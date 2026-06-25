@@ -1,0 +1,6 @@
+# Phase 2 only. Pinned when the FastAPI assistant is built.
+fastapi
+uvicorn[standard]
+anthropic
+supabase
+python-dotenv

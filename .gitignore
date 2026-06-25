@@ -1,3 +1,18 @@
+# --- training-hub project (see SPEC §11 / §14) ---
+# Private build brief — never commit
+SPEC.md
+docs/SPEC.md
+# User-provided legacy data — read-only, local-only, never commit
+raw_data/
+raw-data/
+# Secrets / env (anon key is browser-safe via VITE_*, but never commit .env files)
+.env
+.env.*
+!.env.example
+# Build output
+dist/
+# --- end training-hub project ---
+
 # Logs
 logs
 *.log
