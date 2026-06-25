@@ -1,0 +1,6 @@
+export { resolve, suggestExercise } from './resolve'
+export type { ResolveResult, ExerciseSuggestion } from './resolve'
+export { lookup, cacheRow } from './dictionary'
+export type { TranslationTarget } from './dictionary'
+export { requestTranslation } from './translateClient'
+export type { TranslateResponse } from './translateClient'

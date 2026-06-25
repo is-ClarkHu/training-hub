@@ -19,3 +19,18 @@ export const supabase: SupabaseClient = createClient(url, anonKey, {
     autoRefreshToken: true,
   },
 })
+
+// Cached current user id, kept in sync with auth state. New local rows stamp
+// user_id from here; on Supabase insert the column also defaults to auth.uid().
+let cachedUserId: string | null = null
+void supabase.auth.getSession().then(({ data }) => {
+  cachedUserId = data.session?.user?.id ?? null
+})
+supabase.auth.onAuthStateChange((_event, session) => {
+  cachedUserId = session?.user?.id ?? null
+})
+
+/** The logged-in user's id, or null when signed out. */
+export function currentUserId(): string | null {
+  return cachedUserId
+}
