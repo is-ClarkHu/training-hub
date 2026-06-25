@@ -16,7 +16,7 @@ Dexie/IndexedDB is the instant source of truth; SyncEngine reconciles with Supab
 | `features/log` | default tab: per-set logging, supersets, note tags, add-exercise | §7.1, §6 |
 | `features/history` | reverse-chron sessions; edit/delete; surface needs_review | §7.2 |
 | `features/dashboard` | bilingual charts: heatmap, progression, distributions | §8 |
-| `features/frisbee` | frisbee form + mini-charts | §7.4 |
+| `features/sports` | user-creatable sport library (CRUD + 4 tier labels) + session logging & mini-charts | §4.5, §7.4 |
 | `features/injuries` | injury log + rehab timeline | §6A |
 | `features/cycle` | training loop editor, today/next, per-muscle recovery spacing | §6B |
 | `features/settings` | language toggle, profile, translation manager, trackers (intimacy) | §7.8, §6C |
