@@ -45,6 +45,7 @@ export async function resolve(
 }
 
 export interface ExerciseSuggestion {
+  name_zh: string
   name_en: string
   body_part: BodyPart | null
   measure_type: MeasureType | null
@@ -52,25 +53,48 @@ export interface ExerciseSuggestion {
   needsTranslation: boolean
 }
 
+const HAS_CJK = /[一-鿿]/
+
 /**
- * Add-new-exercise helper (§7.1): given a Chinese exercise name, propose the
- * English name + body_part + measure_type for the user to confirm.
+ * Add-new-exercise helper (§7.1): given an exercise name in Chinese OR English,
+ * propose the other-language name + body_part + measure_type for the user to
+ * confirm. Direction is inferred from whether the input contains Chinese.
  */
-export async function suggestExercise(nameZh: string): Promise<ExerciseSuggestion> {
-  if (typeof navigator !== 'undefined' && !navigator.onLine) {
-    return { name_en: '', body_part: null, measure_type: null, source: 'pending', needsTranslation: true }
+export async function suggestExercise(rawName: string): Promise<ExerciseSuggestion> {
+  const name = rawName.trim()
+  const inputIsZh = HAS_CJK.test(name)
+  const target: TranslationTarget = inputIsZh ? 'en' : 'zh'
+
+  const offline = typeof navigator !== 'undefined' && !navigator.onLine
+  if (offline || !name) {
+    return {
+      name_zh: inputIsZh ? name : '',
+      name_en: inputIsZh ? '' : name,
+      body_part: null,
+      measure_type: null,
+      source: 'pending',
+      needsTranslation: !!name,
+    }
   }
   try {
-    const res = await requestTranslation('exercise', nameZh, 'en')
+    const res = await requestTranslation('exercise', name, target)
     if (res.row) await cacheRow(res.row)
     return {
-      name_en: res.text,
+      name_zh: inputIsZh ? name : res.text,
+      name_en: inputIsZh ? res.text : name,
       body_part: res.suggested_body_part,
       measure_type: res.suggested_measure_type,
       source: res.source,
       needsTranslation: false,
     }
   } catch {
-    return { name_en: '', body_part: null, measure_type: null, source: 'pending', needsTranslation: true }
+    return {
+      name_zh: inputIsZh ? name : '',
+      name_en: inputIsZh ? '' : name,
+      body_part: null,
+      measure_type: null,
+      source: 'pending',
+      needsTranslation: true,
+    }
   }
 }

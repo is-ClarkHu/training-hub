@@ -1,9 +1,10 @@
 import { AuthProvider, AuthGate, useAuth } from './features/auth'
+import { LogScreen } from './features/log'
 import './App.css'
 
-// Placeholder authed shell. Real tabs (Log / History / Dashboard / Sports / …)
-// land in later modules (SPEC §7); for now this proves the auth gate end-to-end.
-const TABS = ['Log', 'History', 'Dashboard', 'Sports', 'Injuries', 'Cycle', 'Settings']
+// Tab bar. Only Log is implemented so far; the rest are built module by module
+// (SPEC §7, §12) and shown as disabled placeholders for now.
+const TABS = ['Log', 'History', 'Dashboard', 'Sports', 'Injuries', 'Cycle', 'Settings'] as const
 
 function AppShell() {
   const { session, signOut } = useAuth()
@@ -18,13 +19,13 @@ function AppShell() {
           </button>
         </div>
       </header>
+      <nav className="app-tabs" aria-label="sections">
+        {TABS.map((t) => (
+          <span key={t} className={`app-tab ${t === 'Log' ? 'is-active' : 'is-disabled'}`}>{t}</span>
+        ))}
+      </nav>
       <main className="app-main">
-        <p className="app-hint">Signed in. Feature tabs are built module by module:</p>
-        <ul className="app-tabs">
-          {TABS.map((t) => (
-            <li key={t} className="app-tab">{t}</li>
-          ))}
-        </ul>
+        <LogScreen />
       </main>
     </div>
   )

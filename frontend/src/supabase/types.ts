@@ -20,6 +20,24 @@ export const BODY_PARTS: readonly BodyPart[] = [
   'chest', 'back', 'shoulders', 'legs', 'arms', 'core', 'frisbee',
 ] as const
 
+/** Bilingual labels for the fixed body-part keys (§4.1). */
+export const BODY_PART_LABELS: Record<BodyPart, { zh: string; en: string }> = {
+  chest: { zh: '胸', en: 'Chest' },
+  back: { zh: '背', en: 'Back' },
+  shoulders: { zh: '肩', en: 'Shoulders' },
+  legs: { zh: '腿', en: 'Legs' },
+  arms: { zh: '手臂', en: 'Arms' },
+  core: { zh: '腹', en: 'Core' },
+  frisbee: { zh: '飞盘', en: 'Frisbee' },
+}
+
+/** Bilingual labels for measure types (§6). */
+export const MEASURE_TYPE_LABELS: Record<MeasureType, { zh: string; en: string }> = {
+  weight_reps: { zh: '重量 × 次数', en: 'Weight × reps' },
+  reps_only: { zh: '次数', en: 'Reps' },
+  duration: { zh: '时长', en: 'Duration' },
+}
+
 // ─── Sync fields present on every user-data row (§3, §4) ─────────────────────
 export interface SyncFields {
   id: string            // client-generated UUID

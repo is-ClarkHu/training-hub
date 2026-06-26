@@ -36,24 +36,23 @@
   max-width: 720px;
   width: 100%;
   margin: 0 auto;
-  padding: 32px 20px;
+  padding: 24px 20px 64px;
 }
-.app-hint { color: var(--text-dim); font-size: 14px; }
 
 .app-tabs {
-  list-style: none;
-  margin: 16px 0 0;
-  padding: 0;
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 4px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
 }
 .app-tab {
-  padding: 8px 14px;
+  padding: 6px 12px;
   font: 600 12px/1 var(--mono);
   letter-spacing: 0.06em;
-  color: var(--text-dim);
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
   border-radius: 6px;
+  white-space: nowrap;
 }
+.app-tab.is-active { color: var(--text-bright); background: var(--grid); }
+.app-tab.is-disabled { color: var(--text-dim); opacity: 0.55; }
