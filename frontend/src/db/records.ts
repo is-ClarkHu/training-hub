@@ -7,17 +7,21 @@ import { currentUserId } from '../supabase/client'
 import { DEFAULT_SPORT_TIERS } from '../supabase/types'
 import type {
   BodyPart,
+  CycleDay,
   Exercise,
   ExerciseSet,
   Injury,
   InjuryModified,
   InjuryStatus,
   MeasureType,
+  OptionalTracker,
   SetType,
   Sport,
   SportSession,
   SportTier,
   TierLevel,
+  TrackerType,
+  TrainingCycle,
   WorkoutEntry,
 } from '../supabase/types'
 
@@ -264,6 +268,82 @@ export async function updateInjury(
 export async function softDeleteInjury(id: string): Promise<void> {
   const i = await db.injuries.get(id)
   if (i) await db.injuries.put({ ...i, deleted: true, updated_at: nowIso() })
+}
+
+// ── training cycle (§4.9, §6B) ───────────────────────────────
+export interface NewCycleInput {
+  name: string
+  active?: boolean
+  days?: CycleDay[]
+}
+
+async function deactivateAllCycles(): Promise<void> {
+  const all = await db.training_cycle.toArray()
+  for (const c of all) {
+    if (c.active && !c.deleted) await db.training_cycle.put({ ...c, active: false, updated_at: nowIso() })
+  }
+}
+
+export async function createCycle(input: NewCycleInput): Promise<TrainingCycle> {
+  const row: TrainingCycle = { ...syncFields(), active: false, days: [], ...input }
+  await db.transaction('rw', db.training_cycle, async () => {
+    if (row.active) await deactivateAllCycles()
+    await db.training_cycle.add(row)
+  })
+  return row
+}
+
+export async function getCycles(): Promise<TrainingCycle[]> {
+  const all = await db.training_cycle.toArray()
+  return all.filter((c) => !c.deleted)
+}
+
+export async function getActiveCycle(): Promise<TrainingCycle | null> {
+  const all = await db.training_cycle.toArray()
+  return all.find((c) => c.active && !c.deleted) ?? null
+}
+
+export async function updateCycle(
+  id: string,
+  patch: Partial<Pick<TrainingCycle, 'name' | 'days'>>,
+): Promise<void> {
+  const c = await db.training_cycle.get(id)
+  if (c) await db.training_cycle.put({ ...c, ...patch, updated_at: nowIso() })
+}
+
+export async function setActiveCycle(id: string): Promise<void> {
+  await db.transaction('rw', db.training_cycle, async () => {
+    await deactivateAllCycles()
+    const c = await db.training_cycle.get(id)
+    if (c) await db.training_cycle.put({ ...c, active: true, updated_at: nowIso() })
+  })
+}
+
+export async function softDeleteCycle(id: string): Promise<void> {
+  const c = await db.training_cycle.get(id)
+  if (c) await db.training_cycle.put({ ...c, deleted: true, active: false, updated_at: nowIso() })
+}
+
+// ── optional trackers (§4.10, §6C) ───────────────────────────
+export async function logTracker(tracker: TrackerType, date: string, count = 1): Promise<OptionalTracker> {
+  const row: OptionalTracker = { ...syncFields(), tracker, date, count }
+  await db.optional_trackers.add(row)
+  return row
+}
+
+export async function getTrackerEntries(tracker: TrackerType): Promise<OptionalTracker[]> {
+  const all = await db.optional_trackers.toArray()
+  return all
+    .filter((t) => t.tracker === tracker && !t.deleted)
+    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+}
+
+/** Easy off + delete (§6C): soft-delete every row for a tracker. */
+export async function deleteAllTracker(tracker: TrackerType): Promise<void> {
+  const ts = nowIso()
+  const all = await db.optional_trackers.toArray()
+  const rows = all.filter((t) => t.tracker === tracker && !t.deleted)
+  await db.optional_trackers.bulkPut(rows.map((t) => ({ ...t, deleted: true, updated_at: ts })))
 }
 
 // ── History reads / edits (§7.2) ─────────────────────────────

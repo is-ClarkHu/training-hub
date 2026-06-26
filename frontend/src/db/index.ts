@@ -20,6 +20,15 @@ export {
   getInjuries,
   updateInjury,
   softDeleteInjury,
+  createCycle,
+  getCycles,
+  getActiveCycle,
+  updateCycle,
+  setActiveCycle,
+  softDeleteCycle,
+  logTracker,
+  getTrackerEntries,
+  deleteAllTracker,
 } from './records'
 export type {
   NewExerciseInput,
@@ -28,4 +37,5 @@ export type {
   NewSportInput,
   NewSportSessionInput,
   NewInjuryInput,
+  NewCycleInput,
 } from './records'

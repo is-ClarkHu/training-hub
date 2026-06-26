@@ -50,8 +50,10 @@
   border: 1px solid var(--border);
   border-radius: 10px;
 }
-.log-entry-head { display: flex; align-items: center; justify-content: space-between; }
+.log-entry-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .log-entry-head h3 { margin: 0; font: 600 16px/1 var(--mono); }
+.log-entry-meta { display: flex; align-items: center; gap: 10px; }
+.log-cycleday { width: auto; padding: 6px 8px; font-size: 12px; }
 .log-superset, .log-perside {
   display: inline-flex;
   align-items: center;

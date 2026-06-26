@@ -3,10 +3,10 @@
 // another exercise" keeps the date. Local-first: writes hit Dexie immediately;
 // the SyncEngine (later module) pushes them to Supabase.
 import { useEffect, useState } from 'react'
-import { createEntryWithSets, getExercises, getInjuries, today, type NewSetInput } from '../../db'
+import { createEntryWithSets, getActiveCycle, getExercises, getInjuries, today, type NewSetInput } from '../../db'
 import { parseNote, noteTagLabel } from '../../translation'
 import { useLanguage } from '../../i18n'
-import type { Exercise, Injury, InjuryModified } from '../../supabase/types'
+import type { Exercise, Injury, InjuryModified, TrainingCycle } from '../../supabase/types'
 import { ExercisePicker } from './ExercisePicker'
 import { SetEditor } from './SetEditor'
 import { AddExerciseDialog } from './AddExerciseDialog'
@@ -34,10 +34,13 @@ export function LogScreen() {
   const [activeInjuries, setActiveInjuries] = useState<Injury[]>([])
   const [injuryMod, setInjuryMod] = useState<InjuryModified | 'none'>('none')
   const [injuryId, setInjuryId] = useState('')
+  const [activeCycle, setActiveCycle] = useState<TrainingCycle | null>(null)
+  const [cycleDay, setCycleDay] = useState('')
 
   useEffect(() => {
     void getExercises().then(setExercises)
     void getInjuries().then((list) => setActiveInjuries(list.filter((i) => i.status !== 'recovered')))
+    void getActiveCycle().then(setActiveCycle)
   }, [])
 
   const parsed = parseNote(note)
@@ -74,6 +77,7 @@ export function LogScreen() {
         is_superset: isSuperset,
         note_raw: note,
         note_tags: parsed.tagKeys,
+        cycle_day_label: cycleDay || null,
         injury_modified: injuryMod === 'none' ? null : injuryMod,
         injury_id: injuryMod === 'none' ? null : injuryId || null,
       },
@@ -99,6 +103,7 @@ export function LogScreen() {
     setIsSuperset(false)
     setInjuryMod('none')
     setInjuryId('')
+    setCycleDay('')
     setSaving(false)
   }
 
@@ -123,10 +128,20 @@ export function LogScreen() {
         <section className="log-entry">
           <div className="log-entry-head">
             <h3>{exerciseName(exercise, lang)}</h3>
-            <label className="log-superset">
-              <input type="checkbox" checked={isSuperset} onChange={(e) => setIsSuperset(e.target.checked)} />
-              {lang === 'zh' ? '超级组' : 'superset'}
-            </label>
+            <div className="log-entry-meta">
+              {activeCycle && activeCycle.days.length > 0 && (
+                <select className="th-input log-cycleday" value={cycleDay} onChange={(e) => setCycleDay(e.target.value)} aria-label="cycle day">
+                  <option value="">{lang === 'zh' ? '循环日' : 'cycle day'}</option>
+                  {activeCycle.days.map((d) => (
+                    <option key={d.label} value={d.label}>{d.label}{d.title ? ` · ${d.title}` : ''}</option>
+                  ))}
+                </select>
+              )}
+              <label className="log-superset">
+                <input type="checkbox" checked={isSuperset} onChange={(e) => setIsSuperset(e.target.checked)} />
+                {lang === 'zh' ? '超级组' : 'superset'}
+              </label>
+            </div>
           </div>
 
           <SetEditor lang={lang} measureType={exercise.measure_type} sets={sets} onChange={setSets} />
