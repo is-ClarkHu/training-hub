@@ -8,5 +8,19 @@ export {
   getSetsByEntryIds,
   softDeleteEntry,
   updateEntry,
+  createSport,
+  getSports,
+  updateSport,
+  softDeleteSport,
+  ensureDefaultSport,
+  createSportSession,
+  getSportSessions,
+  softDeleteSportSession,
 } from './records'
-export type { NewExerciseInput, NewSetInput, NewEntryInput } from './records'
+export type {
+  NewExerciseInput,
+  NewSetInput,
+  NewEntryInput,
+  NewSportInput,
+  NewSportSessionInput,
+} from './records'

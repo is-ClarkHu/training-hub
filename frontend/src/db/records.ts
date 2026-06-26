@@ -4,12 +4,17 @@
 import { db } from './db'
 import { newId, nowIso } from './helpers'
 import { currentUserId } from '../supabase/client'
+import { DEFAULT_SPORT_TIERS } from '../supabase/types'
 import type {
   BodyPart,
   Exercise,
   ExerciseSet,
   MeasureType,
   SetType,
+  Sport,
+  SportSession,
+  SportTier,
+  TierLevel,
   WorkoutEntry,
 } from '../supabase/types'
 
@@ -98,6 +103,105 @@ export async function createEntryWithSets(
     await db.sets.bulkAdd(sets)
   })
   return { entry, sets }
+}
+
+// ── sports library (§4.5, §7.4) ──────────────────────────────
+export interface NewSportInput {
+  name_zh: string
+  name_en: string
+  is_default?: boolean
+  tiers?: SportTier[]
+  name_locked?: boolean
+  needs_translation?: boolean
+}
+
+export async function createSport(input: NewSportInput): Promise<Sport> {
+  const row: Sport = {
+    ...syncFields(),
+    is_default: false,
+    name_locked: false,
+    needs_translation: false,
+    tiers: DEFAULT_SPORT_TIERS,
+    ...input,
+  }
+  await db.sports.add(row)
+  return row
+}
+
+export async function getSports(): Promise<Sport[]> {
+  const all = await db.sports.toArray()
+  return all.filter((s) => !s.deleted)
+}
+
+export async function updateSport(
+  id: string,
+  patch: Partial<Pick<Sport, 'name_zh' | 'name_en' | 'tiers' | 'is_default' | 'name_locked' | 'needs_translation'>>,
+): Promise<void> {
+  const s = await db.sports.get(id)
+  if (s) await db.sports.put({ ...s, ...patch, updated_at: nowIso() })
+}
+
+export async function softDeleteSport(id: string): Promise<void> {
+  const s = await db.sports.get(id)
+  if (s) await db.sports.put({ ...s, deleted: true, updated_at: nowIso() })
+}
+
+// Frisbee's tier labels (the default sport seeded for a new account, §4.5).
+const FRISBEE_TIERS: SportTier[] = [
+  { level: 1, key: 'toss', zh: '抛接', en: 'Toss' },
+  { level: 2, key: 'casual', zh: '休闲', en: 'Casual' },
+  { level: 3, key: 'club', zh: '训练/俱乐部', en: 'Club' },
+  { level: 4, key: 'major', zh: '大赛', en: 'Major' },
+]
+
+/** Seed the default frisbee sport on first use; returns the live sport list. */
+export async function ensureDefaultSport(): Promise<Sport[]> {
+  const sports = await getSports()
+  if (sports.length > 0) return sports
+  const frisbee = await createSport({
+    name_zh: '飞盘',
+    name_en: 'Frisbee',
+    is_default: true,
+    tiers: FRISBEE_TIERS,
+  })
+  return [frisbee]
+}
+
+// ── sport sessions ───────────────────────────────────────────
+export interface NewSportSessionInput {
+  date: string
+  sport_id: string
+  tier: TierLevel
+  hours: number
+  injury?: boolean
+  estimated?: boolean
+  note_raw?: string
+  note_tags?: string[]
+}
+
+export async function createSportSession(input: NewSportSessionInput): Promise<SportSession> {
+  const row: SportSession = {
+    ...syncFields(),
+    injury: false,
+    estimated: false,
+    note_raw: '',
+    note_tags: [],
+    ...input,
+  }
+  await db.sport_sessions.add(row)
+  return row
+}
+
+export async function getSportSessions(): Promise<SportSession[]> {
+  const all = await db.sport_sessions.toArray()
+  return all
+    .filter((s) => !s.deleted)
+    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+}
+
+export async function softDeleteSportSession(id: string): Promise<void> {
+  const s = await db.sport_sessions.get(id)
+  if (s) await db.sport_sessions.put({ ...s, deleted: true, updated_at: nowIso() })
 }
 
 // ── History reads / edits (§7.2) ─────────────────────────────
