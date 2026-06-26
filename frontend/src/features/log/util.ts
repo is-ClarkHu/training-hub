@@ -1,5 +1,6 @@
-import type { TranslationTarget } from '../../translation'
-import type { Exercise } from '../../supabase/types'
+import type { NewSetInput } from '../../db'
+import type { ParsedNote, TranslationTarget } from '../../translation'
+import type { Exercise, ExerciseSet, MeasureType, SetType } from '../../supabase/types'
 
 /** One editable set row in the Log form (strings; parsed on save). */
 export interface SetDraft {
@@ -48,4 +49,51 @@ export function toInt(text: string): number | null {
   if (!t) return null
   const n = parseInt(t, 10)
   return Number.isNaN(n) ? null : n
+}
+
+/** Convert editable drafts → set rows, applying note semantics (§5.3) + superset. */
+export function draftsToSetInputs(
+  sets: SetDraft[],
+  mt: MeasureType,
+  parsed: ParsedNote,
+  isSuperset: boolean,
+): NewSetInput[] {
+  const setType: SetType = parsed.warmup ? 'warmup' : isSuperset ? 'superset' : 'normal'
+  const out: NewSetInput[] = []
+  for (const d of sets) {
+    let row: NewSetInput | null = null
+    if (mt === 'weight_reps') {
+      const w = toNumber(d.weight)
+      const r = toInt(d.reps)
+      if (w !== null || r !== null) row = { weight: w, reps: r, per_side: d.per_side }
+    } else if (mt === 'reps_only') {
+      const r = toInt(d.reps)
+      if (r !== null) row = { reps: r, per_side: d.per_side }
+    } else {
+      const s = parseDuration(d.duration)
+      if (s !== null) row = { duration_sec: s }
+    }
+    if (!row) continue
+    if (parsed.perSide && mt !== 'duration') row.per_side = true
+    row.set_type = setType
+    out.push(row)
+  }
+  return out
+}
+
+/** Existing set row → editable draft (for History edit mode). */
+export function setToDraft(s: ExerciseSet): SetDraft {
+  return {
+    weight: s.weight != null ? String(s.weight) : '',
+    reps: s.reps != null ? String(s.reps) : '',
+    duration: s.duration_sec != null ? formatDuration(s.duration_sec) : '',
+    per_side: s.per_side,
+  }
+}
+
+/** One-line bilingual-agnostic summary of a set (numbers only). */
+export function formatSet(s: ExerciseSet, mt: MeasureType): string {
+  if (mt === 'duration') return s.duration_sec != null ? formatDuration(s.duration_sec) : '–'
+  if (mt === 'reps_only') return `${s.reps ?? '–'}${s.per_side ? '/side' : ''}`
+  return `${s.weight ?? '–'}×${s.reps ?? '–'}${s.per_side ? '/side' : ''}`
 }

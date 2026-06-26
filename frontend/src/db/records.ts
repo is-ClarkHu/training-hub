@@ -99,3 +99,66 @@ export async function createEntryWithSets(
   })
   return { entry, sets }
 }
+
+// ── History reads / edits (§7.2) ─────────────────────────────
+/** Live workout entries, newest first (by date, then recency). */
+export async function getEntries(): Promise<WorkoutEntry[]> {
+  const all = await db.workout_entries.toArray()
+  return all
+    .filter((e) => !e.deleted)
+    .sort((a, b) =>
+      a.date < b.date ? 1 : a.date > b.date ? -1 : a.updated_at < b.updated_at ? 1 : -1,
+    )
+}
+
+/** Map entryId → its live sets (set_index order). */
+export async function getSetsByEntryIds(ids: string[]): Promise<Record<string, ExerciseSet[]>> {
+  if (ids.length === 0) return {}
+  const rows = await db.sets.where('entry_id').anyOf(ids).toArray()
+  const map: Record<string, ExerciseSet[]> = {}
+  for (const s of rows) {
+    if (s.deleted) continue
+    ;(map[s.entry_id] ??= []).push(s)
+  }
+  for (const k of Object.keys(map)) map[k].sort((a, b) => a.set_index - b.set_index)
+  return map
+}
+
+/** Soft-delete an entry and its sets (tombstones for sync, §3). */
+export async function softDeleteEntry(entryId: string): Promise<void> {
+  const ts = nowIso()
+  await db.transaction('rw', db.workout_entries, db.sets, async () => {
+    const e = await db.workout_entries.get(entryId)
+    if (e) await db.workout_entries.put({ ...e, deleted: true, updated_at: ts })
+    const rows = await db.sets.where('entry_id').equals(entryId).toArray()
+    await db.sets.bulkPut(rows.map((s) => ({ ...s, deleted: true, updated_at: ts })))
+  })
+}
+
+/** Edit an entry: patch fields, soft-delete old sets, add the new ones. */
+export async function updateEntry(
+  entryId: string,
+  patch: Partial<Pick<WorkoutEntry, 'note_raw' | 'note_tags' | 'is_superset' | 'needs_review' | 'needs_translation'>>,
+  newSets: NewSetInput[],
+): Promise<void> {
+  const ts = nowIso()
+  await db.transaction('rw', db.workout_entries, db.sets, async () => {
+    const e = await db.workout_entries.get(entryId)
+    if (!e) return
+    await db.workout_entries.put({ ...e, ...patch, updated_at: ts })
+    const existing = await db.sets.where('entry_id').equals(entryId).toArray()
+    await db.sets.bulkPut(existing.map((s) => ({ ...s, deleted: true, updated_at: ts })))
+    const fresh: ExerciseSet[] = newSets.map((s, i) => ({
+      ...syncFields(),
+      entry_id: entryId,
+      set_index: i + 1,
+      set_type: 'normal',
+      weight: null,
+      reps: null,
+      duration_sec: null,
+      per_side: false,
+      ...s,
+    }))
+    await db.sets.bulkAdd(fresh)
+  })
+}

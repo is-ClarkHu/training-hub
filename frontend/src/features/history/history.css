@@ -1,0 +1,57 @@
+.hist-screen { display: flex; flex-direction: column; gap: 22px; }
+.hist-empty { color: var(--text-dim); }
+
+.hist-session { display: flex; flex-direction: column; gap: 10px; }
+.hist-date {
+  margin: 0;
+  font: 600 13px/1 var(--mono);
+  letter-spacing: 0.08em;
+  color: var(--amber);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+}
+.hist-entries { display: flex; flex-direction: column; gap: 8px; }
+
+.hist-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.hist-entry.needs { border-color: var(--amber); }
+
+.hist-entry-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.hist-name { font: 600 14px/1.2 var(--mono); color: var(--text-bright); }
+.hist-actions { display: flex; gap: 10px; }
+.hist-link {
+  background: none; border: none; padding: 0;
+  font: 12px/1 var(--mono); color: var(--ice); text-decoration: underline;
+}
+.hist-link.danger { color: var(--danger); }
+.hist-link:disabled { opacity: 0.5; }
+
+.hist-sets { display: flex; flex-wrap: wrap; gap: 10px; }
+.hist-set { font: 13px/1.4 var(--mono); color: var(--teal); }
+.hist-settype { color: var(--text-dim); font-style: normal; font-size: 11px; }
+
+.hist-note { margin: 0; font-size: 13px; color: var(--text); }
+.hist-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.hist-badges { display: flex; gap: 6px; }
+.hist-badge {
+  padding: 2px 7px;
+  font: 600 10px/1.4 var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-radius: 4px;
+}
+.hist-badge.review { color: #2a1500; background: var(--amber); }
+.hist-badge.translate { color: #04181a; background: var(--ice); }
+
+.hist-edit { display: flex; flex-direction: column; gap: 10px; }
+.hist-superset { display: inline-flex; align-items: center; gap: 6px; font: 12px/1 var(--mono); color: var(--text-dim); }
+.hist-edit-actions { display: flex; gap: 10px; }
+.hist-edit-actions .th-btn, .hist-edit-actions .th-btn-ghost { flex: 1; }

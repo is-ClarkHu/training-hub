@@ -5,12 +5,12 @@
 import { useEffect, useState } from 'react'
 import { createEntryWithSets, getExercises, today, type NewSetInput } from '../../db'
 import { parseNote, noteTagLabel } from '../../translation'
-import type { Exercise, SetType } from '../../supabase/types'
-import type { TranslationTarget } from '../../translation'
+import { useLanguage } from '../../i18n'
+import type { Exercise } from '../../supabase/types'
 import { ExercisePicker } from './ExercisePicker'
 import { SetEditor } from './SetEditor'
 import { AddExerciseDialog } from './AddExerciseDialog'
-import { emptySet, exerciseName, parseDuration, toInt, toNumber, type SetDraft } from './util'
+import { draftsToSetInputs, emptySet, exerciseName, type SetDraft } from './util'
 import './log.css'
 
 interface LoggedItem {
@@ -21,7 +21,7 @@ interface LoggedItem {
 }
 
 export function LogScreen() {
-  const [lang, setLang] = useState<TranslationTarget>('en')
+  const { lang } = useLanguage()
   const [date, setDate] = useState(today())
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [exercise, setExercise] = useState<Exercise | null>(null)
@@ -52,28 +52,7 @@ export function LogScreen() {
 
   function buildSets(): NewSetInput[] {
     if (!exercise) return []
-    const mt = exercise.measure_type
-    const setType: SetType = parsed.warmup ? 'warmup' : isSuperset ? 'superset' : 'normal'
-    const out: NewSetInput[] = []
-    for (const d of sets) {
-      let row: NewSetInput | null = null
-      if (mt === 'weight_reps') {
-        const w = toNumber(d.weight)
-        const r = toInt(d.reps)
-        if (w !== null || r !== null) row = { weight: w, reps: r, per_side: d.per_side }
-      } else if (mt === 'reps_only') {
-        const r = toInt(d.reps)
-        if (r !== null) row = { reps: r, per_side: d.per_side }
-      } else {
-        const s = parseDuration(d.duration)
-        if (s !== null) row = { duration_sec: s }
-      }
-      if (!row) continue
-      if (parsed.perSide && mt !== 'duration') row.per_side = true
-      row.set_type = setType
-      out.push(row)
-    }
-    return out
+    return draftsToSetInputs(sets, exercise.measure_type, parsed, isSuperset)
   }
 
   const validSets = buildSets()
@@ -116,14 +95,6 @@ export function LogScreen() {
           <label className="th-label" htmlFor="log-date">Date</label>
           <input id="log-date" className="th-input log-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </div>
-        <button
-          type="button"
-          className="th-btn-ghost log-lang"
-          onClick={() => setLang((l) => (l === 'en' ? 'zh' : 'en'))}
-          aria-label="toggle language"
-        >
-          {lang === 'en' ? '中 / EN' : 'EN / 中'}
-        </button>
       </header>
 
       <ExercisePicker

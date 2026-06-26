@@ -4,5 +4,9 @@ export {
   createExercise,
   getExercises,
   createEntryWithSets,
+  getEntries,
+  getSetsByEntryIds,
+  softDeleteEntry,
+  updateEntry,
 } from './records'
 export type { NewExerciseInput, NewSetInput, NewEntryInput } from './records'

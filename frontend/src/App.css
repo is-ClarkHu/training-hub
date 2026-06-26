@@ -53,6 +53,13 @@
   letter-spacing: 0.06em;
   border-radius: 6px;
   white-space: nowrap;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
 }
-.app-tab.is-active { color: var(--text-bright); background: var(--grid); }
-.app-tab.is-disabled { color: var(--text-dim); opacity: 0.55; }
+.app-tab:hover:not(.is-disabled):not(.is-active) { color: var(--text); }
+.app-tab.is-active { color: var(--text-bright); background: var(--grid); border-color: var(--border); }
+.app-tab.is-disabled { opacity: 0.45; cursor: not-allowed; }
+
+.app-lang { width: auto; padding: 7px 10px; font-size: 12px; }
