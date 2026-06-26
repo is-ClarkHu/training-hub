@@ -3,10 +3,10 @@
 // another exercise" keeps the date. Local-first: writes hit Dexie immediately;
 // the SyncEngine (later module) pushes them to Supabase.
 import { useEffect, useState } from 'react'
-import { createEntryWithSets, getExercises, today, type NewSetInput } from '../../db'
+import { createEntryWithSets, getExercises, getInjuries, today, type NewSetInput } from '../../db'
 import { parseNote, noteTagLabel } from '../../translation'
 import { useLanguage } from '../../i18n'
-import type { Exercise } from '../../supabase/types'
+import type { Exercise, Injury, InjuryModified } from '../../supabase/types'
 import { ExercisePicker } from './ExercisePicker'
 import { SetEditor } from './SetEditor'
 import { AddExerciseDialog } from './AddExerciseDialog'
@@ -31,9 +31,13 @@ export function LogScreen() {
   const [dialog, setDialog] = useState<{ open: boolean; name: string }>({ open: false, name: '' })
   const [logged, setLogged] = useState<LoggedItem[]>([])
   const [saving, setSaving] = useState(false)
+  const [activeInjuries, setActiveInjuries] = useState<Injury[]>([])
+  const [injuryMod, setInjuryMod] = useState<InjuryModified | 'none'>('none')
+  const [injuryId, setInjuryId] = useState('')
 
   useEffect(() => {
     void getExercises().then(setExercises)
+    void getInjuries().then((list) => setActiveInjuries(list.filter((i) => i.status !== 'recovered')))
   }, [])
 
   const parsed = parseNote(note)
@@ -64,7 +68,15 @@ export function LogScreen() {
     if (setInputs.length === 0) return
     setSaving(true)
     await createEntryWithSets(
-      { date, exercise_id: exercise.id, is_superset: isSuperset, note_raw: note, note_tags: parsed.tagKeys },
+      {
+        date,
+        exercise_id: exercise.id,
+        is_superset: isSuperset,
+        note_raw: note,
+        note_tags: parsed.tagKeys,
+        injury_modified: injuryMod === 'none' ? null : injuryMod,
+        injury_id: injuryMod === 'none' ? null : injuryId || null,
+      },
       setInputs,
     )
     const detail = setInputs
@@ -85,6 +97,8 @@ export function LogScreen() {
     setSets([emptySet()])
     setNote('')
     setIsSuperset(false)
+    setInjuryMod('none')
+    setInjuryId('')
     setSaving(false)
   }
 
@@ -134,6 +148,31 @@ export function LogScreen() {
               </div>
             )}
           </div>
+
+          {activeInjuries.length > 0 && (
+            <div className="log-field">
+              <label className="th-label">{lang === 'zh' ? '伤病影响' : 'Injury impact'}</label>
+              <div className="log-row">
+                <select
+                  className="th-input"
+                  value={injuryMod}
+                  onChange={(e) => setInjuryMod(e.target.value as InjuryModified | 'none')}
+                >
+                  <option value="none">{lang === 'zh' ? '无' : 'none'}</option>
+                  <option value="reduced">{lang === 'zh' ? '减量' : 'reduced'}</option>
+                  <option value="paused">{lang === 'zh' ? '暂停' : 'paused'}</option>
+                </select>
+                {injuryMod !== 'none' && (
+                  <select className="th-input" value={injuryId} onChange={(e) => setInjuryId(e.target.value)}>
+                    <option value="">{lang === 'zh' ? '关联伤病…' : 'link injury…'}</option>
+                    {activeInjuries.map((i) => (
+                      <option key={i.id} value={i.id}>{i.body_area}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            </div>
+          )}
 
           <button className="th-btn" type="button" onClick={onSave} disabled={!canSave}>
             {saving ? 'Saving…' : lang === 'zh' ? '保存' : 'Save exercise'}

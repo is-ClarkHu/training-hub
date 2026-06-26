@@ -4,13 +4,14 @@ import { LanguageProvider, useLanguage } from './i18n'
 import { LogScreen } from './features/log'
 import { HistoryScreen } from './features/history'
 import { SportsScreen } from './features/sports'
+import { InjuriesScreen } from './features/injuries'
 import './App.css'
 
 // Tabs. Log + History are implemented; the rest are built module by module
 // (SPEC §7, §12) and shown disabled for now.
 const TABS = ['Log', 'History', 'Dashboard', 'Sports', 'Injuries', 'Cycle', 'Settings'] as const
 type Tab = (typeof TABS)[number]
-const IMPLEMENTED: ReadonlySet<Tab> = new Set<Tab>(['Log', 'History', 'Sports'])
+const IMPLEMENTED: ReadonlySet<Tab> = new Set<Tab>(['Log', 'History', 'Sports', 'Injuries'])
 
 function AppShell() {
   const { session, signOut } = useAuth()
@@ -53,6 +54,7 @@ function AppShell() {
         {tab === 'Log' && <LogScreen />}
         {tab === 'History' && <HistoryScreen />}
         {tab === 'Sports' && <SportsScreen />}
+        {tab === 'Injuries' && <InjuriesScreen />}
       </main>
     </div>
   )

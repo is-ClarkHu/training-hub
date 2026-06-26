@@ -2,13 +2,16 @@
 // (client UUID, user_id from the session, updated_at, deleted=false) so the
 // SyncEngine can later upsert it to Supabase unchanged (SPEC §3).
 import { db } from './db'
-import { newId, nowIso } from './helpers'
+import { newId, nowIso, today } from './helpers'
 import { currentUserId } from '../supabase/client'
 import { DEFAULT_SPORT_TIERS } from '../supabase/types'
 import type {
   BodyPart,
   Exercise,
   ExerciseSet,
+  Injury,
+  InjuryModified,
+  InjuryStatus,
   MeasureType,
   SetType,
   Sport,
@@ -68,6 +71,8 @@ export interface NewEntryInput {
   note_raw?: string
   note_tags?: string[]
   cycle_day_label?: string | null
+  injury_modified?: InjuryModified | null
+  injury_id?: string | null
 }
 
 export async function createEntryWithSets(
@@ -204,6 +209,63 @@ export async function softDeleteSportSession(id: string): Promise<void> {
   if (s) await db.sport_sessions.put({ ...s, deleted: true, updated_at: nowIso() })
 }
 
+// ── injuries (§4.8, §6A) ─────────────────────────────────────
+export interface NewInjuryInput {
+  body_area: string
+  body_part?: BodyPart | null
+  started_on: string
+  status?: InjuryStatus
+  resolved_on?: string | null
+  severity?: number | null
+  note_raw?: string
+}
+
+export async function createInjury(input: NewInjuryInput): Promise<Injury> {
+  const row: Injury = {
+    ...syncFields(),
+    body_part: null,
+    status: 'acute',
+    resolved_on: null,
+    severity: null,
+    note_raw: '',
+    ...input,
+  }
+  await db.injuries.add(row)
+  return row
+}
+
+export async function getInjuries(): Promise<Injury[]> {
+  const all = await db.injuries.toArray()
+  const order: Record<InjuryStatus, number> = { acute: 0, rehab: 1, recovered: 2 }
+  return all
+    .filter((i) => !i.deleted)
+    .sort((a, b) =>
+      order[a.status] !== order[b.status]
+        ? order[a.status] - order[b.status]
+        : a.started_on < b.started_on
+          ? 1
+          : -1,
+    )
+}
+
+export async function updateInjury(
+  id: string,
+  patch: Partial<Pick<Injury, 'body_area' | 'body_part' | 'started_on' | 'status' | 'resolved_on' | 'severity' | 'note_raw'>>,
+): Promise<void> {
+  const cur = await db.injuries.get(id)
+  if (!cur) return
+  const next: Injury = { ...cur, ...patch, updated_at: nowIso() }
+  // Keep resolved_on consistent with status (§6A acute → rehab → recovered).
+  if (next.status === 'recovered' && !next.resolved_on) next.resolved_on = today()
+  if (next.status !== 'recovered') next.resolved_on = null
+  await db.injuries.put(next)
+}
+
+export async function softDeleteInjury(id: string): Promise<void> {
+  const i = await db.injuries.get(id)
+  if (i) await db.injuries.put({ ...i, deleted: true, updated_at: nowIso() })
+}
+
 // ── History reads / edits (§7.2) ─────────────────────────────
 /** Live workout entries, newest first (by date, then recency). */
 export async function getEntries(): Promise<WorkoutEntry[]> {
@@ -242,7 +304,7 @@ export async function softDeleteEntry(entryId: string): Promise<void> {
 /** Edit an entry: patch fields, soft-delete old sets, add the new ones. */
 export async function updateEntry(
   entryId: string,
-  patch: Partial<Pick<WorkoutEntry, 'note_raw' | 'note_tags' | 'is_superset' | 'needs_review' | 'needs_translation'>>,
+  patch: Partial<Pick<WorkoutEntry, 'note_raw' | 'note_tags' | 'is_superset' | 'needs_review' | 'needs_translation' | 'injury_modified' | 'injury_id'>>,
   newSets: NewSetInput[],
 ): Promise<void> {
   const ts = nowIso()

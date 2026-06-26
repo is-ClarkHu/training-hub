@@ -16,6 +16,10 @@ export {
   createSportSession,
   getSportSessions,
   softDeleteSportSession,
+  createInjury,
+  getInjuries,
+  updateInjury,
+  softDeleteInjury,
 } from './records'
 export type {
   NewExerciseInput,
@@ -23,4 +27,5 @@ export type {
   NewEntryInput,
   NewSportInput,
   NewSportSessionInput,
+  NewInjuryInput,
 } from './records'

@@ -148,6 +148,16 @@ function EntryCard({
         </div>
       </div>
 
+      {entry.injury_modified && (
+        <div className="hist-badges">
+          <span className="hist-badge injury">
+            {entry.injury_modified === 'paused'
+              ? lang === 'zh' ? '因伤暂停' : 'paused (injury)'
+              : lang === 'zh' ? '因伤减量' : 'reduced (injury)'}
+          </span>
+        </div>
+      )}
+
       {needsAttention && (
         <div className="hist-badges">
           {entry.needs_review && <span className="hist-badge review">needs review</span>}
