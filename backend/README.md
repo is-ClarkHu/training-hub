@@ -1,14 +1,22 @@
-# backend — PHASE 2 ONLY
+# backend — Phase 2 AI assistant (SPEC §9)
 
-This minimal FastAPI is **not built in Phase 1**. It exists solely so the Claude
-API key never ships to the browser (SPEC §9, §11). Phase 1 keeps this directory
-as a placeholder.
+Minimal FastAPI whose only job is to keep the Claude API key off the browser.
+Exposes `POST /api/assistant`: the frontend sends the user's Supabase JWT, the
+backend verifies it, builds a memory context scoped to that user (RLS), calls
+Claude, and persists both messages to `chat_messages`.
 
-When Phase 2 starts:
-- `app/main.py` — FastAPI with a single `/api/assistant` route.
-- `app/memory.py` — `build_memory_context()` (reads from Supabase, per-user).
-- Secrets in `.env` (see `.env.example`), never committed.
+- `app/main.py` — FastAPI app + `/api/assistant` + `/health`.
+- `app/memory.py` — `build_memory_context()` (training data, profile, chat
+  history, insights — summarized; the intimacy tracker is never queried, §6C/§9).
 
-Translation (`/api/translate`, SPEC §5) is implemented as a **Supabase Edge
-Function** (`../supabase/functions/translate`), not here — so Phase 1 needs no
-Python backend at all.
+## Run
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env   # ANTHROPIC_API_KEY, SUPABASE_URL, SUPABASE_KEY (anon)
+uvicorn app.main:app --reload --port 8000
+```
+
+Translation (`/api/translate`, §5) runs as a Supabase **Edge Function**
+(`../supabase/functions/translate`), not here. See `../SETUP.md` for the full
+end-to-end setup.
