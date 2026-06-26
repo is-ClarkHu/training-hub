@@ -35,4 +35,13 @@
 }
 .set-count-v { color: var(--teal); }
 
+.set-import {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 14px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.set-import input[type='file'] { font: 12px/1.4 var(--mono); color: var(--text-dim); }
+
 .set-note { color: var(--text-dim); font-size: 13px; }

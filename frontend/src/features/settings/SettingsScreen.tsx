@@ -5,6 +5,8 @@
 import { useEffect, useState } from 'react'
 import { deleteAllTracker, getTrackerEntries, logTracker, today } from '../../db'
 import { useLanguage } from '../../i18n'
+import { syncNow } from '../../sync'
+import { importLegacyCsv } from '../../migration'
 import type { OptionalTracker } from '../../supabase/types'
 import './settings.css'
 
@@ -16,6 +18,8 @@ export function SettingsScreen() {
   const [date, setDate] = useState(today())
   const [count, setCount] = useState('1')
   const [rows, setRows] = useState<OptionalTracker[]>([])
+  const [syncMsg, setSyncMsg] = useState('')
+  const [importMsg, setImportMsg] = useState('')
 
   useEffect(() => {
     if (enabled) void getTrackerEntries('intimacy').then(setRows)
@@ -38,6 +42,30 @@ export function SettingsScreen() {
     if (!confirm(lang === 'zh' ? '删除全部该追踪数据?' : 'Delete all data for this tracker?')) return
     await deleteAllTracker('intimacy')
     setRows([])
+  }
+
+  async function doSync() {
+    setSyncMsg(lang === 'zh' ? '同步中…' : 'Syncing…')
+    try {
+      const r = await syncNow()
+      setSyncMsg(r ? (lang === 'zh' ? `已推送 ${r.pushed} · 已拉取 ${r.pulled}` : `pushed ${r.pushed} · pulled ${r.pulled}`) : (lang === 'zh' ? '未登录或离线' : 'not signed in / offline'))
+    } catch (e) {
+      setSyncMsg(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  async function onImport(file: File) {
+    setImportMsg(lang === 'zh' ? '导入中…' : 'Importing…')
+    try {
+      const rep = await importLegacyCsv(await file.text())
+      setImportMsg(
+        lang === 'zh'
+          ? `导入 ${rep.entries} 条 · ${rep.sportSessions} 场次 · 跳过 ${rep.skipped} · 待复核 ${rep.needsReview.length}`
+          : `imported ${rep.entries} entries · ${rep.sportSessions} sessions · ${rep.skipped} skipped · ${rep.needsReview.length} need review`,
+      )
+    } catch (e) {
+      setImportMsg(e instanceof Error ? e.message : String(e))
+    }
   }
 
   return (
@@ -83,6 +111,23 @@ export function SettingsScreen() {
             </button>
           </div>
         )}
+      </section>
+
+      <section className="set-section">
+        <span className="th-label">{lang === 'zh' ? '同步' : 'Sync'}</span>
+        <div className="set-row">
+          <div className="set-desc">{syncMsg || (lang === 'zh' ? '后台自动同步 · 也可手动' : 'Auto-syncs in background · or manually')}</div>
+          <button className="th-btn set-log" type="button" onClick={doSync}>{lang === 'zh' ? '立即同步' : 'Sync now'}</button>
+        </div>
+      </section>
+
+      <section className="set-section">
+        <span className="th-label">{lang === 'zh' ? '导入旧数据' : 'Import legacy data'}</span>
+        <div className="set-import">
+          <input type="file" accept=".csv,text/csv" onChange={(e) => e.target.files?.[0] && void onImport(e.target.files[0])} />
+          {importMsg && <p className="set-desc">{importMsg}</p>}
+          <p className="set-desc">{lang === 'zh' ? '上传旧 workout_log.csv → 解析入库(可重复导入)。' : 'Upload the legacy workout_log.csv → parsed into the local store (re-import safe).'}</p>
+        </div>
       </section>
 
       <p className="set-note">{lang === 'zh' ? '更多设置(资料、翻译管理、导出)稍后加入。' : 'More settings (profile, translation manager, export) come later.'}</p>

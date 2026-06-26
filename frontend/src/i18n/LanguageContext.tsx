@@ -2,8 +2,9 @@
 // zh/en anytime and the toggle re-renders DATA, not just labels). UI-chrome i18n
 // (en.json/zh.json via i18next) is wired in a later module; this provides the
 // shared lang signal that data rendering and resolve() consume now.
-import { createContext, useContext, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import type { TranslationTarget } from '../translation'
+import i18n from './i18n'
 
 function detect(): TranslationTarget {
   if (typeof navigator !== 'undefined' && navigator.language?.toLowerCase().startsWith('zh')) {
@@ -23,6 +24,11 @@ const LanguageContext = createContext<LanguageContextValue | undefined>(undefine
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const [lang, setLang] = useState<TranslationTarget>(detect)
   const toggle = () => setLang((l) => (l === 'en' ? 'zh' : 'en'))
+
+  // Keep i18next (UI chrome) in lockstep with the data language.
+  useEffect(() => {
+    void i18n.changeLanguage(lang)
+  }, [lang])
   return (
     <LanguageContext.Provider value={{ lang, setLang, toggle }}>
       {children}

@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { AuthProvider, AuthGate, useAuth } from './features/auth'
 import { LanguageProvider, useLanguage } from './i18n'
+import { startSync } from './sync'
 import { LogScreen } from './features/log'
 import { HistoryScreen } from './features/history'
 import { SportsScreen } from './features/sports'
@@ -21,7 +23,11 @@ const IMPLEMENTED: ReadonlySet<Tab> = new Set<Tab>([
 function AppShell() {
   const { session, signOut } = useAuth()
   const { lang, toggle } = useLanguage()
+  const { t } = useTranslation()
   const [tab, setTab] = useState<Tab>('Log')
+
+  // Background sync once authenticated (§3): now, on focus/online, every 2 min.
+  useEffect(() => startSync(), [])
 
   return (
     <div className="app-shell">
@@ -33,23 +39,23 @@ function AppShell() {
           </button>
           <span className="app-email">{session?.user.email}</span>
           <button className="th-btn-ghost app-logout" type="button" onClick={() => void signOut()}>
-            Sign out
+            {t('app.signOut')}
           </button>
         </div>
       </header>
 
       <nav className="app-tabs" aria-label="sections">
-        {TABS.map((t) => {
-          const enabled = IMPLEMENTED.has(t)
+        {TABS.map((tb) => {
+          const enabled = IMPLEMENTED.has(tb)
           return (
             <button
-              key={t}
+              key={tb}
               type="button"
-              className={`app-tab ${t === tab ? 'is-active' : ''} ${enabled ? '' : 'is-disabled'}`}
-              onClick={() => enabled && setTab(t)}
+              className={`app-tab ${tb === tab ? 'is-active' : ''} ${enabled ? '' : 'is-disabled'}`}
+              onClick={() => enabled && setTab(tb)}
               disabled={!enabled}
             >
-              {t}
+              {t(`tabs.${tb}`)}
             </button>
           )
         })}

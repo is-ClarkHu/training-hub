@@ -1,0 +1,15 @@
+{
+  "tabs": {
+    "Log": "Log",
+    "History": "History",
+    "Dashboard": "Dashboard",
+    "Sports": "Sports",
+    "Injuries": "Injuries",
+    "Cycle": "Cycle",
+    "Settings": "Settings"
+  },
+  "app": {
+    "signOut": "Sign out",
+    "syncNow": "Sync now"
+  }
+}

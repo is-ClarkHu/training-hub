@@ -5,6 +5,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from '../../supabase/client'
 import { clearLocalDb } from '../../db'
+import { clearSyncState } from '../../sync'
 
 interface AuthContextValue {
   session: Session | null
@@ -39,6 +40,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function signOut() {
     await supabase.auth.signOut()
     await clearLocalDb() // §3: wipe local data on logout / account switch
+    clearSyncState() // reset sync watermarks so a re-login re-pulls from scratch
   }
 
   return (
