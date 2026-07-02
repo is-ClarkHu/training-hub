@@ -62,6 +62,9 @@
 .set-ai-row .th-input:last-child { flex: 1; }
 .set-ai-keys-label { margin-top: 6px; }
 
+.set-activity { padding: 10px 12px; }
+.set-act-buttons { display: flex; gap: 10px; }
+
 .set-note { color: var(--text-dim); font-size: 13px; }
 
 @media (max-width: 520px) {

@@ -1,38 +1,53 @@
-// Exercise search/select grouped by the 7 body parts, showing each name in the
-// current language (SPEC §7.1).
+// Unified activity picker (SPEC §7.1, redesigned): sports + exercises in one
+// selector, grouped. Pick a sport → sport-session form; pick an exercise →
+// set inputs. Exercises grouped by the 7 body parts; sports in their own group.
 import { useMemo, useState } from 'react'
-import { BODY_PARTS, BODY_PART_LABELS, type Exercise } from '../../supabase/types'
+import {
+  BODY_PARTS,
+  BODY_PART_LABELS,
+  type Exercise,
+  type Sport,
+} from '../../supabase/types'
 import type { TranslationTarget } from '../../translation'
 import { exerciseName } from './util'
+
+function sportLabel(s: Sport, lang: TranslationTarget): string {
+  return (lang === 'zh' ? s.name_zh : s.name_en) || s.name_zh || s.name_en
+}
 
 export function ExercisePicker({
   lang,
   exercises,
+  sports,
   selectedId,
   onSelect,
+  onSelectSport,
   onAddNew,
 }: {
   lang: TranslationTarget
   exercises: Exercise[]
+  sports: Sport[]
   selectedId: string | null
   onSelect: (ex: Exercise) => void
+  onSelectSport: (s: Sport) => void
   onAddNew: (query: string) => void
 }) {
   const [query, setQuery] = useState('')
 
-  const grouped = useMemo(() => {
-    const q = query.trim().toLowerCase()
+  const q = query.trim().toLowerCase()
+  const exGroups = useMemo(() => {
     const matches = exercises.filter(
-      (e) =>
-        !q ||
-        e.name_zh.toLowerCase().includes(q) ||
-        e.name_en.toLowerCase().includes(q),
+      (e) => !q || e.name_zh.toLowerCase().includes(q) || e.name_en.toLowerCase().includes(q),
     )
-    return BODY_PARTS.map((bp) => ({
-      bp,
-      items: matches.filter((e) => e.body_part === bp),
-    })).filter((g) => g.items.length > 0)
-  }, [exercises, query])
+    return BODY_PARTS.map((bp) => ({ bp, items: matches.filter((e) => e.body_part === bp) })).filter(
+      (g) => g.items.length > 0,
+    )
+  }, [exercises, q])
+  const sportMatches = sports.filter(
+    (s) => !q || s.name_zh.toLowerCase().includes(q) || s.name_en.toLowerCase().includes(q),
+  )
+
+  const empty = exercises.length === 0 && sports.length === 0
 
   return (
     <div className="log-picker">
@@ -41,20 +56,35 @@ export function ExercisePicker({
           className="th-input"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder={lang === 'zh' ? '搜索动作…' : 'Search exercises…'}
+          placeholder={lang === 'zh' ? '搜索动作 / 运动…' : 'Search activities…'}
         />
         <button className="th-btn-ghost log-suggest" type="button" onClick={() => onAddNew(query)}>
-          + New
+          {lang === 'zh' ? '+ 新动作' : '+ Exercise'}
         </button>
       </div>
 
-      {exercises.length === 0 ? (
-        <p className="log-empty">No exercises yet — add your first with “+ New”.</p>
-      ) : grouped.length === 0 ? (
-        <p className="log-empty">No match. Add it with “+ New”.</p>
+      {empty ? (
+        <p className="log-empty">{lang === 'zh' ? '还没有动作 —— 用「+ 新动作」添加' : 'No activities yet — add one with “+ Exercise”.'}</p>
       ) : (
         <div className="log-groups">
-          {grouped.map(({ bp, items }) => (
+          {sportMatches.length > 0 && (
+            <div className="log-group">
+              <span className="log-group-label">{lang === 'zh' ? '运动' : 'Sports'}</span>
+              <div className="log-chips">
+                {sportMatches.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    className={`log-chip sport ${selectedId === s.id ? 'is-selected' : ''}`}
+                    onClick={() => onSelectSport(s)}
+                  >
+                    {sportLabel(s, lang)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {exGroups.map(({ bp, items }) => (
             <div key={bp} className="log-group">
               <span className="log-group-label">{BODY_PART_LABELS[bp][lang]}</span>
               <div className="log-chips">

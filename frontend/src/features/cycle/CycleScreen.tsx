@@ -29,15 +29,18 @@ export function CycleScreen() {
   const [cycles, setCycles] = useState<TrainingCycle[]>([])
   const [active, setActive] = useState<TrainingCycle | null>(null)
   const [entries, setEntries] = useState<WorkoutEntry[]>([])
+  const [exercises, setExercises] = useState<Exercise[]>([])
   const [exById, setExById] = useState<Record<string, Exercise>>({})
   const [newName, setNewName] = useState('')
   const [editId, setEditId] = useState<string | null>(null)
+  const [showLibrary, setShowLibrary] = useState(false)
 
   const reload = useCallback(async () => {
     const [cs, act, es, exs] = await Promise.all([getCycles(), getActiveCycle(), getEntries(), getExercises()])
     setCycles(cs)
     setActive(act)
     setEntries(es)
+    setExercises(exs)
     setExById(Object.fromEntries(exs.map((e) => [e.id, e])))
   }, [])
 
@@ -97,6 +100,31 @@ export function CycleScreen() {
         </div>
       </section>
 
+      <section className="cyc-library">
+        <button className="cyc-lib-toggle" type="button" onClick={() => setShowLibrary((v) => !v)}>
+          {lang === 'zh' ? '动作库' : 'Exercise library'} {showLibrary ? '▲' : '▼'}
+        </button>
+        {showLibrary && (
+          <div className="cyc-lib">
+            {exercises.length === 0 && <span className="cyc-empty">{lang === 'zh' ? '还没动作,去 Log 添加' : 'No exercises yet — add them in Log.'}</span>}
+            {BODY_PARTS.map((bp) => {
+              const items = exercises.filter((e) => e.body_part === bp)
+              if (items.length === 0) return null
+              return (
+                <div key={bp} className="cyc-lib-group">
+                  <span className="log-group-label">{BODY_PART_LABELS[bp][lang]}</span>
+                  <div className="log-chips">
+                    {items.map((e) => (
+                      <span key={e.id} className="cyc-lib-item">{(lang === 'zh' ? e.name_zh : e.name_en) || e.name_zh}</span>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </section>
+
       <section className="cyc-cycles">
         <div className="cyc-add">
           <input className="th-input" value={newName} onChange={(e) => setNewName(e.target.value)}
@@ -106,7 +134,7 @@ export function CycleScreen() {
 
         {cycles.map((c) =>
           editId === c.id ? (
-            <CycleDaysEditor key={c.id} cycle={c} lang={lang}
+            <CycleDaysEditor key={c.id} cycle={c} lang={lang} exercises={exercises}
               onSaved={async () => { setEditId(null); await reload() }}
               onCancel={() => setEditId(null)} />
           ) : (
@@ -145,16 +173,20 @@ export function CycleScreen() {
 function CycleDaysEditor({
   cycle,
   lang,
+  exercises,
   onSaved,
   onCancel,
 }: {
   cycle: TrainingCycle
   lang: 'en' | 'zh'
+  exercises: Exercise[]
   onSaved: () => void
   onCancel: () => void
 }) {
   const [name, setName] = useState(cycle.name)
-  const [days, setDays] = useState<CycleDay[]>(cycle.days.map((d) => ({ ...d, body_parts: [...d.body_parts] })))
+  const [days, setDays] = useState<CycleDay[]>(
+    cycle.days.map((d) => ({ ...d, body_parts: [...d.body_parts], exercise_ids: [...(d.exercise_ids ?? [])] })),
+  )
 
   function setDay(i: number, patch: Partial<CycleDay>) {
     setDays((ds) => ds.map((d, idx) => (idx === i ? { ...d, ...patch } : d)))
@@ -168,32 +200,58 @@ function CycleDaysEditor({
       ),
     )
   }
+  function toggleEx(i: number, exId: string) {
+    setDays((ds) =>
+      ds.map((d, idx) => {
+        if (idx !== i) return d
+        const cur = d.exercise_ids ?? []
+        return { ...d, exercise_ids: cur.includes(exId) ? cur.filter((x) => x !== exId) : [...cur, exId] }
+      }),
+    )
+  }
   function addDay() {
     const label = String.fromCharCode(65 + days.length) // A, B, C…
-    setDays((ds) => [...ds, { label, title: '', body_parts: [] }])
+    setDays((ds) => [...ds, { label, title: '', body_parts: [], exercise_ids: [] }])
   }
+
+  const exName = (e: Exercise) => (lang === 'zh' ? e.name_zh : e.name_en) || e.name_zh || e.name_en
 
   return (
     <div className="cyc-editor">
       <input className="th-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="cycle name" />
-      {days.map((d, i) => (
-        <div key={i} className="cyc-edit-day">
-          <div className="cyc-edit-row">
-            <input className="th-input cyc-label" value={d.label} onChange={(e) => setDay(i, { label: e.target.value })} placeholder="A" />
-            <input className="th-input" value={d.title} onChange={(e) => setDay(i, { title: e.target.value })} placeholder={lang === 'zh' ? '标题,如 胸+腹' : 'title, e.g. Chest+Abs'} />
-            <button className="cyc-del" type="button" onClick={() => setDays((ds) => ds.filter((_, idx) => idx !== i))}>×</button>
+      {days.map((d, i) => {
+        const dayExercises = exercises.filter((e) => d.body_parts.includes(e.body_part))
+        return (
+          <div key={i} className="cyc-edit-day">
+            <div className="cyc-edit-row">
+              <input className="th-input cyc-label" value={d.label} onChange={(e) => setDay(i, { label: e.target.value })} placeholder="A" />
+              <input className="th-input" value={d.title} onChange={(e) => setDay(i, { title: e.target.value })} placeholder={lang === 'zh' ? '标题,如 胸+腹' : 'title, e.g. Chest+Abs'} />
+              <button className="cyc-del" type="button" onClick={() => setDays((ds) => ds.filter((_, idx) => idx !== i))}>×</button>
+            </div>
+            <div className="cyc-bp-row">
+              {BODY_PARTS.map((bp) => (
+                <button key={bp} type="button" className={`cyc-bp ${d.body_parts.includes(bp) ? 'on' : ''}`} onClick={() => toggleBp(i, bp)}>
+                  {BODY_PART_LABELS[bp][lang]}
+                </button>
+              ))}
+            </div>
+            {d.body_parts.length > 0 && (
+              <div className="cyc-ex-pick">
+                <span className="cyc-ex-hint">{lang === 'zh' ? '挂动作:' : 'Attach exercises:'}</span>
+                {dayExercises.length === 0 ? (
+                  <span className="cyc-empty">{lang === 'zh' ? '该部位还没动作(去 Log 加)' : 'no exercises for these parts yet'}</span>
+                ) : (
+                  dayExercises.map((e) => (
+                    <button key={e.id} type="button" className={`cyc-ex ${(d.exercise_ids ?? []).includes(e.id) ? 'on' : ''}`} onClick={() => toggleEx(i, e.id)}>
+                      {exName(e)}
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
           </div>
-          <div className="cyc-bp-row">
-            {BODY_PARTS.map((bp) => (
-              <button key={bp} type="button"
-                className={`cyc-bp ${d.body_parts.includes(bp) ? 'on' : ''}`}
-                onClick={() => toggleBp(i, bp)}>
-                {BODY_PART_LABELS[bp][lang]}
-              </button>
-            ))}
-          </div>
-        </div>
-      ))}
+        )
+      })}
       <button className="th-btn-ghost cyc-add-day" type="button" onClick={addDay}>+ day</button>
       <div className="cyc-editor-actions">
         <button className="th-btn-ghost" type="button" onClick={onCancel}>Cancel</button>

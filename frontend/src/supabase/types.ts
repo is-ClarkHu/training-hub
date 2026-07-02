@@ -66,6 +66,7 @@ export interface CycleDay {
   label: string         // 'A' | 'B' | ...
   title: string         // e.g. 'Chest+Abs'
   body_parts: BodyPart[]
+  exercise_ids?: string[] // specific exercises planned for this day (§6B)
 }
 
 export interface ProfileInjury {

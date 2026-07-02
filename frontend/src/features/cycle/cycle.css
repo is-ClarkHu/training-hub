@@ -66,5 +66,34 @@
 .cyc-bp { padding: 4px 8px; font: 11px/1 var(--mono); color: var(--text-dim); background: var(--bg-input); border: 1px solid var(--border); border-radius: 4px; }
 .cyc-bp.on { color: #04181a; background: var(--ice); border-color: var(--ice); }
 .cyc-add-day { width: auto; align-self: flex-start; padding: 7px 12px; }
+
+/* attach exercises to a day */
+.cyc-ex-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.cyc-ex-hint { font: 11px/1 var(--mono); color: var(--text-dim); margin-right: 4px; }
+.cyc-ex { padding: 4px 8px; font: 11px/1 var(--mono); color: var(--text-dim); background: var(--bg-input); border: 1px solid var(--border); border-radius: 4px; }
+.cyc-ex.on { color: #04181a; background: var(--teal); border-color: var(--teal); }
+
+/* library browser */
+.cyc-lib-toggle {
+  align-self: flex-start;
+  padding: 6px 0;
+  font: 600 12px/1 var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+.cyc-lib { display: flex; flex-direction: column; gap: 12px; margin-top: 4px; }
+.cyc-lib-group { display: flex; flex-direction: column; gap: 6px; }
+.cyc-lib-item {
+  padding: 6px 10px;
+  font: 12px/1 var(--mono);
+  color: var(--text);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
 .cyc-editor-actions { display: flex; gap: 10px; }
 .cyc-editor-actions .th-btn, .cyc-editor-actions .th-btn-ghost { flex: 1; }

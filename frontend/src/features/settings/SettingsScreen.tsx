@@ -3,10 +3,21 @@
 // when off, minimal data (date + count), and an explicit "delete all" action.
 // (Excluded from Phase-2 AI context by default — enforced when the assistant ships.)
 import { useEffect, useState } from 'react'
-import { deleteAllTracker, getTrackerEntries, logTracker, today } from '../../db'
+import {
+  deleteAllTracker,
+  getTrackerEntries,
+  logTracker,
+  today,
+  ensureDefaultSport,
+  getSports,
+  softDeleteSport,
+} from '../../db'
 import { useLanguage } from '../../i18n'
+import { useAuth } from '../auth'
 import { syncNow } from '../../sync'
 import { importLegacyCsv } from '../../migration'
+import { AddSportDialog, sportName } from '../sports'
+import type { Sport } from '../../supabase/types'
 import {
   AI_PROVIDERS,
   DEFAULT_MODEL,
@@ -24,6 +35,9 @@ const ENABLED_KEY = 'th.tracker.intimacy.enabled'
 
 export function SettingsScreen() {
   const { lang } = useLanguage()
+  const { session, signOut } = useAuth()
+  const [sports, setSports] = useState<Sport[]>([])
+  const [sportDialog, setSportDialog] = useState<{ open: boolean; sport?: Sport }>({ open: false })
   const [enabled, setEnabled] = useState(() => localStorage.getItem(ENABLED_KEY) === '1')
   const [date, setDate] = useState(today())
   const [count, setCount] = useState('1')
@@ -49,6 +63,20 @@ export function SettingsScreen() {
   useEffect(() => {
     if (enabled) void getTrackerEntries('intimacy').then(setRows)
   }, [enabled])
+
+  useEffect(() => {
+    void ensureDefaultSport().then(setSports)
+  }, [])
+
+  async function reloadSports() {
+    setSports(await getSports())
+  }
+  async function delSport(s: Sport) {
+    if (sports.length <= 1) return
+    if (!confirm(lang === 'zh' ? `删除运动「${sportName(s, lang)}」?` : `Delete sport “${sportName(s, lang)}”?`)) return
+    await softDeleteSport(s.id)
+    await reloadSports()
+  }
 
   function toggle(on: boolean) {
     localStorage.setItem(ENABLED_KEY, on ? '1' : '0')
@@ -95,6 +123,31 @@ export function SettingsScreen() {
 
   return (
     <div className="set-screen">
+      <section className="set-section">
+        <span className="th-label">{lang === 'zh' ? '账户' : 'Account'}</span>
+        <div className="set-row">
+          <div className="set-desc">{session?.user.email}</div>
+          <button className="th-btn-ghost set-log" type="button" onClick={() => void signOut()}>{lang === 'zh' ? '登出' : 'Sign out'}</button>
+        </div>
+      </section>
+
+      <section className="set-section">
+        <span className="th-label">{lang === 'zh' ? '运动项目' : 'Activities'}</span>
+        <div className="set-ai">
+          <p className="set-desc">{lang === 'zh' ? '管理运动库与它们的 4 档强度(Log 里记录场次)。' : 'Manage your sports and their 4 intensity tiers (log sessions in the Log tab).'}</p>
+          {sports.map((s) => (
+            <div key={s.id} className="set-row set-activity">
+              <div className="set-name">{sportName(s, lang)}</div>
+              <div className="set-act-buttons">
+                <button className="hist-link" type="button" onClick={() => setSportDialog({ open: true, sport: s })}>edit</button>
+                {sports.length > 1 && <button className="hist-link danger" type="button" onClick={() => delSport(s)}>delete</button>}
+              </div>
+            </div>
+          ))}
+          <button className="th-btn-ghost set-log" type="button" onClick={() => setSportDialog({ open: true })}>{lang === 'zh' ? '+ 运动' : '+ Sport'}</button>
+        </div>
+      </section>
+
       <section className="set-section">
         <span className="th-label">{lang === 'zh' ? '可选追踪' : 'Optional trackers'}</span>
 
@@ -207,6 +260,15 @@ export function SettingsScreen() {
       </section>
 
       <p className="set-note">{lang === 'zh' ? '更多设置(资料、翻译管理、导出)稍后加入。' : 'More settings (profile, translation manager, export) come later.'}</p>
+
+      {sportDialog.open && (
+        <AddSportDialog
+          lang={lang}
+          sport={sportDialog.sport}
+          onSaved={() => { setSportDialog({ open: false }); void reloadSports() }}
+          onClose={() => setSportDialog({ open: false })}
+        />
+      )}
     </div>
   )
 }

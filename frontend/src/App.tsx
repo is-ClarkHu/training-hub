@@ -5,7 +5,6 @@ import { LanguageProvider, useLanguage } from './i18n'
 import { startSync } from './sync'
 import { LogScreen } from './features/log'
 import { HistoryScreen } from './features/history'
-import { SportsScreen } from './features/sports'
 import { InjuriesScreen } from './features/injuries'
 import { CycleScreen } from './features/cycle'
 import { DashboardScreen } from './features/dashboard'
@@ -15,10 +14,10 @@ import './App.css'
 
 // Tabs. Log + History are implemented; the rest are built module by module
 // (SPEC §7, §12) and shown disabled for now.
-const TABS = ['Log', 'History', 'Dashboard', 'Sports', 'Injuries', 'Cycle', 'Assistant', 'Settings'] as const
+const TABS = ['Log', 'History', 'Dashboard', 'Injuries', 'Cycle', 'Assistant', 'Settings'] as const
 type Tab = (typeof TABS)[number]
 const IMPLEMENTED: ReadonlySet<Tab> = new Set<Tab>([
-  'Log', 'History', 'Dashboard', 'Sports', 'Injuries', 'Cycle', 'Assistant', 'Settings',
+  'Log', 'History', 'Dashboard', 'Injuries', 'Cycle', 'Assistant', 'Settings',
 ])
 
 function AppShell() {
@@ -83,7 +82,6 @@ function AppShell() {
         {tab === 'Log' && <LogScreen />}
         {tab === 'History' && <HistoryScreen />}
         {tab === 'Dashboard' && <DashboardScreen />}
-        {tab === 'Sports' && <SportsScreen />}
         {tab === 'Injuries' && <InjuriesScreen />}
         {tab === 'Cycle' && <CycleScreen />}
         {tab === 'Assistant' && <AssistantScreen />}
