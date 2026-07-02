@@ -15,7 +15,7 @@ import {
 import { useLanguage } from '../../i18n'
 import { useAuth } from '../auth'
 import { syncNow } from '../../sync'
-import { importLegacyCsv } from '../../migration'
+import { importLegacyCsv, downloadBackup, importBackup } from '../../migration'
 import { AddSportDialog, sportName } from '../sports'
 import type { Sport } from '../../supabase/types'
 import {
@@ -44,6 +44,7 @@ export function SettingsScreen() {
   const [rows, setRows] = useState<OptionalTracker[]>([])
   const [syncMsg, setSyncMsg] = useState('')
   const [importMsg, setImportMsg] = useState('')
+  const [dataMsg, setDataMsg] = useState('')
   const [aiKeys, setAiKeys] = useState<Record<string, string>>(() =>
     Object.fromEntries(AI_PROVIDERS.map((p) => [p, getKey(p)])),
   )
@@ -118,6 +119,26 @@ export function SettingsScreen() {
       )
     } catch (e) {
       setImportMsg(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  async function onExport() {
+    setDataMsg(lang === 'zh' ? '导出中…' : 'Exporting…')
+    try {
+      await downloadBackup()
+      setDataMsg(lang === 'zh' ? '已导出备份 JSON' : 'Backup JSON downloaded')
+    } catch (e) {
+      setDataMsg(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  async function onImportBackup(file: File) {
+    setDataMsg(lang === 'zh' ? '恢复中…' : 'Restoring…')
+    try {
+      const r = await importBackup(await file.text())
+      setDataMsg(lang === 'zh' ? `恢复 ${r.imported} 行 / ${r.tables} 表` : `restored ${r.imported} rows across ${r.tables} tables`)
+    } catch (e) {
+      setDataMsg(e instanceof Error ? e.message : String(e))
     }
   }
 
@@ -251,11 +272,25 @@ export function SettingsScreen() {
       </section>
 
       <section className="set-section">
-        <span className="th-label">{lang === 'zh' ? '导入旧数据' : 'Import legacy data'}</span>
+        <span className="th-label">{lang === 'zh' ? '数据(导入 / 导出)' : 'Data (import / export)'}</span>
         <div className="set-import">
-          <input type="file" accept=".csv,text/csv" onChange={(e) => e.target.files?.[0] && void onImport(e.target.files[0])} />
-          {importMsg && <p className="set-desc">{importMsg}</p>}
-          <p className="set-desc">{lang === 'zh' ? '上传旧 workout_log.csv → 解析入库(可重复导入)。' : 'Upload the legacy workout_log.csv → parsed into the local store (re-import safe).'}</p>
+          <div className="set-row">
+            <div className="set-desc">{lang === 'zh' ? '导出全部数据为 JSON 备份' : 'Export all data as a JSON backup'}</div>
+            <button className="th-btn set-log" type="button" onClick={onExport}>{lang === 'zh' ? '导出备份' : 'Export'}</button>
+          </div>
+
+          <label className="set-desc set-file">
+            {lang === 'zh' ? '恢复备份(JSON):' : 'Restore backup (JSON):'}
+            <input type="file" accept=".json,application/json" onChange={(e) => e.target.files?.[0] && void onImportBackup(e.target.files[0])} />
+          </label>
+
+          <label className="set-desc set-file">
+            {lang === 'zh' ? '导入旧 CSV(workout_log.csv):' : 'Import legacy CSV (workout_log.csv):'}
+            <input type="file" accept=".csv,text/csv" onChange={(e) => e.target.files?.[0] && void onImport(e.target.files[0])} />
+          </label>
+
+          {(dataMsg || importMsg) && <p className="set-desc set-datamsg">{dataMsg || importMsg}</p>}
+          <p className="set-desc">{lang === 'zh' ? '导入均为可重复安全(按 id 覆盖);导入后到「同步」上云。' : 'Imports are re-run safe (upsert by id); Sync now to push to the cloud.'}</p>
         </div>
       </section>
 

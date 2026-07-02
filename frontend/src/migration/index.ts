@@ -1,3 +1,5 @@
 export { parseLegacyCsv } from './parseLegacy'
 export type { ParseResult, ParseReport } from './parseLegacy'
 export { importLegacy, importLegacyCsv } from './importLegacy'
+export { exportAll, downloadBackup, importBackup } from './backup'
+export type { Backup } from './backup'

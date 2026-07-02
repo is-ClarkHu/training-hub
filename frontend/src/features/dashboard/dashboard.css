@@ -42,6 +42,28 @@
 }
 .dash-prog-pick { max-width: 100%; }
 
+/* intensity heatmap */
+.dash-heat-sec { display: flex; flex-direction: column; gap: 10px; }
+.dash-sub { font-style: normal; font-weight: 400; color: var(--text-dim); font-size: 10px; }
+.dash-heat {
+  display: flex; gap: 6px;
+  padding: 12px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow-x: auto;
+}
+.dash-heat-days { display: flex; flex-direction: column; gap: 3px; }
+.dash-heat-days span { height: 13px; font: 9px/13px var(--mono); color: var(--text-dim); }
+.dash-heat-grid { display: flex; gap: 3px; }
+.dash-heat-col { display: flex; flex-direction: column; gap: 3px; }
+.dash-heat-cell { width: 13px; height: 13px; border-radius: 2px; }
+
+/* sports section */
+.dash-sports { display: flex; flex-direction: column; gap: 10px; }
+.dash-sports-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.dash-sport-pick { width: auto; max-width: 200px; }
+
 @media (max-width: 640px) {
   .dash-charts { grid-template-columns: 1fr; }
 }
