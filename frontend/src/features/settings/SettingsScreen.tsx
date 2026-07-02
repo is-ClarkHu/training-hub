@@ -17,6 +17,7 @@ import { useAuth } from '../auth'
 import { syncNow } from '../../sync'
 import { importLegacyCsv, downloadBackup, importBackup } from '../../migration'
 import { AddSportDialog, sportName } from '../sports'
+import { ExerciseManager } from '../log'
 import type { Sport } from '../../supabase/types'
 import {
   AI_PROVIDERS,
@@ -167,6 +168,11 @@ export function SettingsScreen() {
           ))}
           <button className="th-btn-ghost set-log" type="button" onClick={() => setSportDialog({ open: true })}>{lang === 'zh' ? '+ 运动' : '+ Sport'}</button>
         </div>
+      </section>
+
+      <section className="set-section">
+        <span className="th-label">{lang === 'zh' ? '动作库' : 'Exercises'}</span>
+        <ExerciseManager lang={lang} />
       </section>
 
       <section className="set-section">

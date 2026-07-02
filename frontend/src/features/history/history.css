@@ -1,6 +1,10 @@
 .hist-screen { display: flex; flex-direction: column; gap: 22px; }
 .hist-empty { color: var(--text-dim); }
 
+.hist-toolbar { display: flex; gap: 16px; align-items: center; }
+.hist-check { width: 16px; height: 16px; accent-color: var(--teal); }
+.hist-entry.sel { border-color: var(--teal); }
+
 .hist-session { display: flex; flex-direction: column; gap: 10px; }
 .hist-date {
   margin: 0;

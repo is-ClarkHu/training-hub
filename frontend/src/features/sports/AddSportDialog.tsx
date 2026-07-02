@@ -6,6 +6,7 @@ import { createSport, updateSport } from '../../db'
 import { requestTranslation } from '../../translation'
 import { DEFAULT_SPORT_TIERS, type Sport, type SportTier } from '../../supabase/types'
 import type { TranslationTarget } from '../../translation'
+import './sports.css'
 
 const HAS_CJK = /[一-鿿]/
 

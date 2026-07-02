@@ -106,6 +106,17 @@ function parseDurationToken(tok: string): number | null {
   return null
 }
 
+// Infer a frisbee tier (1 toss · 2 casual/pickup · 3 club/league · 4 major/comp)
+// from the legacy "动作"/备注/类型 text.
+function frisbeeTier(text: string): 1 | 2 | 3 | 4 {
+  const s = text.toLowerCase()
+  if (/regional|比赛|major|nationals|赛事|大学|sectionals/.test(s)) return 4
+  if (/联赛|league|训练|俱乐部|club/.test(s)) return 3
+  if (/toss|抛接/.test(s)) return 1
+  if (/pickup|娱乐|casual|沙滩|beach|尔湾|mix|初/.test(s)) return 2
+  return 2
+}
+
 export function parseLegacyCsv(csv: string): ParseResult {
   const lines = csv.replace(/^﻿/, '').split(/\r?\n/).filter((l) => l.trim().length > 0)
   const exercises = new Map<string, DraftExercise>()
@@ -128,13 +139,23 @@ export function parseLegacyCsv(csv: string): ParseResult {
     report.totalRows++
     const raw = cell.trim()
 
-    // Frisbee / sport sessions (§4.5)
-    if (type === '飞盘') {
-      const hours = (parseDurationToken(raw) ?? 0) / 3600
+    // Frisbee / sport sessions (§4.5). Any 飞盘* type (飞盘, 飞盘比赛, …) is a sport,
+    // never a gym exercise. The legacy "动作" column encodes the tier.
+    if (type.includes('飞盘')) {
+      const tier = frisbeeTier(`${name} ${note} ${type}`)
+      let hours = (parseDurationToken(raw) ?? 0) / 3600
+      let estimated = !raw.includes(':')
+      if (raw.includes('天')) {
+        const days = parseInt(raw, 10) || (/[一二两]/.test(raw) ? 1 : 1)
+        hours = (days || 1) * 6 // tournament day ≈ 6h
+        estimated = true
+      }
       sportSessions.push({
         id: seededUuid(`sport_session:${date}:${name}:${i}`),
-        date, sport_id: frisbeeId, tier: 2, hours: hours || 1,
-        injury: false, estimated: !raw.includes(':'), note_raw: note, note_tags: [], deleted: false,
+        date, sport_id: frisbeeId, tier, hours: hours || 1.5,
+        injury: /拉伤|受伤|⚠️/.test(note), estimated,
+        note_raw: [name, note].filter(Boolean).join(' · '), // keep "夏季联赛" etc as the session label
+        note_tags: [], deleted: false,
       })
       report.sportSessions++
       continue

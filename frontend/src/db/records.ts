@@ -59,6 +59,37 @@ export async function getExercises(): Promise<Exercise[]> {
   return all.filter((e) => !e.deleted)
 }
 
+export async function updateExercise(
+  id: string,
+  patch: Partial<Pick<Exercise, 'name_zh' | 'name_en' | 'body_part' | 'measure_type' | 'assisted' | 'name_locked' | 'needs_translation'>>,
+): Promise<void> {
+  const e = await db.exercises.get(id)
+  if (e) await db.exercises.put({ ...e, ...patch, name_locked: true, updated_at: nowIso() })
+}
+
+export async function softDeleteExercise(id: string): Promise<void> {
+  const e = await db.exercises.get(id)
+  if (e) await db.exercises.put({ ...e, deleted: true, updated_at: nowIso() })
+}
+
+/** Count live workout entries referencing an exercise (for merge/delete UX). */
+export async function exerciseUsage(id: string): Promise<number> {
+  const rows = await db.workout_entries.where('exercise_id').equals(id).toArray()
+  return rows.filter((e) => !e.deleted).length
+}
+
+/** Merge `fromId` into `intoId`: reassign all its entries, then retire it (§ merge). */
+export async function mergeExercises(fromId: string, intoId: string): Promise<void> {
+  if (fromId === intoId) return
+  const ts = nowIso()
+  await db.transaction('rw', db.workout_entries, db.exercises, async () => {
+    const ents = await db.workout_entries.where('exercise_id').equals(fromId).toArray()
+    await db.workout_entries.bulkPut(ents.map((e) => ({ ...e, exercise_id: intoId, updated_at: ts })))
+    const ex = await db.exercises.get(fromId)
+    if (ex) await db.exercises.put({ ...ex, deleted: true, updated_at: ts })
+  })
+}
+
 // ── workout entry + its sets (one transaction) ───────────────
 export interface NewSetInput {
   set_type?: SetType

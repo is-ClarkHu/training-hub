@@ -28,6 +28,9 @@ export function HistoryScreen() {
   const [setMap, setSetMap] = useState<Record<string, ExerciseSet[]>>({})
   const [exById, setExById] = useState<Record<string, Exercise>>({})
   const [loading, setLoading] = useState(true)
+  const [selectMode, setSelectMode] = useState(false)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [discreet, setDiscreet] = useState(false)
 
   const reload = useCallback(async () => {
     const [es, exs] = await Promise.all([getEntries(), getExercises()])
@@ -53,6 +56,23 @@ export function HistoryScreen() {
     return byDate
   }, [entries])
 
+  function toggleSel(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+  async function deleteSelected() {
+    if (selected.size === 0) return
+    if (!confirm(lang === 'zh' ? `删除选中的 ${selected.size} 条?` : `Delete ${selected.size} selected?`)) return
+    for (const id of selected) await softDeleteEntry(id)
+    setSelected(new Set())
+    setSelectMode(false)
+    await reload()
+  }
+
   if (loading) return <p className="hist-empty">Loading…</p>
   if (entries.length === 0) {
     return <p className="hist-empty">No sessions logged yet. Head to the Log tab.</p>
@@ -60,6 +80,19 @@ export function HistoryScreen() {
 
   return (
     <div className="hist-screen">
+      <div className="hist-toolbar">
+        <button className="hist-link" type="button" onClick={() => setDiscreet((v) => !v)}>
+          {discreet ? (lang === 'zh' ? '显示数值' : 'show values') : (lang === 'zh' ? '隐藏数值' : 'hide values')}
+        </button>
+        <button className="hist-link" type="button" onClick={() => { setSelectMode((v) => !v); setSelected(new Set()) }}>
+          {selectMode ? (lang === 'zh' ? '取消' : 'cancel') : (lang === 'zh' ? '批量选择' : 'select')}
+        </button>
+        {selectMode && (
+          <button className="hist-link danger" type="button" onClick={deleteSelected} disabled={selected.size === 0}>
+            {lang === 'zh' ? `删除 (${selected.size})` : `delete (${selected.size})`}
+          </button>
+        )}
+      </div>
       {sessions.map((s) => (
         <section key={s.date} className="hist-session">
           <h3 className="hist-date">{s.date}</h3>
@@ -72,6 +105,10 @@ export function HistoryScreen() {
                 sets={setMap[entry.id] ?? []}
                 lang={lang}
                 onChanged={reload}
+                selectMode={selectMode}
+                selected={selected.has(entry.id)}
+                onToggleSelect={() => toggleSel(entry.id)}
+                discreet={discreet}
               />
             ))}
           </div>
@@ -87,12 +124,20 @@ function EntryCard({
   sets,
   lang,
   onChanged,
+  selectMode,
+  selected,
+  onToggleSelect,
+  discreet,
 }: {
   entry: WorkoutEntry
   exercise: Exercise | undefined
   sets: ExerciseSet[]
   lang: 'en' | 'zh'
   onChanged: () => Promise<void> | void
+  selectMode: boolean
+  selected: boolean
+  onToggleSelect: () => void
+  discreet: boolean
 }) {
   const [editing, setEditing] = useState(false)
   const [drafts, setDrafts] = useState<SetDraft[]>([])
@@ -137,15 +182,20 @@ function EntryCard({
   const name = exercise ? exerciseName(exercise, lang) : '(deleted exercise)'
 
   return (
-    <div className={`hist-entry ${needsAttention ? 'needs' : ''}`}>
+    <div className={`hist-entry ${needsAttention ? 'needs' : ''} ${selected ? 'sel' : ''}`}>
       <div className="hist-entry-head">
+        {selectMode && (
+          <input type="checkbox" className="hist-check" checked={selected} onChange={onToggleSelect} aria-label="select" />
+        )}
         <span className="hist-name">{name}</span>
-        <div className="hist-actions">
-          {exercise && !editing && (
-            <button className="hist-link" type="button" onClick={startEdit} disabled={busy}>edit</button>
-          )}
-          <button className="hist-link danger" type="button" onClick={remove} disabled={busy}>delete</button>
-        </div>
+        {!selectMode && (
+          <div className="hist-actions">
+            {exercise && !editing && (
+              <button className="hist-link" type="button" onClick={startEdit} disabled={busy}>edit</button>
+            )}
+            <button className="hist-link danger" type="button" onClick={remove} disabled={busy}>delete</button>
+          </div>
+        )}
       </div>
 
       {entry.injury_modified && (
@@ -184,12 +234,16 @@ function EntryCard({
       ) : (
         <>
           <div className="hist-sets">
-            {sets.map((s) => (
-              <span key={s.id} className="hist-set">
-                {exercise ? formatSet(s, exercise.measure_type) : '–'}
-                {s.set_type !== 'normal' && <em className="hist-settype"> {s.set_type}</em>}
-              </span>
-            ))}
+            {discreet ? (
+              <span className="hist-set">{sets.length} {lang === 'zh' ? '组' : sets.length === 1 ? 'set' : 'sets'}</span>
+            ) : (
+              sets.map((s) => (
+                <span key={s.id} className="hist-set">
+                  {exercise ? formatSet(s, exercise.measure_type) : '–'}
+                  {s.set_type !== 'normal' && <em className="hist-settype"> {s.set_type}</em>}
+                </span>
+              ))
+            )}
           </div>
           {entry.note_raw && <p className="hist-note">{entry.note_raw}</p>}
           {entry.note_tags.length > 0 && (

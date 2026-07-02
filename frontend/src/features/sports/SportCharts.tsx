@@ -13,6 +13,7 @@ import { Doughnut, Bar } from 'react-chartjs-2'
 import type { Sport, SportSession } from '../../supabase/types'
 import type { TranslationTarget } from '../../translation'
 import { hoursByTier, weeklyHours, tierLabel, TIER_COLORS } from './util'
+import './sports.css'
 
 Chart.register(ArcElement, BarElement, CategoryScale, LinearScale, Tooltip, Legend)
 Chart.defaults.color = '#6b8294'

@@ -3,6 +3,10 @@ export { newId, nowIso, today } from './helpers'
 export {
   createExercise,
   getExercises,
+  updateExercise,
+  softDeleteExercise,
+  exerciseUsage,
+  mergeExercises,
   createEntryWithSets,
   getEntries,
   getSetsByEntryIds,

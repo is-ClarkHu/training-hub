@@ -67,6 +67,19 @@
 .set-activity { padding: 10px 12px; }
 .set-act-buttons { display: flex; gap: 10px; }
 
+.set-ex-group { display: flex; flex-direction: column; gap: 6px; }
+.set-ex-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.set-ex-item {
+  padding: 6px 10px;
+  font: 12px/1 var(--mono);
+  color: var(--text);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.set-ex-item:hover { border-color: var(--teal); color: var(--text-bright); }
+
 .set-note { color: var(--text-dim); font-size: 13px; }
 
 @media (max-width: 520px) {
