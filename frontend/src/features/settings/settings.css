@@ -44,4 +44,27 @@
 }
 .set-import input[type='file'] { font: 12px/1.4 var(--mono); color: var(--text-dim); }
 
+.set-ai {
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 14px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.set-ai-row { display: flex; align-items: center; gap: 8px; }
+.set-ai-task {
+  flex: 0 0 92px;
+  font: 12px/1.3 var(--mono);
+  color: var(--text-dim);
+  word-break: break-word;
+}
+.set-ai-prov { flex: 0 0 120px; }
+.set-ai-row .th-input:last-child { flex: 1; }
+.set-ai-keys-label { margin-top: 6px; }
+
 .set-note { color: var(--text-dim); font-size: 13px; }
+
+@media (max-width: 520px) {
+  .set-ai-row { flex-wrap: wrap; }
+  .set-ai-task { flex-basis: 100%; }
+}

@@ -7,6 +7,16 @@ import { deleteAllTracker, getTrackerEntries, logTracker, today } from '../../db
 import { useLanguage } from '../../i18n'
 import { syncNow } from '../../sync'
 import { importLegacyCsv } from '../../migration'
+import {
+  AI_PROVIDERS,
+  DEFAULT_MODEL,
+  getKey,
+  setKey,
+  getTaskCfg,
+  setTaskCfg,
+  type AiProvider,
+  type AiTask,
+} from '../../ai'
 import type { OptionalTracker } from '../../supabase/types'
 import './settings.css'
 
@@ -20,6 +30,21 @@ export function SettingsScreen() {
   const [rows, setRows] = useState<OptionalTracker[]>([])
   const [syncMsg, setSyncMsg] = useState('')
   const [importMsg, setImportMsg] = useState('')
+  const [aiKeys, setAiKeys] = useState<Record<string, string>>(() =>
+    Object.fromEntries(AI_PROVIDERS.map((p) => [p, getKey(p)])),
+  )
+  const [taskT, setTaskT] = useState(() => getTaskCfg('translation'))
+  const [taskA, setTaskA] = useState(() => getTaskCfg('assistant'))
+
+  function updKey(p: AiProvider, v: string) {
+    setKey(p, v)
+    setAiKeys((k) => ({ ...k, [p]: v }))
+  }
+  function updTask(t: AiTask, provider: AiProvider, model: string) {
+    const cfg = { provider, model }
+    setTaskCfg(t, cfg)
+    ;(t === 'translation' ? setTaskT : setTaskA)(cfg)
+  }
 
   useEffect(() => {
     if (enabled) void getTrackerEntries('intimacy').then(setRows)
@@ -111,6 +136,57 @@ export function SettingsScreen() {
             </button>
           </div>
         )}
+      </section>
+
+      <section className="set-section">
+        <span className="th-label">{lang === 'zh' ? 'AI 设置' : 'AI'}</span>
+        <div className="set-ai">
+          <p className="set-desc">
+            {lang === 'zh'
+              ? '每类任务选提供方/模型,并填对应的 API key。key 只存在本机,经你本地后端(:8000)中转调用。'
+              : 'Pick a provider/model per task and paste that provider’s API key. Keys stay on this device and calls relay through your local backend (:8000).'}
+          </p>
+
+          {(['translation', 'assistant'] as AiTask[]).map((t) => {
+            const cfg = t === 'translation' ? taskT : taskA
+            return (
+              <div key={t} className="set-ai-row">
+                <span className="set-ai-task">{t === 'translation' ? (lang === 'zh' ? '翻译' : 'Translation') : (lang === 'zh' ? '助手' : 'Assistant')}</span>
+                <select
+                  className="th-input set-ai-prov"
+                  value={cfg.provider}
+                  onChange={(e) => updTask(t, e.target.value as AiProvider, DEFAULT_MODEL[e.target.value as AiProvider])}
+                >
+                  {AI_PROVIDERS.map((p) => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+                <input
+                  className="th-input"
+                  value={cfg.model}
+                  onChange={(e) => updTask(t, cfg.provider, e.target.value)}
+                  placeholder="model"
+                  aria-label={`${t} model`}
+                />
+              </div>
+            )
+          })}
+
+          <span className="th-label set-ai-keys-label">{lang === 'zh' ? 'API Keys(按提供方)' : 'API keys (per provider)'}</span>
+          {AI_PROVIDERS.map((p) => (
+            <div key={p} className="set-ai-row">
+              <span className="set-ai-task">{p}</span>
+              <input
+                className="th-input"
+                type="password"
+                autoComplete="off"
+                value={aiKeys[p] ?? ''}
+                onChange={(e) => updKey(p, e.target.value)}
+                placeholder={`${p} API key`}
+              />
+            </div>
+          ))}
+        </div>
       </section>
 
       <section className="set-section">

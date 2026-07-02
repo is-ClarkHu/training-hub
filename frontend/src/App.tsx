@@ -26,41 +26,58 @@ function AppShell() {
   const { lang, toggle } = useLanguage()
   const { t } = useTranslation()
   const [tab, setTab] = useState<Tab>('Log')
+  const [drawerOpen, setDrawerOpen] = useState(false)
 
   // Background sync once authenticated (§3): now, on focus/online, every 2 min.
   useEffect(() => startSync(), [])
 
+  function pick(tb: Tab) {
+    setTab(tb)
+    setDrawerOpen(false)
+  }
+
   return (
     <div className="app-shell">
       <header className="app-bar">
+        <button className="app-burger" type="button" aria-label="menu" onClick={() => setDrawerOpen(true)}>
+          <span /><span /><span />
+        </button>
         <span className="app-logo">training&middot;hub</span>
+        <span className="app-current">{t(`tabs.${tab}`)}</span>
         <div className="app-user">
           <button className="th-btn-ghost app-lang" type="button" onClick={toggle} aria-label="toggle language">
             {lang === 'en' ? '中 / EN' : 'EN / 中'}
           </button>
-          <span className="app-email">{session?.user.email}</span>
           <button className="th-btn-ghost app-logout" type="button" onClick={() => void signOut()}>
             {t('app.signOut')}
           </button>
         </div>
       </header>
 
-      <nav className="app-tabs" aria-label="sections">
-        {TABS.map((tb) => {
-          const enabled = IMPLEMENTED.has(tb)
-          return (
-            <button
-              key={tb}
-              type="button"
-              className={`app-tab ${tb === tab ? 'is-active' : ''} ${enabled ? '' : 'is-disabled'}`}
-              onClick={() => enabled && setTab(tb)}
-              disabled={!enabled}
-            >
-              {t(`tabs.${tb}`)}
-            </button>
-          )
-        })}
-      </nav>
+      {/* Slide-in drawer nav (mobile-friendly) */}
+      {drawerOpen && <div className="app-drawer-backdrop" onClick={() => setDrawerOpen(false)} />}
+      <aside className={`app-drawer ${drawerOpen ? 'open' : ''}`} aria-hidden={!drawerOpen}>
+        <div className="app-drawer-head">
+          <span className="app-logo">training&middot;hub</span>
+          <span className="app-drawer-email">{session?.user.email}</span>
+        </div>
+        <nav aria-label="sections">
+          {TABS.map((tb) => {
+            const enabled = IMPLEMENTED.has(tb)
+            return (
+              <button
+                key={tb}
+                type="button"
+                className={`app-drawer-item ${tb === tab ? 'is-active' : ''}`}
+                onClick={() => enabled && pick(tb)}
+                disabled={!enabled}
+              >
+                {t(`tabs.${tb}`)}
+              </button>
+            )
+          })}
+        </nav>
+      </aside>
 
       <main className="app-main">
         {tab === 'Log' && <LogScreen />}

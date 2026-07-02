@@ -1,6 +1,7 @@
-# Phase 2 only. Pinned when the FastAPI assistant is built.
+# Phase 2 backend (translate + assistant relay).
 fastapi
 uvicorn[standard]
 anthropic
+httpx
 supabase
 python-dotenv

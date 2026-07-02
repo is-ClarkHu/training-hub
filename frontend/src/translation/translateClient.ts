@@ -1,7 +1,8 @@
-// Client for the /api/translate Supabase Edge Function (SPEC §5.5). The Claude
-// API key lives in the function, never here — we only invoke it (supabase-js
-// attaches the user's JWT so the function's writes are RLS-scoped).
+// Client for the /api/translate backend relay (SPEC §5). Sends the user's Supabase
+// JWT (RLS-scoped caching) + the chosen provider/model/key (Settings → AI). The
+// backend calls the LLM and caches the pair into translation_dictionary.
 import { supabase } from '../supabase/client'
+import { aiPayload, backendUrl } from '../ai/config'
 import type {
   BodyPart,
   MeasureType,
@@ -24,10 +25,18 @@ export async function requestTranslation(
   text: string,
   target: TranslationTarget,
 ): Promise<TranslateResponse> {
-  const { data, error } = await supabase.functions.invoke('translate', {
-    body: { domain, text, target },
+  const { data } = await supabase.auth.getSession()
+  const token = data.session?.access_token
+  if (!token) throw new Error('Not signed in')
+
+  const res = await fetch(`${backendUrl()}/api/translate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ domain, text, target, ...aiPayload('translation') }),
   })
-  if (error) throw error
-  if (data?.error) throw new Error(data.error)
-  return data as TranslateResponse
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '')
+    throw new Error(`translate ${res.status}${detail ? `: ${detail}` : ''}`)
+  }
+  return (await res.json()) as TranslateResponse
 }

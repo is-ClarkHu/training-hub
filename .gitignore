@@ -1,7 +1,7 @@
 # --- training-hub project (see SPEC §11 / §14) ---
 # Private build brief — never commit
 SPEC.md
-docs/SPEC.md
+docs/SPEC(v1).md
 # User-provided legacy data — read-only, local-only, never commit
 raw_data/
 raw-data/

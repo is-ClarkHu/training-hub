@@ -5,6 +5,8 @@ import { VitePWA } from 'vite-plugin-pwa'
 // Installable, offline-first PWA (SPEC §12.13, §14). Service worker precaches the
 // app shell; the data layer is already offline via Dexie.
 export default defineConfig({
+  server: { port: 5174, strictPort: true },
+  preview: { port: 5174 },
   plugins: [
     react(),
     VitePWA({
