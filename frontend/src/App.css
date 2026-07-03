@@ -1,13 +1,14 @@
 .app-shell {
-  min-height: 100svh;
+  height: 100svh;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .app-bar {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 16px;
   padding: 12px 20px;
   border-bottom: 1px solid var(--border);
@@ -29,14 +30,12 @@
 .app-logout { width: auto; padding: 7px 12px; }
 .app-lang { width: auto; padding: 7px 10px; font-size: 12px; }
 
-/* current section title in the bar */
 .app-current {
   font: 600 13px/1 var(--mono);
   letter-spacing: 0.04em;
   color: var(--amber);
 }
 
-/* hamburger */
 .app-burger {
   display: flex;
   flex-direction: column;
@@ -50,22 +49,20 @@
   border-radius: 7px;
   cursor: pointer;
 }
-.app-burger span {
-  display: block;
-  height: 2px;
-  background: var(--text);
-  border-radius: 2px;
-}
+.app-burger span { display: block; height: 2px; background: var(--text); border-radius: 2px; }
+
+.app-body { flex: 1; display: flex; min-height: 0; }
 
 .app-main {
   flex: 1;
-  max-width: 720px;
-  width: 100%;
-  margin: 0 auto;
+  min-width: 0;
+  overflow-y: auto;
   padding: 24px 20px 64px;
 }
+/* keep content readable but let the sidebar sit flush left */
+.app-main > * { max-width: 720px; margin-inline: auto; }
 
-/* slide-in drawer */
+/* ── drawer (mobile: slide-in overlay) ──────────────────────── */
 .app-drawer-backdrop {
   position: fixed;
   inset: 0;
@@ -92,12 +89,7 @@
 }
 .app-drawer.open { transform: translateX(0); }
 
-.app-drawer nav {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
+.app-drawer nav { display: flex; flex-direction: column; gap: 4px; }
 .app-drawer-head {
   display: flex;
   flex-direction: column;
@@ -124,3 +116,20 @@
 .app-drawer-item:hover:not(:disabled) { background: var(--bg-input); }
 .app-drawer-item.is-active { color: #04181a; background: var(--teal); }
 .app-drawer-item:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── wide screens: persistent sidebar, no hamburger/overlay ── */
+/* (placed AFTER the base rules so it wins) */
+@media (min-width: 900px) {
+  .app-burger,
+  .app-current,
+  .app-drawer-backdrop { display: none; }
+  .app-drawer {
+    position: static;
+    transform: none;
+    height: auto;
+    width: auto;
+    max-width: none;
+    flex: 0 0 240px;
+    z-index: auto;
+  }
+}

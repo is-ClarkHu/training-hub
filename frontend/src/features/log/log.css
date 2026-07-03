@@ -104,6 +104,7 @@
 .log-session-item { align-items: center; padding: 8px 10px; background: var(--bg-panel); border: 1px solid var(--border); border-radius: 6px; }
 .log-session-name { font: 600 13px/1 var(--mono); color: var(--text-bright); }
 .log-session-detail { font: 13px/1 var(--mono); color: var(--teal); }
+.log-session-del { margin-left: auto; }
 
 /* add-exercise dialog */
 .log-dialog-backdrop {
@@ -125,6 +126,8 @@
   border-radius: 12px;
 }
 .log-dialog h3 { margin: 0; font: 600 16px/1 var(--mono); }
+.log-hint { margin: 6px 0 0; font: 12px/1.4 var(--mono); color: var(--amber); }
+.log-usage { font: 11px/1 var(--mono); color: var(--text-dim); }
 .log-dialog-actions { display: flex; gap: 10px; }
 .log-dialog-actions .th-btn, .log-dialog-actions .th-btn-ghost { flex: 1; }
 

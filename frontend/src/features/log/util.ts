@@ -8,9 +8,11 @@ export interface SetDraft {
   reps: string
   duration: string // 'mm:ss' or seconds
   per_side: boolean
+  set_type: SetType
+  note: string
 }
 
-export const emptySet = (): SetDraft => ({ weight: '', reps: '', duration: '', per_side: false })
+export const emptySet = (): SetDraft => ({ weight: '', reps: '', duration: '', per_side: false, set_type: 'normal', note: '' })
 
 export function exerciseName(ex: Exercise, lang: TranslationTarget): string {
   const primary = lang === 'zh' ? ex.name_zh : ex.name_en
@@ -56,9 +58,10 @@ export function draftsToSetInputs(
   sets: SetDraft[],
   mt: MeasureType,
   parsed: ParsedNote,
-  isSuperset: boolean,
 ): NewSetInput[] {
-  const setType: SetType = parsed.warmup ? 'warmup' : isSuperset ? 'superset' : 'normal'
+  // Set type is per-set now (§ superset/dropset are single sets, not the whole
+  // exercise). A note-parsed warmup only fills sets left as 'normal'.
+  const globalType: SetType = parsed.warmup ? 'warmup' : 'normal'
   const out: NewSetInput[] = []
   for (const d of sets) {
     let row: NewSetInput | null = null
@@ -75,7 +78,9 @@ export function draftsToSetInputs(
     }
     if (!row) continue
     if (parsed.perSide && mt !== 'duration') row.per_side = true
-    row.set_type = setType
+    // per-set type wins; otherwise fall back to the entry-level warmup/superset
+    row.set_type = d.set_type !== 'normal' ? d.set_type : globalType
+    if (d.note.trim()) row.note = d.note.trim()
     out.push(row)
   }
   return out
@@ -88,6 +93,8 @@ export function setToDraft(s: ExerciseSet): SetDraft {
     reps: s.reps != null ? String(s.reps) : '',
     duration: s.duration_sec != null ? formatDuration(s.duration_sec) : '',
     per_side: s.per_side,
+    set_type: s.set_type,
+    note: s.note ?? '',
   }
 }
 

@@ -7,13 +7,14 @@ import type { TranslationTarget } from '../../translation'
 import { EditExerciseDialog } from './EditExerciseDialog'
 import { exerciseName } from './util'
 
-export function ExerciseManager({ lang }: { lang: TranslationTarget }) {
+export function ExerciseManager({ lang, onChanged }: { lang: TranslationTarget; onChanged?: () => void }) {
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [editing, setEditing] = useState<Exercise | null>(null)
 
   const reload = useCallback(async () => {
     setExercises(await getExercises())
-  }, [])
+    onChanged?.()
+  }, [onChanged])
   useEffect(() => {
     void reload()
   }, [reload])

@@ -53,40 +53,42 @@ function AppShell() {
         </div>
       </header>
 
-      {/* Slide-in drawer nav (mobile-friendly) */}
+      {/* Persistent sidebar on wide screens; slide-in drawer on narrow. */}
       {drawerOpen && <div className="app-drawer-backdrop" onClick={() => setDrawerOpen(false)} />}
-      <aside className={`app-drawer ${drawerOpen ? 'open' : ''}`} aria-hidden={!drawerOpen}>
-        <div className="app-drawer-head">
-          <span className="app-logo">training&middot;hub</span>
-          <span className="app-drawer-email">{session?.user.email}</span>
-        </div>
-        <nav aria-label="sections">
-          {TABS.map((tb) => {
-            const enabled = IMPLEMENTED.has(tb)
-            return (
-              <button
-                key={tb}
-                type="button"
-                className={`app-drawer-item ${tb === tab ? 'is-active' : ''}`}
-                onClick={() => enabled && pick(tb)}
-                disabled={!enabled}
-              >
-                {t(`tabs.${tb}`)}
-              </button>
-            )
-          })}
-        </nav>
-      </aside>
+      <div className="app-body">
+        <aside className={`app-drawer ${drawerOpen ? 'open' : ''}`}>
+          <div className="app-drawer-head">
+            <span className="app-logo">training&middot;hub</span>
+            <span className="app-drawer-email">{session?.user.email}</span>
+          </div>
+          <nav aria-label="sections">
+            {TABS.map((tb) => {
+              const enabled = IMPLEMENTED.has(tb)
+              return (
+                <button
+                  key={tb}
+                  type="button"
+                  className={`app-drawer-item ${tb === tab ? 'is-active' : ''}`}
+                  onClick={() => enabled && pick(tb)}
+                  disabled={!enabled}
+                >
+                  {t(`tabs.${tb}`)}
+                </button>
+              )
+            })}
+          </nav>
+        </aside>
 
-      <main className="app-main">
-        {tab === 'Log' && <LogScreen />}
-        {tab === 'History' && <HistoryScreen />}
-        {tab === 'Dashboard' && <DashboardScreen />}
-        {tab === 'Injuries' && <InjuriesScreen />}
-        {tab === 'Cycle' && <CycleScreen />}
-        {tab === 'Assistant' && <AssistantScreen />}
-        {tab === 'Settings' && <SettingsScreen />}
-      </main>
+        <main className="app-main">
+          {tab === 'Log' && <LogScreen />}
+          {tab === 'History' && <HistoryScreen />}
+          {tab === 'Dashboard' && <DashboardScreen />}
+          {tab === 'Injuries' && <InjuriesScreen />}
+          {tab === 'Cycle' && <CycleScreen />}
+          {tab === 'Assistant' && <AssistantScreen />}
+          {tab === 'Settings' && <SettingsScreen />}
+        </main>
+      </div>
     </div>
   )
 }

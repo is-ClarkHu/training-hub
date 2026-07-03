@@ -33,6 +33,7 @@ export function EditExerciseDialog({
   const [nameEn, setNameEn] = useState(exercise.name_en)
   const [bodyPart, setBodyPart] = useState<BodyPart>(exercise.body_part)
   const [measureType, setMeasureType] = useState<MeasureType>(exercise.measure_type)
+  const [perSide, setPerSide] = useState(exercise.default_per_side ?? false)
   const [mergeTarget, setMergeTarget] = useState('')
   const [usage, setUsage] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
@@ -51,6 +52,8 @@ export function EditExerciseDialog({
       name_en: nameEn.trim(),
       body_part: bodyPart,
       measure_type: measureType,
+      default_per_side: perSide,
+      name_locked: true,
     })
     setBusy(false)
     onSaved()
@@ -103,6 +106,11 @@ export function EditExerciseDialog({
             </select>
           </div>
         </div>
+
+        <label className="log-perside">
+          <input type="checkbox" checked={perSide} onChange={(e) => setPerSide(e.target.checked)} />
+          {lang === 'zh' ? '默认每侧(录入时自动勾选)' : 'per-side by default (prefills the toggle)'}
+        </label>
 
         <div className="log-field">
           <label className="th-label">{lang === 'zh' ? '合并到(它们其实是同一个动作)' : 'Merge into (same exercise)'}</label>

@@ -39,6 +39,7 @@ export interface NewExerciseInput {
   is_custom?: boolean
   name_locked?: boolean
   needs_translation?: boolean
+  default_per_side?: boolean
 }
 
 export async function createExercise(input: NewExerciseInput): Promise<Exercise> {
@@ -61,10 +62,10 @@ export async function getExercises(): Promise<Exercise[]> {
 
 export async function updateExercise(
   id: string,
-  patch: Partial<Pick<Exercise, 'name_zh' | 'name_en' | 'body_part' | 'measure_type' | 'assisted' | 'name_locked' | 'needs_translation'>>,
+  patch: Partial<Pick<Exercise, 'name_zh' | 'name_en' | 'body_part' | 'measure_type' | 'assisted' | 'name_locked' | 'needs_translation' | 'default_per_side'>>,
 ): Promise<void> {
   const e = await db.exercises.get(id)
-  if (e) await db.exercises.put({ ...e, ...patch, name_locked: true, updated_at: nowIso() })
+  if (e) await db.exercises.put({ ...e, ...patch, updated_at: nowIso() })
 }
 
 export async function softDeleteExercise(id: string): Promise<void> {
@@ -97,6 +98,7 @@ export interface NewSetInput {
   reps?: number | null
   duration_sec?: number | null
   per_side?: boolean
+  note?: string
 }
 
 export interface NewEntryInput {
@@ -136,6 +138,7 @@ export async function createEntryWithSets(
     reps: null,
     duration_sec: null,
     per_side: false,
+    note: '',
     ...s,
   }))
   await db.transaction('rw', db.workout_entries, db.sets, async () => {
@@ -434,6 +437,7 @@ export async function updateEntry(
       reps: null,
       duration_sec: null,
       per_side: false,
+    note: '',
       ...s,
     }))
     await db.sets.bulkAdd(fresh)

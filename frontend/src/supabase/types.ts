@@ -85,6 +85,7 @@ export interface Exercise extends SyncFields {
   is_custom: boolean
   name_locked: boolean   // user-edited translation; AI must never overwrite
   needs_translation: boolean
+  default_per_side?: boolean // this movement is inherently per-side (prefills the toggle)
 }
 
 export interface WorkoutEntry extends SyncFields {
@@ -109,6 +110,7 @@ export interface ExerciseSet extends SyncFields {
   reps: number | null
   duration_sec: number | null
   per_side: boolean
+  note?: string                      // per-set note (e.g. to-failure); §5.3
 }
 
 export interface Sport extends SyncFields {

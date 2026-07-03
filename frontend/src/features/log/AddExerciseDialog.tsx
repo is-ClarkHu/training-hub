@@ -1,6 +1,7 @@
-// Add-new-exercise flow (SPEC §7.1): user types the name in Chinese or English →
-// the translation subsystem proposes the other name + body_part + measure_type →
-// user confirms (and may edit) → a library row is created and the dictionary grows.
+// Add-exercise dialog. Manual-first: you can always type the name(s), body part
+// and measure type and create — no AI needed. "Suggest" is an optional helper that
+// auto-fills the other-language name + classification when the backend/key is set.
+// De-duplicates against the existing library on create.
 import { useState } from 'react'
 import { createExercise } from '../../db'
 import { suggestExercise } from '../../translation'
@@ -15,53 +16,65 @@ import {
 import type { TranslationTarget } from '../../translation'
 
 const MEASURE_TYPES: MeasureType[] = ['weight_reps', 'reps_only', 'duration']
+const HAS_CJK = /[一-鿿]/
+const norm = (s: string) => s.trim().toLowerCase()
 
 export function AddExerciseDialog({
   lang,
   initialName = '',
+  existing = [],
   onCreated,
   onClose,
 }: {
   lang: TranslationTarget
   initialName?: string
+  existing?: Exercise[]
   onCreated: (ex: Exercise) => void
   onClose: () => void
 }) {
+  const startZh = HAS_CJK.test(initialName)
   const [raw, setRaw] = useState(initialName)
-  const [nameZh, setNameZh] = useState('')
-  const [nameEn, setNameEn] = useState('')
+  const [nameZh, setNameZh] = useState(startZh ? initialName : '')
+  const [nameEn, setNameEn] = useState(startZh ? '' : initialName)
   const [bodyPart, setBodyPart] = useState<BodyPart>('chest')
   const [measureType, setMeasureType] = useState<MeasureType>('weight_reps')
-  const [proposed, setProposed] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [note, setNote] = useState<string | null>(null)
+  const [hint, setHint] = useState<string | null>(null)
 
   async function onSuggest() {
     if (!raw.trim()) return
     setBusy(true)
-    setNote(null)
+    setHint(null)
     const s = await suggestExercise(raw)
-    setNameZh(s.name_zh)
-    setNameEn(s.name_en)
+    if (s.name_zh) setNameZh(s.name_zh)
+    if (s.name_en) setNameEn(s.name_en)
     if (s.body_part) setBodyPart(s.body_part)
     if (s.measure_type) setMeasureType(s.measure_type)
-    setProposed(true)
     if (s.needsTranslation) {
-      setNote('Offline or translation unavailable — fill the other name manually.')
+      setHint(lang === 'zh' ? '自动翻译暂不可用(填 key + 跑后端可启用),手动填另一名即可。' : 'Auto-translate unavailable (set a key + run the backend). Fill the other name manually.')
     }
     setBusy(false)
   }
 
   async function onCreate() {
-    if (!nameZh.trim() && !nameEn.trim()) return
+    const zh = nameZh.trim()
+    const en = nameEn.trim()
+    if (!zh && !en) return
+    const dup = existing.find(
+      (e) => (zh && norm(e.name_zh) === norm(zh)) || (en && norm(e.name_en) === norm(en)),
+    )
+    if (dup) {
+      if (confirm(lang === 'zh' ? '库里已有同名动作,直接用它?' : 'An exercise with this name exists — use it?')) onCreated(dup)
+      return
+    }
     setBusy(true)
     const ex = await createExercise({
-      name_zh: nameZh.trim(),
-      name_en: nameEn.trim(),
+      name_zh: zh,
+      name_en: en,
       body_part: bodyPart,
       measure_type: measureType,
       is_custom: true,
-      needs_translation: !nameZh.trim() || !nameEn.trim(),
+      needs_translation: !zh || !en,
     })
     setBusy(false)
     onCreated(ex)
@@ -70,63 +83,49 @@ export function AddExerciseDialog({
   return (
     <div className="log-dialog-backdrop" onClick={onClose}>
       <div className="log-dialog" onClick={(e) => e.stopPropagation()}>
-        <h3>Add exercise</h3>
+        <h3>{lang === 'zh' ? '添加动作' : 'Add exercise'}</h3>
 
         <div className="log-field">
-          <label className="th-label" htmlFor="ex-raw">Name (Chinese or English)</label>
+          <label className="th-label">{lang === 'zh' ? '自动翻译(可选)' : 'Auto-translate (optional)'}</label>
           <div className="log-row">
-            <input
-              id="ex-raw"
-              className="th-input"
-              value={raw}
-              onChange={(e) => setRaw(e.target.value)}
-              placeholder={lang === 'zh' ? '例如 牧师凳弯举' : 'e.g. 牧师凳弯举'}
-              autoFocus
-            />
+            <input className="th-input" value={raw} onChange={(e) => setRaw(e.target.value)}
+              placeholder={lang === 'zh' ? '输中/英名后点 Suggest' : 'type a name, then Suggest'} />
             <button className="th-btn-ghost log-suggest" type="button" onClick={onSuggest} disabled={busy || !raw.trim()}>
               {busy ? '…' : 'Suggest'}
             </button>
           </div>
+          {hint && <p className="log-hint">{hint}</p>}
         </div>
 
-        {proposed && (
-          <>
-            <div className="log-grid2">
-              <div className="log-field">
-                <label className="th-label" htmlFor="ex-zh">中文名</label>
-                <input id="ex-zh" className="th-input" value={nameZh} onChange={(e) => setNameZh(e.target.value)} />
-              </div>
-              <div className="log-field">
-                <label className="th-label" htmlFor="ex-en">English name</label>
-                <input id="ex-en" className="th-input" value={nameEn} onChange={(e) => setNameEn(e.target.value)} />
-              </div>
-            </div>
-            <div className="log-grid2">
-              <div className="log-field">
-                <label className="th-label" htmlFor="ex-bp">Body part</label>
-                <select id="ex-bp" className="th-input" value={bodyPart} onChange={(e) => setBodyPart(e.target.value as BodyPart)}>
-                  {BODY_PARTS.map((bp) => (
-                    <option key={bp} value={bp}>{BODY_PART_LABELS[bp][lang]}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="log-field">
-                <label className="th-label" htmlFor="ex-mt">Measure</label>
-                <select id="ex-mt" className="th-input" value={measureType} onChange={(e) => setMeasureType(e.target.value as MeasureType)}>
-                  {MEASURE_TYPES.map((mt) => (
-                    <option key={mt} value={mt}>{MEASURE_TYPE_LABELS[mt][lang]}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            {note && <p className="th-error">{note}</p>}
-          </>
-        )}
+        <div className="log-grid2">
+          <div className="log-field">
+            <label className="th-label">中文名</label>
+            <input className="th-input" value={nameZh} onChange={(e) => setNameZh(e.target.value)} autoFocus />
+          </div>
+          <div className="log-field">
+            <label className="th-label">English name</label>
+            <input className="th-input" value={nameEn} onChange={(e) => setNameEn(e.target.value)} />
+          </div>
+        </div>
+        <div className="log-grid2">
+          <div className="log-field">
+            <label className="th-label">{lang === 'zh' ? '部位' : 'Body part'}</label>
+            <select className="th-input" value={bodyPart} onChange={(e) => setBodyPart(e.target.value as BodyPart)}>
+              {BODY_PARTS.map((bp) => (<option key={bp} value={bp}>{BODY_PART_LABELS[bp][lang]}</option>))}
+            </select>
+          </div>
+          <div className="log-field">
+            <label className="th-label">{lang === 'zh' ? '类型' : 'Measure'}</label>
+            <select className="th-input" value={measureType} onChange={(e) => setMeasureType(e.target.value as MeasureType)}>
+              {MEASURE_TYPES.map((mt) => (<option key={mt} value={mt}>{MEASURE_TYPE_LABELS[mt][lang]}</option>))}
+            </select>
+          </div>
+        </div>
 
         <div className="log-dialog-actions">
           <button className="th-btn-ghost" type="button" onClick={onClose}>Cancel</button>
-          <button className="th-btn" type="button" onClick={onCreate} disabled={busy || !proposed || (!nameZh.trim() && !nameEn.trim())}>
-            Create
+          <button className="th-btn" type="button" onClick={onCreate} disabled={busy || (!nameZh.trim() && !nameEn.trim())}>
+            {lang === 'zh' ? '创建' : 'Create'}
           </button>
         </div>
       </div>

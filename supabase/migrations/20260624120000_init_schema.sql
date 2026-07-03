@@ -30,6 +30,7 @@ create table public.exercises (
   is_custom     boolean not null default false,
   name_locked   boolean not null default false,  -- user-edited translation; AI must not overwrite
   needs_translation boolean not null default false,
+  default_per_side boolean not null default false, -- movement is inherently per-side
   updated_at    timestamptz not null default now(),
   deleted       boolean not null default false
 );
@@ -70,6 +71,7 @@ create table public.sets (
   reps          integer,                          -- weight_reps / reps_only
   duration_sec  integer,                          -- duration
   per_side      boolean not null default false,   -- reps are per-side (e.g. Bulgarian split squat)
+  note          text,                             -- per-set note (e.g. to-failure); §5.3
   updated_at    timestamptz not null default now(),
   deleted       boolean not null default false
 );

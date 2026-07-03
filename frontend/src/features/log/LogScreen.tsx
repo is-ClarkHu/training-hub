@@ -10,6 +10,8 @@ import {
   getExercises,
   getInjuries,
   getSports,
+  softDeleteEntry,
+  softDeleteSportSession,
   today,
   type NewSetInput,
 } from '../../db'
@@ -35,7 +37,7 @@ type Selection =
   | { kind: 'sport'; sport: Sport }
   | null
 
-interface LoggedItem { id: string; name: string; detail: string; tagKeys: string[] }
+interface LoggedItem { id: string; name: string; detail: string; tagKeys: string[]; kind: 'exercise' | 'sport'; realId: string }
 
 export function LogScreen() {
   const { lang } = useLanguage()
@@ -53,14 +55,11 @@ export function LogScreen() {
 
   // exercise form
   const [sets, setSets] = useState<SetDraft[]>([emptySet()])
-  const [isSuperset, setIsSuperset] = useState(false)
   const [injuryMod, setInjuryMod] = useState<InjuryModified | 'none'>('none')
   const [injuryId, setInjuryId] = useState('')
   // sport form
   const [tier, setTier] = useState<TierLevel>(1)
   const [hours, setHours] = useState('')
-  const [sInjury, setSInjury] = useState(false)
-  const [sEstimated, setSEstimated] = useState(false)
   // shared
   const [note, setNote] = useState('')
 
@@ -75,13 +74,10 @@ export function LogScreen() {
 
   function resetForms() {
     setSets([emptySet()])
-    setIsSuperset(false)
     setInjuryMod('none')
     setInjuryId('')
     setTier(1)
     setHours('')
-    setSInjury(false)
-    setSEstimated(false)
     setNote('')
   }
   function selectExercise(ex: Exercise) {
@@ -107,7 +103,7 @@ export function LogScreen() {
 
   function buildSets(): NewSetInput[] {
     if (sel?.kind !== 'exercise') return []
-    return draftsToSetInputs(sets, sel.ex.measure_type, parsed, isSuperset)
+    return draftsToSetInputs(sets, sel.ex.measure_type, parsed)
   }
 
   const canSaveExercise = sel?.kind === 'exercise' && buildSets().length > 0 && !saving
@@ -118,11 +114,11 @@ export function LogScreen() {
     const setInputs = buildSets()
     if (setInputs.length === 0) return
     setSaving(true)
-    await createEntryWithSets(
+    const { entry } = await createEntryWithSets(
       {
         date,
         exercise_id: sel.ex.id,
-        is_superset: isSuperset,
+        is_superset: setInputs.some((s) => s.set_type === 'superset'),
         note_raw: note,
         note_tags: parsed.tagKeys,
         cycle_day_label: cycleDay || null,
@@ -140,7 +136,7 @@ export function LogScreen() {
             : `${s.weight ?? '–'}×${s.reps ?? '–'}`,
       )
       .join(', ')
-    finishSave(exerciseName(sel.ex, lang), detail)
+    finishSave(exerciseName(sel.ex, lang), detail, 'exercise', entry.id)
   }
 
   async function saveSport() {
@@ -148,27 +144,36 @@ export function LogScreen() {
     const h = toNumber(hours)
     if (!h || h <= 0) return
     setSaving(true)
-    await createSportSession({
+    const injured = activeInjuries.length > 0 // auto: derived from active injuries (§6A)
+    const session = await createSportSession({
       date,
       sport_id: sel.sport.id,
       tier,
       hours: h,
-      injury: sInjury,
-      estimated: sEstimated,
+      injury: injured,
+      estimated: false,
       note_raw: note,
       note_tags: parsed.tagKeys,
     })
     finishSave(
       (lang === 'zh' ? sel.sport.name_zh : sel.sport.name_en) || sel.sport.name_zh,
-      `${h}h · ${tierLabel(sel.sport, tier, lang)}${sInjury ? ' · injury' : ''}`,
+      `${h}h · ${tierLabel(sel.sport, tier, lang)}${injured ? ' · injury' : ''}`,
+      'sport',
+      session.id,
     )
   }
 
-  function finishSave(name: string, detail: string) {
-    setLogged((prev) => [{ id: crypto.randomUUID(), name, detail, tagKeys: parsed.tagKeys }, ...prev])
+  function finishSave(name: string, detail: string, kind: 'exercise' | 'sport', realId: string) {
+    setLogged((prev) => [{ id: crypto.randomUUID(), name, detail, tagKeys: parsed.tagKeys, kind, realId }, ...prev])
     setSel(null)
     resetForms()
     setSaving(false)
+  }
+
+  async function deleteLogged(item: LoggedItem) {
+    if (item.kind === 'exercise') await softDeleteEntry(item.realId)
+    else await softDeleteSportSession(item.realId)
+    setLogged((prev) => prev.filter((x) => x.id !== item.id))
   }
 
   return (
@@ -218,10 +223,7 @@ export function LogScreen() {
         <section className="log-entry">
           <div className="log-entry-head">
             <h3>{exerciseName(sel.ex, lang)}</h3>
-            <label className="log-superset">
-              <input type="checkbox" checked={isSuperset} onChange={(e) => setIsSuperset(e.target.checked)} />
-              {lang === 'zh' ? '超级组' : 'superset'}
-            </label>
+            <span className="log-superset-hint">{lang === 'zh' ? '每组可标 超级组/递减/热身' : 'mark each set: superset/dropset/warmup'}</span>
           </div>
 
           <SetEditor lang={lang} measureType={sel.ex.measure_type} sets={sets} onChange={setSets} />
@@ -270,10 +272,9 @@ export function LogScreen() {
               <input className="th-input" inputMode="decimal" value={hours} onChange={(e) => setHours(e.target.value)} placeholder="2" />
             </div>
           </div>
-          <div className="log-row">
-            <label className="log-superset"><input type="checkbox" checked={sInjury} onChange={(e) => setSInjury(e.target.checked)} />{lang === 'zh' ? '伤病' : 'injury'}</label>
-            <label className="log-superset"><input type="checkbox" checked={sEstimated} onChange={(e) => setSEstimated(e.target.checked)} />{lang === 'zh' ? '估算' : 'estimated'}</label>
-          </div>
+          {activeInjuries.length > 0 && (
+            <p className="log-hint">{lang === 'zh' ? '⚠ 有活动伤病,本场次自动标记为带伤(可在 Injuries 里管理状态)' : '⚠ Active injury — this session is auto-flagged as injured (manage status in Injuries)'}</p>
+          )}
           <NoteField lang={lang} note={note} setNote={setNote} tagKeys={parsed.tagKeys} />
           <button className="th-btn" type="button" onClick={saveSport} disabled={!canSaveSport}>
             {saving ? 'Saving…' : lang === 'zh' ? '保存场次' : 'Save session'}
@@ -290,6 +291,7 @@ export function LogScreen() {
                 <span className="log-session-name">{item.name}</span>
                 <span className="log-session-detail">{item.detail}</span>
                 {item.tagKeys.map((k) => (<span key={k} className="log-tagchip sm">{noteTagLabel(k, lang)}</span>))}
+                <button className="hist-link danger log-session-del" type="button" onClick={() => void deleteLogged(item)}>{lang === 'zh' ? '删除' : 'delete'}</button>
               </li>
             ))}
           </ul>
@@ -297,7 +299,7 @@ export function LogScreen() {
       )}
 
       {dialog.open && (
-        <AddExerciseDialog lang={lang} initialName={dialog.name} onCreated={onExerciseCreated} onClose={() => setDialog({ open: false, name: '' })} />
+        <AddExerciseDialog lang={lang} initialName={dialog.name} existing={exercises} onCreated={onExerciseCreated} onClose={() => setDialog({ open: false, name: '' })} />
       )}
     </div>
   )

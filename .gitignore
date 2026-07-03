@@ -7,6 +7,7 @@ raw_data/
 raw-data/
 # Migration output (derived from raw_data — also private)
 migration/out/
+data/
 # Secrets / env (anon key is browser-safe via VITE_*, but never commit .env files)
 .env
 .env.*

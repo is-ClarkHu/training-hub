@@ -22,6 +22,7 @@ import {
   type WorkoutEntry,
 } from '../../supabase/types'
 import { muscleRecovery } from '../dashboard/stats'
+import { ExerciseManager } from '../log'
 import './cycle.css'
 
 export function CycleScreen() {
@@ -102,27 +103,9 @@ export function CycleScreen() {
 
       <section className="cyc-library">
         <button className="cyc-lib-toggle" type="button" onClick={() => setShowLibrary((v) => !v)}>
-          {lang === 'zh' ? '动作库' : 'Exercise library'} {showLibrary ? '▲' : '▼'}
+          {lang === 'zh' ? '动作库(增删改查)' : 'Exercise library (manage)'} {showLibrary ? '▲' : '▼'}
         </button>
-        {showLibrary && (
-          <div className="cyc-lib">
-            {exercises.length === 0 && <span className="cyc-empty">{lang === 'zh' ? '还没动作,去 Log 添加' : 'No exercises yet — add them in Log.'}</span>}
-            {BODY_PARTS.map((bp) => {
-              const items = exercises.filter((e) => e.body_part === bp)
-              if (items.length === 0) return null
-              return (
-                <div key={bp} className="cyc-lib-group">
-                  <span className="log-group-label">{BODY_PART_LABELS[bp][lang]}</span>
-                  <div className="log-chips">
-                    {items.map((e) => (
-                      <span key={e.id} className="cyc-lib-item">{(lang === 'zh' ? e.name_zh : e.name_en) || e.name_zh}</span>
-                    ))}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
+        {showLibrary && <ExerciseManager lang={lang} onChanged={reload} />}
       </section>
 
       <section className="cyc-cycles">

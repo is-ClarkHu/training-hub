@@ -1,6 +1,7 @@
-// Legacy migration reference script (SPEC §10). Reads the user-provided CSV from
-// raw_data/ (read-only) and writes the converted records to migration/out/ — never
-// back into raw_data/. Idempotent: stable ids mean re-running overwrites cleanly.
+// Convert the read-only legacy CSV (raw_data/) into an import-ready backup file
+// under data/ (SPEC §10). The output uses the same JSON shape as Settings →
+// Export, so you restore it via Settings → 数据 → 恢复备份 (Restore backup).
+// raw_data/ is never modified. Idempotent: stable ids mean re-import upserts.
 //
 // Run with Node's type stripping (Node ≥ 22.18):
 //   node --experimental-strip-types migration/migrate.ts
@@ -10,19 +11,33 @@ import { fileURLToPath } from 'node:url'
 import { parseLegacyCsv } from '../frontend/src/migration/parseLegacy.ts'
 
 const here = dirname(fileURLToPath(import.meta.url))
-const csvPath = resolve(here, '../raw_data/workout_log.csv')
-const outDir = resolve(here, 'out')
-
-const csv = readFileSync(csvPath, 'utf8')
+const csv = readFileSync(resolve(here, '../raw_data/workout_log.csv'), 'utf8')
 const result = parseLegacyCsv(csv)
 
-mkdirSync(outDir, { recursive: true })
-const { report, ...records } = result
-writeFileSync(resolve(outDir, 'records.json'), JSON.stringify(records, null, 2))
-writeFileSync(resolve(outDir, 'report.json'), JSON.stringify(report, null, 2))
+const ts = new Date().toISOString()
+const stamp = (rows: Record<string, unknown>[]) => rows.map((r) => ({ ...r, user_id: '', updated_at: ts }))
 
+// Backup shape (matches Settings → Export). Table keys are the DB table names.
+const backup = {
+  version: 1,
+  exported_at: ts,
+  source: 'legacy-migration',
+  tables: {
+    exercises: stamp(result.exercises),
+    workout_entries: stamp(result.entries),
+    sets: stamp(result.sets),
+    sports: stamp(result.sports),
+    sport_sessions: stamp(result.sportSessions),
+  },
+}
+
+const outDir = resolve(here, '../data')
+mkdirSync(outDir, { recursive: true })
+writeFileSync(resolve(outDir, 'training-hub-import.json'), JSON.stringify(backup, null, 2))
+writeFileSync(resolve(outDir, 'import-report.json'), JSON.stringify(result.report, null, 2))
+
+console.log('→ data/training-hub-import.json  (import via Settings → 数据 → 恢复备份)')
 console.log(
-  `migrated: ${report.entries} entries, ${result.sets.length} sets, ${result.exercises.length} exercises, ` +
-    `${report.sportSessions} sport sessions, ${report.skipped} skipped, ${report.needsReview.length} need review`,
+  `entries=${result.report.entries} · sets=${result.sets.length} · exercises=${result.exercises.length} · ` +
+    `sport sessions=${result.report.sportSessions} · needsReview=${result.report.needsReview.length}`,
 )
-console.log(`→ ${resolve(outDir, 'records.json')}`)

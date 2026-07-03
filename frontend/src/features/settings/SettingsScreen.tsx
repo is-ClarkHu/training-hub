@@ -17,7 +17,6 @@ import { useAuth } from '../auth'
 import { syncNow } from '../../sync'
 import { importLegacyCsv, downloadBackup, importBackup } from '../../migration'
 import { AddSportDialog, sportName } from '../sports'
-import { ExerciseManager } from '../log'
 import type { Sport } from '../../supabase/types'
 import {
   AI_PROVIDERS,
@@ -171,11 +170,6 @@ export function SettingsScreen() {
       </section>
 
       <section className="set-section">
-        <span className="th-label">{lang === 'zh' ? '动作库' : 'Exercises'}</span>
-        <ExerciseManager lang={lang} />
-      </section>
-
-      <section className="set-section">
         <span className="th-label">{lang === 'zh' ? '可选追踪' : 'Optional trackers'}</span>
 
         <div className="set-row">
@@ -223,8 +217,8 @@ export function SettingsScreen() {
         <div className="set-ai">
           <p className="set-desc">
             {lang === 'zh'
-              ? '每类任务选提供方/模型,并填对应的 API key。key 只存在本机,经你本地后端(:8000)中转调用。'
-              : 'Pick a provider/model per task and paste that provider’s API key. Keys stay on this device and calls relay through your local backend (:8000).'}
+              ? '每类任务选提供方/模型,填对应的 API key(只存本机)。翻译是浏览器直连——填了 key 联网即用,不用跑后端。提示:DeepSeek/OpenAI 等可能被浏览器 CORS 挡,翻译建议选 Gemini 或 Anthropic(可直连)。助手仍走后端。'
+              : 'Pick a provider/model per task and paste that provider’s API key (stored on this device). Translation runs browser-direct — set a key + go online, no backend needed. Note: DeepSeek/OpenAI may be CORS-blocked in the browser; for translation prefer Gemini or Anthropic. The assistant still uses the backend.'}
           </p>
 
           {(['translation', 'assistant'] as AiTask[]).map((t) => {

@@ -31,6 +31,12 @@ export function HistoryScreen() {
   const [selectMode, setSelectMode] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [discreet, setDiscreet] = useState(false)
+  const [reviewOnly, setReviewOnly] = useState(false)
+
+  function flagged(e: WorkoutEntry): boolean {
+    const ex = exById[e.exercise_id]
+    return e.needs_review || e.needs_translation || (ex ? ex.needs_translation || !ex.name_en || !ex.name_zh : false)
+  }
 
   const reload = useCallback(async () => {
     const [es, exs] = await Promise.all([getEntries(), getExercises()])
@@ -49,12 +55,14 @@ export function HistoryScreen() {
   const sessions = useMemo(() => {
     const byDate: { date: string; items: WorkoutEntry[] }[] = []
     for (const e of entries) {
+      if (reviewOnly && !flagged(e)) continue
       const last = byDate[byDate.length - 1]
       if (last && last.date === e.date) last.items.push(e)
       else byDate.push({ date: e.date, items: [e] })
     }
     return byDate
-  }, [entries])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries, reviewOnly, exById])
 
   function toggleSel(id: string) {
     setSelected((prev) => {
@@ -63,6 +71,9 @@ export function HistoryScreen() {
       else next.add(id)
       return next
     })
+  }
+  function toggleSelectAll() {
+    setSelected((prev) => (prev.size === entries.length ? new Set() : new Set(entries.map((e) => e.id))))
   }
   async function deleteSelected() {
     if (selected.size === 0) return
@@ -81,12 +92,20 @@ export function HistoryScreen() {
   return (
     <div className="hist-screen">
       <div className="hist-toolbar">
+        <button className={`hist-link ${reviewOnly ? 'on' : ''}`} type="button" onClick={() => setReviewOnly((v) => !v)}>
+          {lang === 'zh' ? '只看待复核' : 'review only'}
+        </button>
         <button className="hist-link" type="button" onClick={() => setDiscreet((v) => !v)}>
           {discreet ? (lang === 'zh' ? '显示数值' : 'show values') : (lang === 'zh' ? '隐藏数值' : 'hide values')}
         </button>
         <button className="hist-link" type="button" onClick={() => { setSelectMode((v) => !v); setSelected(new Set()) }}>
           {selectMode ? (lang === 'zh' ? '取消' : 'cancel') : (lang === 'zh' ? '批量选择' : 'select')}
         </button>
+        {selectMode && (
+          <button className="hist-link" type="button" onClick={toggleSelectAll}>
+            {selected.size === entries.length ? (lang === 'zh' ? '全不选' : 'none') : (lang === 'zh' ? '全选' : 'all')}
+          </button>
+        )}
         {selectMode && (
           <button className="hist-link danger" type="button" onClick={deleteSelected} disabled={selected.size === 0}>
             {lang === 'zh' ? `删除 (${selected.size})` : `delete (${selected.size})`}
@@ -142,7 +161,6 @@ function EntryCard({
   const [editing, setEditing] = useState(false)
   const [drafts, setDrafts] = useState<SetDraft[]>([])
   const [note, setNote] = useState(entry.note_raw)
-  const [isSuperset, setIsSuperset] = useState(entry.is_superset)
   const [busy, setBusy] = useState(false)
 
   const needsAttention =
@@ -153,7 +171,6 @@ function EntryCard({
   function startEdit() {
     setDrafts(sets.length ? sets.map(setToDraft) : [])
     setNote(entry.note_raw)
-    setIsSuperset(entry.is_superset)
     setEditing(true)
   }
 
@@ -161,10 +178,10 @@ function EntryCard({
     if (!exercise) return
     setBusy(true)
     const parsed = parseNote(note)
-    const inputs = draftsToSetInputs(drafts, exercise.measure_type, parsed, isSuperset)
+    const inputs = draftsToSetInputs(drafts, exercise.measure_type, parsed)
     await updateEntry(
       entry.id,
-      { note_raw: note, note_tags: parsed.tagKeys, is_superset: isSuperset },
+      { note_raw: note, note_tags: parsed.tagKeys, is_superset: inputs.some((s) => s.set_type === 'superset') },
       inputs,
     )
     setBusy(false)
@@ -220,10 +237,6 @@ function EntryCard({
       {editing && exercise ? (
         <div className="hist-edit">
           <SetEditor lang={lang} measureType={exercise.measure_type} sets={drafts} onChange={setDrafts} />
-          <label className="hist-superset">
-            <input type="checkbox" checked={isSuperset} onChange={(e) => setIsSuperset(e.target.checked)} />
-            {lang === 'zh' ? '超级组' : 'superset'}
-          </label>
           <input className="th-input" value={note} onChange={(e) => setNote(e.target.value)}
             placeholder={lang === 'zh' ? '笔记' : 'note'} />
           <div className="hist-edit-actions">
@@ -241,6 +254,7 @@ function EntryCard({
                 <span key={s.id} className="hist-set">
                   {exercise ? formatSet(s, exercise.measure_type) : '–'}
                   {s.set_type !== 'normal' && <em className="hist-settype"> {s.set_type}</em>}
+                  {s.note && <em className="hist-setnote"> · {s.note}</em>}
                 </span>
               ))
             )}
