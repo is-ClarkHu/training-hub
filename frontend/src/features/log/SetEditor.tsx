@@ -76,7 +76,7 @@ export function SetEditor({
         </div>
       ))}
 
-      <button type="button" className="th-btn-ghost log-addset" onClick={() => onChange([...sets, emptySet()])}>
+      <button type="button" className="th-btn-ghost log-addset" onClick={() => onChange([...sets, { ...emptySet(), per_side: sets[sets.length - 1]?.per_side ?? false }])}>
         {lang === 'zh' ? '+ 加一组' : '+ add set'}
       </button>
     </div>

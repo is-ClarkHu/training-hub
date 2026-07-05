@@ -14,6 +14,68 @@ const here = dirname(fileURLToPath(import.meta.url))
 const csv = readFileSync(resolve(here, '../raw_data/workout_log.csv'), 'utf8')
 const result = parseLegacyCsv(csv)
 
+// ── fill English names via DeepSeek (cheap; runs from Node, no CORS) ──
+// Reads DEEPSEEK_API_KEY from the repo root .env. Skip with --no-translate.
+function loadEnvKey(name: string): string {
+  try {
+    const env = readFileSync(resolve(here, '../.env'), 'utf8')
+    const m = env.match(new RegExp(`^${name}=(.+)$`, 'm'))
+    return m ? m[1].trim() : ''
+  } catch {
+    return ''
+  }
+}
+
+async function translateBatch(names: string[], key: string): Promise<Record<string, string>> {
+  const sys =
+    'You translate Chinese strength-training exercise names into standard English gym ' +
+    'terminology (not literal): 牧师凳弯举→Preacher Curl, 高位下拉→Lat Pulldown. ' +
+    'Reply ONLY with a JSON object mapping each input to its English name.'
+  const r = await fetch('https://api.deepseek.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+    body: JSON.stringify({
+      model: 'deepseek-chat',
+      max_tokens: 2000,
+      messages: [
+        { role: 'system', content: sys },
+        { role: 'user', content: JSON.stringify(names) },
+      ],
+    }),
+  })
+  if (!r.ok) throw new Error(`deepseek ${r.status}: ${await r.text()}`)
+  const j = await r.json()
+  const txt: string = j.choices?.[0]?.message?.content ?? '{}'
+  const m = txt.match(/\{[\s\S]*\}/)
+  return m ? JSON.parse(m[0]) : {}
+}
+
+const noTranslate = process.argv.includes('--no-translate')
+const key = loadEnvKey('DEEPSEEK_API_KEY')
+if (!noTranslate && key) {
+  const need = result.exercises.filter((e) => !e.name_en)
+  if (need.length) {
+    process.stdout.write(`translating ${need.length} exercise names via DeepSeek… `)
+    try {
+      const map = await translateBatch(need.map((e) => e.name_zh), key)
+      let filled = 0
+      for (const ex of need) {
+        const en = map[ex.name_zh]
+        if (en) {
+          ex.name_en = en
+          ex.needs_translation = false
+          filled++
+        }
+      }
+      console.log(`filled ${filled}`)
+    } catch (e) {
+      console.log(`skipped (${e instanceof Error ? e.message : e})`)
+    }
+  }
+} else if (!key) {
+  console.log('(no DEEPSEEK_API_KEY in .env — English names left blank, flagged needs_translation)')
+}
+
 const ts = new Date().toISOString()
 const stamp = (rows: Record<string, unknown>[]) => rows.map((r) => ({ ...r, user_id: '', updated_at: ts }))
 

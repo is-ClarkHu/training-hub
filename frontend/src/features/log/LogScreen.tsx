@@ -83,6 +83,7 @@ export function LogScreen() {
   function selectExercise(ex: Exercise) {
     setSel({ kind: 'exercise', ex })
     resetForms()
+    if (ex.default_per_side) setSets([{ ...emptySet(), per_side: true }]) // learned default (§ per-side)
   }
   function selectSport(sport: Sport) {
     setSel({ kind: 'sport', sport })
