@@ -6,16 +6,21 @@ import {
   getEntries,
   getExercises,
   getSetsByEntryIds,
+  getSportSessions,
+  getSports,
   softDeleteEntry,
+  softDeleteSportSession,
   updateEntry,
 } from '../../db'
 import { parseNote, noteTagLabel } from '../../translation'
 import { useLanguage } from '../../i18n'
-import type { Exercise, ExerciseSet, WorkoutEntry } from '../../supabase/types'
+import type { Exercise, ExerciseSet, Sport, SportSession, WorkoutEntry } from '../../supabase/types'
 import { SetEditor } from '../log/SetEditor'
+import { sportName, attrLabel } from '../sports'
 import {
   draftsToSetInputs,
   exerciseName,
+  formatHours,
   formatSet,
   setToDraft,
   type SetDraft,
@@ -27,6 +32,8 @@ export function HistoryScreen() {
   const [entries, setEntries] = useState<WorkoutEntry[]>([])
   const [setMap, setSetMap] = useState<Record<string, ExerciseSet[]>>({})
   const [exById, setExById] = useState<Record<string, Exercise>>({})
+  const [sportSessions, setSportSessions] = useState<SportSession[]>([])
+  const [sportById, setSportById] = useState<Record<string, Sport>>({})
   const [loading, setLoading] = useState(true)
   const [selectMode, setSelectMode] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -39,11 +46,13 @@ export function HistoryScreen() {
   }
 
   const reload = useCallback(async () => {
-    const [es, exs] = await Promise.all([getEntries(), getExercises()])
+    const [es, exs, ss, sp] = await Promise.all([getEntries(), getExercises(), getSportSessions(), getSports()])
     const sets = await getSetsByEntryIds(es.map((e) => e.id))
     setEntries(es)
     setSetMap(sets)
     setExById(Object.fromEntries(exs.map((e) => [e.id, e])))
+    setSportSessions(ss)
+    setSportById(Object.fromEntries(sp.map((s) => [s.id, s])))
     setLoading(false)
   }, [])
 
@@ -51,18 +60,22 @@ export function HistoryScreen() {
     void reload()
   }, [reload])
 
-  // Group into sessions by date (entries already sorted newest-first).
+  // Group entries + sport sessions by date (newest first).
   const sessions = useMemo(() => {
-    const byDate: { date: string; items: WorkoutEntry[] }[] = []
+    const map = new Map<string, { date: string; items: WorkoutEntry[]; sports: SportSession[] }>()
+    const get = (d: string) => {
+      let g = map.get(d)
+      if (!g) { g = { date: d, items: [], sports: [] }; map.set(d, g) }
+      return g
+    }
     for (const e of entries) {
       if (reviewOnly && !flagged(e)) continue
-      const last = byDate[byDate.length - 1]
-      if (last && last.date === e.date) last.items.push(e)
-      else byDate.push({ date: e.date, items: [e] })
+      get(e.date).items.push(e)
     }
-    return byDate
+    if (!reviewOnly) for (const s of sportSessions) get(s.date).sports.push(s)
+    return [...map.values()].sort((a, b) => (a.date < b.date ? 1 : -1))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entries, reviewOnly, exById])
+  }, [entries, sportSessions, reviewOnly, exById])
 
   function toggleSel(id: string) {
     setSelected((prev) => {
@@ -84,8 +97,14 @@ export function HistoryScreen() {
     await reload()
   }
 
+  async function delSport(id: string) {
+    if (!confirm(lang === 'zh' ? '删除这条运动记录?' : 'Delete this session?')) return
+    await softDeleteSportSession(id)
+    await reload()
+  }
+
   if (loading) return <p className="hist-empty">Loading…</p>
-  if (entries.length === 0) {
+  if (entries.length === 0 && sportSessions.length === 0) {
     return <p className="hist-empty">No sessions logged yet. Head to the Log tab.</p>
   }
 
@@ -130,6 +149,29 @@ export function HistoryScreen() {
                 discreet={discreet}
               />
             ))}
+            {s.sports.map((ss) => {
+              const sp = sportById[ss.sport_id]
+              return (
+                <div key={ss.id} className="hist-entry hist-sport">
+                  <div className="hist-entry-head">
+                    <span className="hist-name">🏃 {sp ? sportName(sp, lang) : '(sport)'}</span>
+                    {!selectMode && (
+                      <div className="hist-actions">
+                        <button className="hist-link danger" type="button" onClick={() => void delSport(ss.id)}>delete</button>
+                      </div>
+                    )}
+                  </div>
+                  <div className="hist-sets">
+                    <span className="hist-set">{formatHours(ss.hours)}</span>
+                    {(sp?.fields ?? []).map((f) => ss.attributes?.[f.key] && (
+                      <span key={f.key} className="hist-settype">{attrLabel(f, ss.attributes[f.key], lang)}</span>
+                    ))}
+                    {ss.injury && <span className="hist-badge injury">injury</span>}
+                  </div>
+                  {ss.note_raw && <p className="hist-note">{ss.note_raw}</p>}
+                </div>
+              )
+            })}
           </div>
         </section>
       ))}

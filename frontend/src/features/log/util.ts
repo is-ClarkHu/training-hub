@@ -39,6 +39,27 @@ export function formatDuration(sec: number): string {
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
+/** Parse 'h:mm' or 'h.h' or bare hours → decimal hours; '' → null. */
+export function parseHours(text: string): number | null {
+  const t = text.trim()
+  if (!t) return null
+  if (t.includes(':')) {
+    const [h, m] = t.split(':')
+    const hh = parseInt(h, 10) || 0
+    const mm = parseInt(m, 10) || 0
+    return hh + mm / 60
+  }
+  const n = Number(t)
+  return Number.isNaN(n) ? null : n
+}
+
+/** Decimal hours → 'h:mm'. */
+export function formatHours(hours: number): string {
+  const h = Math.floor(hours)
+  const m = Math.round((hours - h) * 60)
+  return `${h}:${String(m).padStart(2, '0')}`
+}
+
 export function toNumber(text: string): number | null {
   const t = text.trim()
   if (!t) return null

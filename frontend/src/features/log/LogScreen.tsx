@@ -17,19 +17,18 @@ import {
 } from '../../db'
 import { parseNote, noteTagLabel } from '../../translation'
 import { useLanguage } from '../../i18n'
-import { tierLabel } from '../sports'
+import { fieldLabel } from '../sports'
 import type {
   Exercise,
   Injury,
   InjuryModified,
   Sport,
-  TierLevel,
   TrainingCycle,
 } from '../../supabase/types'
 import { ExercisePicker } from './ExercisePicker'
 import { SetEditor } from './SetEditor'
 import { AddExerciseDialog } from './AddExerciseDialog'
-import { draftsToSetInputs, emptySet, exerciseName, toNumber, type SetDraft } from './util'
+import { draftsToSetInputs, emptySet, exerciseName, parseHours, formatHours, type SetDraft } from './util'
 import './log.css'
 
 type Selection =
@@ -58,8 +57,8 @@ export function LogScreen() {
   const [injuryMod, setInjuryMod] = useState<InjuryModified | 'none'>('none')
   const [injuryId, setInjuryId] = useState('')
   // sport form
-  const [tier, setTier] = useState<TierLevel>(1)
   const [hours, setHours] = useState('')
+  const [attrs, setAttrs] = useState<Record<string, string>>({})
   // shared
   const [note, setNote] = useState('')
 
@@ -76,8 +75,8 @@ export function LogScreen() {
     setSets([emptySet()])
     setInjuryMod('none')
     setInjuryId('')
-    setTier(1)
     setHours('')
+    setAttrs({})
     setNote('')
   }
   function selectExercise(ex: Exercise) {
@@ -108,7 +107,7 @@ export function LogScreen() {
   }
 
   const canSaveExercise = sel?.kind === 'exercise' && buildSets().length > 0 && !saving
-  const canSaveSport = sel?.kind === 'sport' && (toNumber(hours) ?? 0) > 0 && !saving
+  const canSaveSport = sel?.kind === 'sport' && (parseHours(hours) ?? 0) > 0 && !saving
 
   async function saveExercise() {
     if (sel?.kind !== 'exercise') return
@@ -142,23 +141,26 @@ export function LogScreen() {
 
   async function saveSport() {
     if (sel?.kind !== 'sport') return
-    const h = toNumber(hours)
+    const h = parseHours(hours)
     if (!h || h <= 0) return
     setSaving(true)
     const injured = activeInjuries.length > 0 // auto: derived from active injuries (§6A)
     const session = await createSportSession({
       date,
       sport_id: sel.sport.id,
-      tier,
       hours: h,
+      attributes: attrs,
       injury: injured,
-      estimated: false,
       note_raw: note,
       note_tags: parsed.tagKeys,
     })
+    const attrSummary = (sel.sport.fields ?? [])
+      .map((f) => attrs[f.key])
+      .filter(Boolean)
+      .join(' · ')
     finishSave(
       (lang === 'zh' ? sel.sport.name_zh : sel.sport.name_en) || sel.sport.name_zh,
-      `${h}h · ${tierLabel(sel.sport, tier, lang)}${injured ? ' · injury' : ''}`,
+      `${formatHours(h)}${attrSummary ? ' · ' + attrSummary : ''}${injured ? ' · injury' : ''}`,
       'sport',
       session.id,
     )
@@ -261,18 +263,24 @@ export function LogScreen() {
           <div className="log-entry-head">
             <h3>{(lang === 'zh' ? sel.sport.name_zh : sel.sport.name_en) || sel.sport.name_zh}</h3>
           </div>
-          <div className="log-grid2">
-            <div className="log-field">
-              <label className="th-label">{lang === 'zh' ? '档位' : 'Tier'}</label>
-              <select className="th-input" value={tier} onChange={(e) => setTier(Number(e.target.value) as TierLevel)}>
-                {[1, 2, 3, 4].map((tv) => (<option key={tv} value={tv}>{tv} · {tierLabel(sel.sport, tv, lang)}</option>))}
-              </select>
-            </div>
-            <div className="log-field">
-              <label className="th-label">{lang === 'zh' ? '时长(小时)' : 'Hours'}</label>
-              <input className="th-input" inputMode="decimal" value={hours} onChange={(e) => setHours(e.target.value)} placeholder="2" />
-            </div>
+          <div className="log-field">
+            <label className="th-label">{lang === 'zh' ? '时长 (时:分)' : 'Duration (h:mm)'}</label>
+            <input className="th-input" value={hours} onChange={(e) => setHours(e.target.value)} placeholder="1:30" />
           </div>
+          {(sel.sport.fields ?? []).map((f) => (
+            <div key={f.key} className="log-field">
+              <label className="th-label">{fieldLabel(f, lang)}</label>
+              {f.type === 'select' ? (
+                <select className="th-input" value={attrs[f.key] ?? ''} onChange={(e) => setAttrs((a) => ({ ...a, [f.key]: e.target.value }))}>
+                  <option value="">—</option>
+                  {(f.options ?? []).map((o) => (<option key={o.value} value={o.value}>{lang === 'zh' ? o.zh : o.en}</option>))}
+                </select>
+              ) : (
+                <input className="th-input" type={f.type === 'number' ? 'number' : 'text'} value={attrs[f.key] ?? ''}
+                  onChange={(e) => setAttrs((a) => ({ ...a, [f.key]: e.target.value }))} />
+              )}
+            </div>
+          ))}
           {activeInjuries.length > 0 && (
             <p className="log-hint">{lang === 'zh' ? '⚠ 有活动伤病,本场次自动标记为带伤(可在 Injuries 里管理状态)' : '⚠ Active injury — this session is auto-flagged as injured (manage status in Injuries)'}</p>
           )}

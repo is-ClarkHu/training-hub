@@ -80,8 +80,8 @@ create index sets_entry_idx on public.sets (entry_id);
 -- ─────────────────── 4.5a sports (user-creatable activity library) ───────────────────
 -- Frisbee is the default sport seeded for a new account, but the user can add others
 -- (basketball, climbing, …). Per-user and bilingual like the exercise library (§5).
--- Each sport defines EXACTLY 4 intensity tiers (fixed 4-level scale; labels customizable
--- per sport — generalized from frisbee's toss/casual/club/major).
+-- Each sport declares its OWN custom fields in `fields` (jsonb): e.g. frisbee has a
+-- "level" select (抛接/休闲/俱乐部/大赛); basketball has none — just duration. No forced tiers.
 create table public.sports (
   id           uuid primary key default gen_random_uuid(),
   user_id      uuid not null default auth.uid() references auth.users (id) on delete cascade,
@@ -90,13 +90,8 @@ create table public.sports (
   is_default   boolean not null default false,  -- the user's primary sport (frisbee by default)
   name_locked  boolean not null default false,  -- translation lock (like exercises)
   needs_translation boolean not null default false,
-  -- ordered 4 tiers: [{level,key,zh,en}]. level 1 play → 2 casual → 3 club → 4 major.
-  tiers        jsonb not null default
-                 '[{"level":1,"key":"play","zh":"玩玩","en":"Play"},
-                   {"level":2,"key":"casual","zh":"休闲","en":"Casual"},
-                   {"level":3,"key":"club","zh":"训练/俱乐部","en":"Club"},
-                   {"level":4,"key":"major","zh":"大赛","en":"Major"}]'::jsonb
-                 check (jsonb_array_length(tiers) = 4),
+  -- custom fields: [{key,label_zh,label_en,type:'select'|'text'|'number',options?:[{value,zh,en}]}]
+  fields       jsonb not null default '[]'::jsonb,
   updated_at   timestamptz not null default now(),
   deleted      boolean not null default false
 );
@@ -109,10 +104,9 @@ create table public.sport_sessions (
   user_id     uuid not null default auth.uid() references auth.users (id) on delete cascade,
   date        date not null,
   sport_id    uuid not null references public.sports (id),
-  tier        integer not null check (tier between 1 and 4), -- label resolved from sports.tiers
-  hours       double precision not null,
+  hours       double precision not null,          -- universal: every sport tracks duration
+  attributes  jsonb not null default '{}'::jsonb, -- values for this sport's custom fields
   injury      boolean not null default false,
-  estimated   boolean not null default false,     -- duration estimated (e.g. multi-day tournament)
   note_raw    text not null default '',
   note_tags   jsonb not null default '[]'::jsonb,
   updated_at  timestamptz not null default now(),

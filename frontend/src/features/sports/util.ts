@@ -1,4 +1,4 @@
-import type { Sport, SportSession } from '../../supabase/types'
+import type { Sport, SportField, SportSession } from '../../supabase/types'
 import type { TranslationTarget } from '../../translation'
 
 export function sportName(s: Sport, lang: TranslationTarget): string {
@@ -6,13 +6,22 @@ export function sportName(s: Sport, lang: TranslationTarget): string {
   return primary || s.name_zh || s.name_en
 }
 
-export function tierLabel(s: Sport, tier: number, lang: TranslationTarget): string {
-  const t = s.tiers.find((x) => x.level === tier)
-  return t ? (lang === 'zh' ? t.zh : t.en) : `T${tier}`
+export function fieldLabel(f: SportField, lang: TranslationTarget): string {
+  return lang === 'zh' ? f.label_zh : f.label_en
 }
 
-/** Tier signal colors (play → casual → club → major). */
-export const TIER_COLORS = ['#2dd4bf', '#7cc4ff', '#f5a623', '#ff6b6b']
+/** Human label for a session's stored value of a given field. */
+export function attrLabel(f: SportField, value: string | undefined, lang: TranslationTarget): string {
+  if (!value) return '—'
+  if (f.type === 'select') {
+    const o = f.options?.find((x) => x.value === value)
+    return o ? (lang === 'zh' ? o.zh : o.en) : value
+  }
+  return value
+}
+
+/** Signal colors for grouping. */
+export const TIER_COLORS = ['#2dd4bf', '#7cc4ff', '#f5a623', '#ff6b6b', '#a78bfa', '#4ade80']
 
 function mondayOf(d: Date): Date {
   const x = new Date(d)
@@ -41,12 +50,16 @@ export function weeklyHours(sessions: SportSession[], weeks = 8): { labels: stri
   return { labels, data }
 }
 
-/** Total hours in each of the 4 tiers. */
-export function hoursByTier(sessions: SportSession[]): number[] {
-  const out = [0, 0, 0, 0]
+/** Total hours grouped by a select-field's option values (for the doughnut). */
+export function hoursByField(
+  sessions: SportSession[],
+  field: SportField,
+): { labels: string[]; data: number[] } {
+  if (field.type !== 'select' || !field.options) return { labels: [], data: [] }
+  const sums = new Map<string, number>(field.options.map((o) => [o.value, 0]))
   for (const s of sessions) {
-    const i = s.tier - 1
-    if (i >= 0 && i < 4) out[i] += s.hours
+    const v = s.attributes?.[field.key]
+    if (v != null && sums.has(v)) sums.set(v, (sums.get(v) ?? 0) + s.hours)
   }
-  return out
+  return { labels: [...sums.keys()], data: [...sums.values()] }
 }

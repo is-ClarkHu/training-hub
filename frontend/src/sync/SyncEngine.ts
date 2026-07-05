@@ -77,19 +77,35 @@ let running = false
 export interface SyncResult {
   pushed: number
   pulled: number
+  errors: string[]
 }
 
-/** One push+pull pass across all tables. No-op when signed out or already running. */
+/** One push+pull pass across all tables. No-op when signed out or already running.
+ *  A single table's failure (e.g. a Supabase column missing) no longer aborts the
+ *  whole run — the error is collected and the other tables still sync. */
 export async function syncNow(): Promise<SyncResult | null> {
   const uid = currentUserId()
   if (!uid || running) return null
   running = true
+  const errors: string[] = []
   try {
     let pushed = 0
     let pulled = 0
-    for (const t of TABLES) pushed += await pushTable(uid, t)
-    for (const t of TABLES) pulled += await pullTable(uid, t)
-    return { pushed, pulled }
+    for (const t of TABLES) {
+      try {
+        pushed += await pushTable(uid, t)
+      } catch (e) {
+        errors.push(`push ${t}: ${e instanceof Error ? e.message : String(e)}`)
+      }
+    }
+    for (const t of TABLES) {
+      try {
+        pulled += await pullTable(uid, t)
+      } catch (e) {
+        errors.push(`pull ${t}: ${e instanceof Error ? e.message : String(e)}`)
+      }
+    }
+    return { pushed, pulled, errors }
   } finally {
     running = false
   }

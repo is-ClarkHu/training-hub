@@ -4,7 +4,7 @@
 import { db } from './db'
 import { newId, nowIso, today } from './helpers'
 import { currentUserId } from '../supabase/client'
-import { DEFAULT_SPORT_TIERS } from '../supabase/types'
+import { FRISBEE_FIELDS } from '../supabase/types'
 import type {
   BodyPart,
   CycleDay,
@@ -18,8 +18,7 @@ import type {
   SetType,
   Sport,
   SportSession,
-  SportTier,
-  TierLevel,
+  SportField,
   TrackerType,
   TrainingCycle,
   WorkoutEntry,
@@ -148,12 +147,12 @@ export async function createEntryWithSets(
   return { entry, sets }
 }
 
-// ── sports library (§4.5, §7.4) ──────────────────────────────
+// ── sports library (§4.5, §7.4 — redesigned: per-sport custom fields) ─────────
 export interface NewSportInput {
   name_zh: string
   name_en: string
   is_default?: boolean
-  tiers?: SportTier[]
+  fields?: SportField[]
   name_locked?: boolean
   needs_translation?: boolean
 }
@@ -164,7 +163,7 @@ export async function createSport(input: NewSportInput): Promise<Sport> {
     is_default: false,
     name_locked: false,
     needs_translation: false,
-    tiers: DEFAULT_SPORT_TIERS,
+    fields: [],            // default: no custom fields (just duration)
     ...input,
   }
   await db.sports.add(row)
@@ -173,12 +172,13 @@ export async function createSport(input: NewSportInput): Promise<Sport> {
 
 export async function getSports(): Promise<Sport[]> {
   const all = await db.sports.toArray()
-  return all.filter((s) => !s.deleted)
+  // Back-compat: older rows may lack `fields` — normalize so the UI never crashes.
+  return all.filter((s) => !s.deleted).map((s) => ({ ...s, fields: s.fields ?? [] }))
 }
 
 export async function updateSport(
   id: string,
-  patch: Partial<Pick<Sport, 'name_zh' | 'name_en' | 'tiers' | 'is_default' | 'name_locked' | 'needs_translation'>>,
+  patch: Partial<Pick<Sport, 'name_zh' | 'name_en' | 'fields' | 'is_default' | 'name_locked' | 'needs_translation'>>,
 ): Promise<void> {
   const s = await db.sports.get(id)
   if (s) await db.sports.put({ ...s, ...patch, updated_at: nowIso() })
@@ -189,14 +189,6 @@ export async function softDeleteSport(id: string): Promise<void> {
   if (s) await db.sports.put({ ...s, deleted: true, updated_at: nowIso() })
 }
 
-// Frisbee's tier labels (the default sport seeded for a new account, §4.5).
-const FRISBEE_TIERS: SportTier[] = [
-  { level: 1, key: 'toss', zh: '抛接', en: 'Toss' },
-  { level: 2, key: 'casual', zh: '休闲', en: 'Casual' },
-  { level: 3, key: 'club', zh: '训练/俱乐部', en: 'Club' },
-  { level: 4, key: 'major', zh: '大赛', en: 'Major' },
-]
-
 /** Seed the default frisbee sport on first use; returns the live sport list. */
 export async function ensureDefaultSport(): Promise<Sport[]> {
   const sports = await getSports()
@@ -205,7 +197,7 @@ export async function ensureDefaultSport(): Promise<Sport[]> {
     name_zh: '飞盘',
     name_en: 'Frisbee',
     is_default: true,
-    tiers: FRISBEE_TIERS,
+    fields: FRISBEE_FIELDS,
   })
   return [frisbee]
 }
@@ -214,10 +206,9 @@ export async function ensureDefaultSport(): Promise<Sport[]> {
 export interface NewSportSessionInput {
   date: string
   sport_id: string
-  tier: TierLevel
   hours: number
+  attributes?: Record<string, string>
   injury?: boolean
-  estimated?: boolean
   note_raw?: string
   note_tags?: string[]
 }
@@ -225,8 +216,8 @@ export interface NewSportSessionInput {
 export async function createSportSession(input: NewSportSessionInput): Promise<SportSession> {
   const row: SportSession = {
     ...syncFields(),
+    attributes: {},
     injury: false,
-    estimated: false,
     note_raw: '',
     note_tags: [],
     ...input,

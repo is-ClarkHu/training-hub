@@ -47,20 +47,48 @@ export interface SyncFields {
 }
 
 // ─── Embedded JSON shapes ────────────────────────────────────────────────────
+// Sports no longer force a fixed 4-tier scale. Each sport declares its OWN custom
+// fields (frisbee: a "level" select; basketball: none — just duration). Sessions
+// store the field values in `attributes`. (§4.5, redesigned per user feedback.)
+export type SportFieldType = 'select' | 'text' | 'number'
+
+export interface SportFieldOption {
+  value: string          // stable key, e.g. 'club'
+  zh: string             // '俱乐部'
+  en: string             // 'Club'
+}
+
+export interface SportField {
+  key: string            // stable key, e.g. 'level'
+  label_zh: string       // '等级'
+  label_en: string       // 'Level'
+  type: SportFieldType
+  options?: SportFieldOption[] // only for type='select'
+}
+
+/** Frisbee's optional "level" field — organizational labels, not tier numbers. */
+export const FRISBEE_FIELDS: SportField[] = [
+  {
+    key: 'level',
+    label_zh: '等级',
+    label_en: 'Level',
+    type: 'select',
+    options: [
+      { value: 'toss', zh: '抛接', en: 'Toss' },
+      { value: 'casual', zh: '休闲', en: 'Casual' },
+      { value: 'club', zh: '俱乐部', en: 'Club' },
+      { value: 'major', zh: '大赛', en: 'Major' },
+    ],
+  },
+]
+
+// Legacy — kept for back-compat with older exports. New sports use SportField.
 export interface SportTier {
   level: TierLevel
-  key: string           // e.g. 'play' | 'casual' | 'club' | 'major'
+  key: string
   zh: string
   en: string
 }
-
-/** Default 4-tier template for a newly-added sport (§4.5). */
-export const DEFAULT_SPORT_TIERS: SportTier[] = [
-  { level: 1, key: 'play', zh: '玩玩', en: 'Play' },
-  { level: 2, key: 'casual', zh: '休闲', en: 'Casual' },
-  { level: 3, key: 'club', zh: '训练/俱乐部', en: 'Club' },
-  { level: 4, key: 'major', zh: '大赛', en: 'Major' },
-]
 
 export interface CycleDay {
   label: string         // 'A' | 'B' | ...
@@ -119,18 +147,19 @@ export interface Sport extends SyncFields {
   is_default: boolean                // the user's primary sport (frisbee by default)
   name_locked: boolean
   needs_translation: boolean
-  tiers: SportTier[]                 // exactly 4 (§4.5)
+  fields: SportField[]               // per-sport custom attributes (may be empty)
+  tiers?: SportTier[]                // legacy — ignored; kept so old rows parse
 }
 
 export interface SportSession extends SyncFields {
   date: string
   sport_id: string
-  tier: TierLevel                    // label resolved from the sport's tiers
-  hours: number
+  hours: number                      // universal: every sport tracks duration
+  attributes: Record<string, string> // values for this sport's custom fields
   injury: boolean
-  estimated: boolean
   note_raw: string
   note_tags: string[]
+  tier?: number                      // legacy — ignored; kept so old rows parse
 }
 
 export interface Profile extends SyncFields {

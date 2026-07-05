@@ -55,6 +55,8 @@
 .hist-badge.review { color: #2a1500; background: var(--amber); }
 .hist-badge.translate { color: #04181a; background: var(--ice); }
 .hist-badge.injury { color: #2a0000; background: var(--danger); }
+.hist-sport { border-left: 3px solid var(--ice); }
+.hist-setnote { color: var(--text-dim); font-style: italic; }
 
 .hist-edit { display: flex; flex-direction: column; gap: 10px; }
 .hist-superset { display: inline-flex; align-items: center; gap: 6px; font: 12px/1 var(--mono); color: var(--text-dim); }

@@ -34,7 +34,7 @@ export function CycleScreen() {
   const [exById, setExById] = useState<Record<string, Exercise>>({})
   const [newName, setNewName] = useState('')
   const [editId, setEditId] = useState<string | null>(null)
-  const [showLibrary, setShowLibrary] = useState(false)
+  const [showLibrary, setShowLibrary] = useState(true)
 
   const reload = useCallback(async () => {
     const [cs, act, es, exs] = await Promise.all([getCycles(), getActiveCycle(), getEntries(), getExercises()])

@@ -102,7 +102,13 @@ export function SettingsScreen() {
     setSyncMsg(lang === 'zh' ? '同步中…' : 'Syncing…')
     try {
       const r = await syncNow()
-      setSyncMsg(r ? (lang === 'zh' ? `已推送 ${r.pushed} · 已拉取 ${r.pulled}` : `pushed ${r.pushed} · pulled ${r.pulled}`) : (lang === 'zh' ? '未登录或离线' : 'not signed in / offline'))
+      if (!r) {
+        setSyncMsg(lang === 'zh' ? '未登录或离线(需先登录)' : 'not signed in / offline')
+      } else if (r.errors.length) {
+        setSyncMsg((lang === 'zh' ? `已推送 ${r.pushed} · 已拉取 ${r.pulled} · ${r.errors.length} 个错误:\n` : `pushed ${r.pushed} · pulled ${r.pulled} · ${r.errors.length} errors:\n`) + r.errors.join('\n'))
+      } else {
+        setSyncMsg(lang === 'zh' ? `已推送 ${r.pushed} · 已拉取 ${r.pulled} ✓` : `pushed ${r.pushed} · pulled ${r.pulled} ✓`)
+      }
     } catch (e) {
       setSyncMsg(e instanceof Error ? e.message : String(e))
     }

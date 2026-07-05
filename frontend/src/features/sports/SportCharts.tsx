@@ -12,7 +12,7 @@ import {
 import { Doughnut, Bar } from 'react-chartjs-2'
 import type { Sport, SportSession } from '../../supabase/types'
 import type { TranslationTarget } from '../../translation'
-import { hoursByTier, weeklyHours, tierLabel, TIER_COLORS } from './util'
+import { hoursByField, weeklyHours, attrLabel, fieldLabel, TIER_COLORS } from './util'
 import './sports.css'
 
 Chart.register(ArcElement, BarElement, CategoryScale, LinearScale, Tooltip, Legend)
@@ -35,26 +35,28 @@ export function SportCharts({
     return <p className="sport-empty">No sessions yet for this sport.</p>
   }
 
-  const byTier = hoursByTier(sessions)
   const weekly = weeklyHours(sessions)
+  // Group hours by the sport's first select field (e.g. frisbee level), if any.
+  const selectField = sport.fields?.find((f) => f.type === 'select')
+  const byField = selectField ? hoursByField(sessions, selectField) : null
 
   return (
     <div className="sport-charts">
-      <div className="sport-chart">
-        <span className="th-label">Hours by tier</span>
-        <Doughnut
-          data={{
-            labels: [1, 2, 3, 4].map((t) => tierLabel(sport, t, lang)),
-            datasets: [{ data: byTier, backgroundColor: TIER_COLORS, borderColor: '#0c151c', borderWidth: 2 }],
-          }}
-          options={{
-            plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, padding: 10 } } },
-          }}
-        />
-      </div>
+      {selectField && byField && byField.data.some((n) => n > 0) && (
+        <div className="sport-chart">
+          <span className="th-label">{lang === 'zh' ? '按' : 'Hours by '}{fieldLabel(selectField, lang)}{lang === 'zh' ? '分组时长' : ''}</span>
+          <Doughnut
+            data={{
+              labels: byField.labels.map((v) => attrLabel(selectField, v, lang)),
+              datasets: [{ data: byField.data, backgroundColor: TIER_COLORS, borderColor: '#0c151c', borderWidth: 2 }],
+            }}
+            options={{ plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, padding: 10 } } } }}
+          />
+        </div>
+      )}
 
       <div className="sport-chart">
-        <span className="th-label">Weekly hours</span>
+        <span className="th-label">{lang === 'zh' ? '每周时长' : 'Weekly hours'}</span>
         <Bar
           data={{
             labels: weekly.labels,

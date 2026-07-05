@@ -2,7 +2,7 @@
 // Pure & self-contained (only type-only imports) so it runs in the browser (in-app
 // import) and under Node (migration/migrate.ts) unchanged. Idempotent: ids are
 // derived from stable seeds, so re-importing upserts rather than duplicates.
-import type { BodyPart, MeasureType, SportTier } from '../supabase/types'
+import type { BodyPart, MeasureType, SportField } from '../supabase/types'
 
 // ── deterministic UUIDv5-shaped id from a seed (stable across runs) ──
 function cyrb128(str: string): [number, number, number, number] {
@@ -48,11 +48,12 @@ export interface DraftSet {
 }
 export interface DraftSport {
   id: string; name_zh: string; name_en: string; is_default: boolean
-  name_locked: boolean; needs_translation: boolean; tiers: SportTier[]; deleted: boolean
+  name_locked: boolean; needs_translation: boolean; fields: SportField[]; deleted: boolean
 }
 export interface DraftSportSession {
-  id: string; date: string; sport_id: string; tier: 1 | 2 | 3 | 4; hours: number
-  injury: boolean; estimated: boolean; note_raw: string; note_tags: string[]; deleted: boolean
+  id: string; date: string; sport_id: string; hours: number
+  attributes: Record<string, string>
+  injury: boolean; note_raw: string; note_tags: string[]; deleted: boolean
 }
 export interface ParseReport {
   totalRows: number; entries: number; sportSessions: number; skipped: number
@@ -63,12 +64,18 @@ export interface ParseResult {
   sports: DraftSport[]; sportSessions: DraftSportSession[]; report: ParseReport
 }
 
-const FRISBEE_TIERS: SportTier[] = [
-  { level: 1, key: 'toss', zh: '抛接', en: 'Toss' },
-  { level: 2, key: 'casual', zh: '休闲', en: 'Casual' },
-  { level: 3, key: 'club', zh: '训练/俱乐部', en: 'Club' },
-  { level: 4, key: 'major', zh: '大赛', en: 'Major' },
+const FRISBEE_MIGRATION_FIELDS: SportField[] = [
+  {
+    key: 'level', label_zh: '等级', label_en: 'Level', type: 'select',
+    options: [
+      { value: 'toss', zh: '抛接', en: 'Toss' },
+      { value: 'casual', zh: '休闲', en: 'Casual' },
+      { value: 'club', zh: '俱乐部', en: 'Club' },
+      { value: 'major', zh: '大赛', en: 'Major' },
+    ],
+  },
 ]
+const TIER_TO_LEVEL: Record<number, string> = { 1: 'toss', 2: 'casual', 3: 'club', 4: 'major' }
 
 // 部位/分类 → one of the 7 body parts. activation/stretch/recovery are NOT body
 // parts (§4.1) — they become note tags and the entry is flagged for review.
@@ -129,7 +136,7 @@ export function parseLegacyCsv(csv: string): ParseResult {
   const frisbeeId = seededUuid('sport:frisbee')
   const sports: DraftSport[] = [{
     id: frisbeeId, name_zh: '飞盘', name_en: 'Frisbee', is_default: true,
-    name_locked: false, needs_translation: false, tiers: FRISBEE_TIERS, deleted: false,
+    name_locked: false, needs_translation: false, fields: FRISBEE_MIGRATION_FIELDS, deleted: false,
   }]
 
   for (let i = 1; i < lines.length; i++) {
@@ -150,10 +157,12 @@ export function parseLegacyCsv(csv: string): ParseResult {
         hours = (days || 1) * 6 // tournament day ≈ 6h
         estimated = true
       }
+      void estimated
       sportSessions.push({
         id: seededUuid(`sport_session:${date}:${name}:${i}`),
-        date, sport_id: frisbeeId, tier, hours: hours || 1.5,
-        injury: /拉伤|受伤|⚠️/.test(note), estimated,
+        date, sport_id: frisbeeId, hours: hours || 1.5,
+        attributes: { level: TIER_TO_LEVEL[tier] },
+        injury: /拉伤|受伤|⚠️/.test(note),
         note_raw: [name, note].filter(Boolean).join(' · '), // keep "夏季联赛" etc as the session label
         note_tags: [], deleted: false,
       })
