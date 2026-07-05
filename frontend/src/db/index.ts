@@ -32,6 +32,7 @@ export {
   softDeleteCycle,
   logTracker,
   getTrackerEntries,
+  deleteTrackerEntry,
   deleteAllTracker,
 } from './records'
 export type {

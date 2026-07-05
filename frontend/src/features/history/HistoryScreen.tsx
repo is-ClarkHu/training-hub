@@ -8,15 +8,18 @@ import {
   getSetsByEntryIds,
   getSportSessions,
   getSports,
+  getTrackerEntries,
   softDeleteEntry,
   softDeleteSportSession,
+  deleteTrackerEntry,
   updateEntry,
 } from '../../db'
 import { parseNote, noteTagLabel } from '../../translation'
 import { useLanguage } from '../../i18n'
-import type { Exercise, ExerciseSet, Sport, SportSession, WorkoutEntry } from '../../supabase/types'
+import type { Exercise, ExerciseSet, OptionalTracker, Sport, SportSession, WorkoutEntry } from '../../supabase/types'
 import { SetEditor } from '../log/SetEditor'
 import { sportName, attrLabel } from '../sports'
+import { intimacyCategory, intimacyLabel, intimacyVisible } from '../intimacy'
 import {
   draftsToSetInputs,
   exerciseName,
@@ -34,6 +37,8 @@ export function HistoryScreen() {
   const [exById, setExById] = useState<Record<string, Exercise>>({})
   const [sportSessions, setSportSessions] = useState<SportSession[]>([])
   const [sportById, setSportById] = useState<Record<string, Sport>>({})
+  const [intimacyRows, setIntimacyRows] = useState<OptionalTracker[]>([])
+  const [showIntimacy, setShowIntimacy] = useState(false)
   const [loading, setLoading] = useState(true)
   const [selectMode, setSelectMode] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -46,13 +51,18 @@ export function HistoryScreen() {
   }
 
   const reload = useCallback(async () => {
-    const [es, exs, ss, sp] = await Promise.all([getEntries(), getExercises(), getSportSessions(), getSports()])
+    const visible = intimacyVisible()
+    const [es, exs, ss, sp, ir] = await Promise.all([
+      getEntries(), getExercises(), getSportSessions(), getSports(), visible ? getTrackerEntries('intimacy') : Promise.resolve([]),
+    ])
     const sets = await getSetsByEntryIds(es.map((e) => e.id))
     setEntries(es)
     setSetMap(sets)
     setExById(Object.fromEntries(exs.map((e) => [e.id, e])))
     setSportSessions(ss)
     setSportById(Object.fromEntries(sp.map((s) => [s.id, s])))
+    setIntimacyRows(ir)
+    setShowIntimacy(visible)
     setLoading(false)
   }, [])
 
@@ -62,10 +72,10 @@ export function HistoryScreen() {
 
   // Group entries + sport sessions by date (newest first).
   const sessions = useMemo(() => {
-    const map = new Map<string, { date: string; items: WorkoutEntry[]; sports: SportSession[] }>()
+    const map = new Map<string, { date: string; items: WorkoutEntry[]; sports: SportSession[]; intimacy: OptionalTracker[] }>()
     const get = (d: string) => {
       let g = map.get(d)
-      if (!g) { g = { date: d, items: [], sports: [] }; map.set(d, g) }
+      if (!g) { g = { date: d, items: [], sports: [], intimacy: [] }; map.set(d, g) }
       return g
     }
     for (const e of entries) {
@@ -73,9 +83,10 @@ export function HistoryScreen() {
       get(e.date).items.push(e)
     }
     if (!reviewOnly) for (const s of sportSessions) get(s.date).sports.push(s)
+    if (!reviewOnly && showIntimacy) for (const r of intimacyRows) get(r.date).intimacy.push(r)
     return [...map.values()].sort((a, b) => (a.date < b.date ? 1 : -1))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entries, sportSessions, reviewOnly, exById])
+  }, [entries, sportSessions, intimacyRows, reviewOnly, exById, showIntimacy])
 
   function toggleSel(id: string) {
     setSelected((prev) => {
@@ -103,8 +114,14 @@ export function HistoryScreen() {
     await reload()
   }
 
+  async function delIntimacy(id: string) {
+    if (!confirm(lang === 'zh' ? '隐藏这条私密记录?' : 'Hide this private record?')) return
+    await deleteTrackerEntry(id)
+    await reload()
+  }
+
   if (loading) return <p className="hist-empty">Loading…</p>
-  if (entries.length === 0 && sportSessions.length === 0) {
+  if (entries.length === 0 && sportSessions.length === 0 && intimacyRows.length === 0) {
     return <p className="hist-empty">No sessions logged yet. Head to the Log tab.</p>
   }
 
@@ -172,6 +189,24 @@ export function HistoryScreen() {
                 </div>
               )
             })}
+            {showIntimacy && s.intimacy.map((r) => (
+              <div key={r.id} className="hist-entry hist-intimacy">
+                <div className="hist-entry-head">
+                  <span className="hist-name">{lang === 'zh' ? '成人亲密健康' : 'Adult wellness'}</span>
+                  {!selectMode && (
+                    <div className="hist-actions">
+                      <button className="hist-link danger" type="button" onClick={() => void delIntimacy(r.id)}>
+                        {lang === 'zh' ? '隐藏' : 'hide'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <div className="hist-sets">
+                  <span className="hist-intimacy-pill">{intimacyLabel(intimacyCategory(r), lang)}</span>
+                  <span className="hist-set">×{r.count}</span>
+                </div>
+              </div>
+            ))}
           </div>
         </section>
       ))}

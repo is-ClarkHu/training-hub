@@ -1,6 +1,15 @@
 // Pure analytics over the local store, shared by the Dashboard (§8) and the
 // Cycle muscle-recovery panel (§6B).
-import { BODY_PARTS, type BodyPart, type Exercise, type ExerciseSet, type SetType, type WorkoutEntry } from '../../supabase/types'
+import {
+  BODY_PARTS,
+  type BodyPart,
+  type Exercise,
+  type ExerciseSet,
+  type OptionalTracker,
+  type SetType,
+  type WorkoutEntry,
+} from '../../supabase/types'
+import { intimacyCategory } from '../intimacy'
 
 export function daysSince(date: string): number {
   const start = new Date(`${date}T00:00:00`)
@@ -85,14 +94,20 @@ const RECOVERY_TAGS = new Set(['rehab', 'activation', 'skipped_stretch', 'warmup
 export function dayIntensity(
   entries: WorkoutEntry[],
   sessions: { hours: number }[],
+  intimacy: OptionalTracker[] = [],
 ): number {
-  if (entries.length === 0 && sessions.length === 0) return 0
+  if (entries.length === 0 && sessions.length === 0 && intimacy.length === 0) return 0
   let lvl = 0
+  if (intimacy.length > 0) {
+    const active = intimacy.some((r) => intimacyCategory(r) === 'partner_active')
+    lvl = Math.max(lvl, active ? 2 : 1)
+  }
   if (entries.length > 0) lvl = 2
   if (sessions.length > 0) {
     const maxH = Math.max(...sessions.map((s) => s.hours ?? 0))
     lvl = Math.max(lvl, maxH >= 3 ? 4 : maxH >= 2 ? 3 : 2)
   }
+  if ((entries.length > 0 || sessions.length > 0) && intimacy.length > 0) lvl = Math.max(lvl, 3)
   if (entries.length > 0 && sessions.length > 0) lvl = 4 // double session
   if (entries.length >= 6) lvl = Math.max(lvl, 3)
   if (entries.length > 0 && sessions.length === 0) {
@@ -108,12 +123,15 @@ export interface HeatCell { date: string; level: number }
 export function intensityHeatmap(
   entries: WorkoutEntry[],
   sessions: { date: string; hours: number }[],
+  intimacy: OptionalTracker[] = [],
   weeks = 18,
 ): HeatCell[][] {
   const eByDate: Record<string, WorkoutEntry[]> = {}
   for (const e of entries) (eByDate[e.date] ??= []).push(e)
   const sByDate: Record<string, { hours: number }[]> = {}
   for (const s of sessions) (sByDate[s.date] ??= []).push(s)
+  const iByDate: Record<string, OptionalTracker[]> = {}
+  for (const r of intimacy) (iByDate[r.date] ??= []).push(r)
 
   const thisMon = mondayOf(new Date())
   const cols: HeatCell[][] = []
@@ -125,7 +143,7 @@ export function intensityHeatmap(
       const day = new Date(monday)
       day.setDate(monday.getDate() + d)
       const iso = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`
-      col.push({ date: iso, level: dayIntensity(eByDate[iso] ?? [], sByDate[iso] ?? []) })
+      col.push({ date: iso, level: dayIntensity(eByDate[iso] ?? [], sByDate[iso] ?? [], iByDate[iso] ?? []) })
     }
     cols.push(col)
   }

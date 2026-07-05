@@ -4,10 +4,6 @@
 // (Excluded from Phase-2 AI context by default — enforced when the assistant ships.)
 import { useEffect, useState } from 'react'
 import {
-  deleteAllTracker,
-  getTrackerEntries,
-  logTracker,
-  today,
   ensureDefaultSport,
   getSports,
   softDeleteSport,
@@ -17,6 +13,10 @@ import { useAuth } from '../auth'
 import { syncNow } from '../../sync'
 import { importLegacyCsv, downloadBackup, importBackup } from '../../migration'
 import { AddSportDialog, sportName } from '../sports'
+import {
+  INTIMACY_VISIBLE_KEY,
+  setIntimacyVisible,
+} from '../intimacy'
 import type { Sport } from '../../supabase/types'
 import {
   AI_PROVIDERS,
@@ -28,20 +28,14 @@ import {
   type AiProvider,
   type AiTask,
 } from '../../ai'
-import type { OptionalTracker } from '../../supabase/types'
 import './settings.css'
-
-const ENABLED_KEY = 'th.tracker.intimacy.enabled'
 
 export function SettingsScreen() {
   const { lang } = useLanguage()
   const { session, signOut } = useAuth()
   const [sports, setSports] = useState<Sport[]>([])
   const [sportDialog, setSportDialog] = useState<{ open: boolean; sport?: Sport }>({ open: false })
-  const [enabled, setEnabled] = useState(() => localStorage.getItem(ENABLED_KEY) === '1')
-  const [date, setDate] = useState(today())
-  const [count, setCount] = useState('1')
-  const [rows, setRows] = useState<OptionalTracker[]>([])
+  const [enabled, setEnabled] = useState(() => localStorage.getItem(INTIMACY_VISIBLE_KEY) === '1')
   const [syncMsg, setSyncMsg] = useState('')
   const [importMsg, setImportMsg] = useState('')
   const [dataMsg, setDataMsg] = useState('')
@@ -62,10 +56,6 @@ export function SettingsScreen() {
   }
 
   useEffect(() => {
-    if (enabled) void getTrackerEntries('intimacy').then(setRows)
-  }, [enabled])
-
-  useEffect(() => {
     void ensureDefaultSport().then(setSports)
   }, [])
 
@@ -80,22 +70,8 @@ export function SettingsScreen() {
   }
 
   function toggle(on: boolean) {
-    localStorage.setItem(ENABLED_KEY, on ? '1' : '0')
+    setIntimacyVisible(on)
     setEnabled(on)
-  }
-
-  async function add() {
-    const n = parseInt(count, 10)
-    if (!Number.isFinite(n) || n <= 0) return
-    await logTracker('intimacy', date, n)
-    setRows(await getTrackerEntries('intimacy'))
-    setCount('1')
-  }
-
-  async function deleteAll() {
-    if (!confirm(lang === 'zh' ? '删除全部该追踪数据?' : 'Delete all data for this tracker?')) return
-    await deleteAllTracker('intimacy')
-    setRows([])
   }
 
   async function doSync() {
@@ -161,7 +137,7 @@ export function SettingsScreen() {
       <section className="set-section">
         <span className="th-label">{lang === 'zh' ? '运动项目' : 'Activities'}</span>
         <div className="set-ai">
-          <p className="set-desc">{lang === 'zh' ? '管理运动库与它们的 4 档强度(Log 里记录场次)。' : 'Manage your sports and their 4 intensity tiers (log sessions in the Log tab).'}</p>
+          <p className="set-desc">{lang === 'zh' ? '管理运动库与自定义属性(Log 里记录场次)。' : 'Manage sports and custom fields (log sessions in the Log tab).'}</p>
           {sports.map((s) => (
             <div key={s.id} className="set-row set-activity">
               <div className="set-name">{sportName(s, lang)}</div>
@@ -176,13 +152,15 @@ export function SettingsScreen() {
       </section>
 
       <section className="set-section">
-        <span className="th-label">{lang === 'zh' ? '可选追踪' : 'Optional trackers'}</span>
+        <span className="th-label">{lang === 'zh' ? '私密显示' : 'Private display'}</span>
 
-        <div className="set-row">
+        <div className={`set-row set-intimacy-head ${enabled ? 'on' : ''}`}>
           <div>
-            <div className="set-name">{lang === 'zh' ? '亲密度' : 'Intimacy'}</div>
+            <div className="set-name">{lang === 'zh' ? '成人亲密健康' : 'Adult wellness'}</div>
             <div className="set-desc">
-              {lang === 'zh' ? '私密 · 仅记日期与次数 · 默认关闭' : 'Private · date + count only · off by default'}
+              {lang === 'zh'
+                ? '私密 · 默认隐藏 · 关闭只是不显示,记录仍保留'
+                : 'Private · hidden by default · turning off only hides existing records'}
             </div>
           </div>
           <label className="set-switch">
@@ -192,28 +170,12 @@ export function SettingsScreen() {
         </div>
 
         {enabled && (
-          <div className="set-tracker">
-            <div className="set-tracker-form">
-              <input className="th-input" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-              <input className="th-input set-count" inputMode="numeric" value={count}
-                onChange={(e) => setCount(e.target.value)} aria-label="count" />
-              <button className="th-btn set-log" type="button" onClick={add}>{lang === 'zh' ? '记录' : 'Log'}</button>
-            </div>
-
-            {rows.length > 0 && (
-              <ul className="set-list">
-                {rows.slice(0, 20).map((r) => (
-                  <li key={r.id} className="set-list-item">
-                    <span>{r.date}</span>
-                    <span className="set-count-v">×{r.count}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            <button className="hist-link danger" type="button" onClick={deleteAll}>
-              {lang === 'zh' ? '删除全部亲密度数据' : 'Delete all intimacy data'}
-            </button>
+          <div className="set-tracker set-intimacy-note">
+            <p className="set-desc">
+              {lang === 'zh'
+                ? '开启后,Log 会出现独立的私密记录入口,History 和 Dashboard 也会显示相关数据。关闭后这些记录不会显示,但数据仍保留；如需删除,请在 History 里删除单条记录。'
+                : 'When enabled, Log shows a separate private entry point, and History/Dashboard include the data. Turning this off hides those records without deleting them; delete individual records from History.'}
+            </p>
           </div>
         )}
       </section>

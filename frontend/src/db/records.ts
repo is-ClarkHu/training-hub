@@ -3,7 +3,7 @@
 // SyncEngine can later upsert it to Supabase unchanged (SPEC §3).
 import { db } from './db'
 import { newId, nowIso, today } from './helpers'
-import { currentUserId } from '../supabase/client'
+import { currentUserId, supabase } from '../supabase/client'
 import { FRISBEE_FIELDS } from '../supabase/types'
 import type {
   BodyPart,
@@ -13,6 +13,7 @@ import type {
   Injury,
   InjuryModified,
   InjuryStatus,
+  IntimacyCategory,
   MeasureType,
   OptionalTracker,
   SetType,
@@ -350,8 +351,13 @@ export async function softDeleteCycle(id: string): Promise<void> {
 }
 
 // ── optional trackers (§4.10, §6C) ───────────────────────────
-export async function logTracker(tracker: TrackerType, date: string, count = 1): Promise<OptionalTracker> {
-  const row: OptionalTracker = { ...syncFields(), tracker, date, count }
+export async function logTracker(
+  tracker: TrackerType,
+  date: string,
+  count = 1,
+  category: IntimacyCategory | null = null,
+): Promise<OptionalTracker> {
+  const row: OptionalTracker = { ...syncFields(), tracker, date, count, category }
   await db.optional_trackers.add(row)
   return row
 }
@@ -361,6 +367,13 @@ export async function getTrackerEntries(tracker: TrackerType): Promise<OptionalT
   return all
     .filter((t) => t.tracker === tracker && !t.deleted)
     .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+}
+
+export async function deleteTrackerEntry(id: string): Promise<void> {
+  await db.optional_trackers.delete(id)
+  if (currentUserId()) {
+    await supabase.from('optional_trackers').delete().eq('id', id)
+  }
 }
 
 /** Easy off + delete (§6C): soft-delete every row for a tracker. */

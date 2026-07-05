@@ -9,7 +9,8 @@ export type MeasureType = 'weight_reps' | 'reps_only' | 'duration'        // §6
 export type SetType = 'normal' | 'warmup' | 'superset' | 'dropset'
 export type InjuryStatus = 'acute' | 'rehab' | 'recovered'
 export type InjuryModified = 'paused' | 'reduced'
-export type TrackerType = 'intimacy'                                       // v1: one type
+export type TrackerType = 'intimacy'                                       // private adult wellness tracker
+export type IntimacyCategory = 'solo' | 'partner_low' | 'partner_active'
 export type TranslationDomain = 'exercise' | 'body_part' | 'note_tag' | 'sport'
 export type TranslationSource = 'seed' | 'ai' | 'user'
 export type ChatRole = 'user' | 'assistant'
@@ -190,6 +191,7 @@ export interface OptionalTracker extends SyncFields {
   tracker: TrackerType
   date: string
   count: number
+  category?: IntimacyCategory | null
 }
 
 export interface TranslationDictionaryRow extends SyncFields {

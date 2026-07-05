@@ -10,16 +10,20 @@ import {
   getExercises,
   getInjuries,
   getSports,
+  logTracker,
   softDeleteEntry,
   softDeleteSportSession,
+  deleteTrackerEntry,
   today,
   type NewSetInput,
 } from '../../db'
 import { parseNote, noteTagLabel } from '../../translation'
 import { useLanguage } from '../../i18n'
 import { fieldLabel } from '../sports'
+import { INTIMACY_CATEGORIES, intimacyLabel, intimacyVisible } from '../intimacy'
 import type {
   Exercise,
+  IntimacyCategory,
   Injury,
   InjuryModified,
   Sport,
@@ -36,7 +40,7 @@ type Selection =
   | { kind: 'sport'; sport: Sport }
   | null
 
-interface LoggedItem { id: string; name: string; detail: string; tagKeys: string[]; kind: 'exercise' | 'sport'; realId: string }
+interface LoggedItem { id: string; name: string; detail: string; tagKeys: string[]; kind: 'exercise' | 'sport' | 'intimacy'; realId: string }
 
 export function LogScreen() {
   const { lang } = useLanguage()
@@ -59,6 +63,9 @@ export function LogScreen() {
   // sport form
   const [hours, setHours] = useState('')
   const [attrs, setAttrs] = useState<Record<string, string>>({})
+  const [showIntimacy, setShowIntimacy] = useState(false)
+  const [intimacyCat, setIntimacyCat] = useState<IntimacyCategory>('partner_active')
+  const [intimacyCount, setIntimacyCount] = useState('1')
   // shared
   const [note, setNote] = useState('')
 
@@ -67,6 +74,7 @@ export function LogScreen() {
     void getSports().then(setSports)
     void getInjuries().then((l) => setActiveInjuries(l.filter((i) => i.status !== 'recovered')))
     void getActiveCycle().then(setActiveCycle)
+    setShowIntimacy(intimacyVisible())
   }, [])
 
   const parsed = parseNote(note)
@@ -166,7 +174,24 @@ export function LogScreen() {
     )
   }
 
-  function finishSave(name: string, detail: string, kind: 'exercise' | 'sport', realId: string) {
+  async function saveIntimacy() {
+    const n = parseInt(intimacyCount, 10)
+    if (!Number.isFinite(n) || n <= 0 || saving) return
+    setSaving(true)
+    const row = await logTracker('intimacy', date, n, intimacyCat)
+    setLogged((prev) => [{
+      id: crypto.randomUUID(),
+      name: lang === 'zh' ? '成人亲密健康' : 'Adult wellness',
+      detail: `${intimacyLabel(intimacyCat, lang, true)} ×${n}`,
+      tagKeys: [],
+      kind: 'intimacy',
+      realId: row.id,
+    }, ...prev])
+    setIntimacyCount('1')
+    setSaving(false)
+  }
+
+  function finishSave(name: string, detail: string, kind: 'exercise' | 'sport' | 'intimacy', realId: string) {
     setLogged((prev) => [{ id: crypto.randomUUID(), name, detail, tagKeys: parsed.tagKeys, kind, realId }, ...prev])
     setSel(null)
     resetForms()
@@ -175,7 +200,8 @@ export function LogScreen() {
 
   async function deleteLogged(item: LoggedItem) {
     if (item.kind === 'exercise') await softDeleteEntry(item.realId)
-    else await softDeleteSportSession(item.realId)
+    else if (item.kind === 'sport') await softDeleteSportSession(item.realId)
+    else await deleteTrackerEntry(item.realId)
     setLogged((prev) => prev.filter((x) => x.id !== item.id))
   }
 
@@ -210,6 +236,26 @@ export function LogScreen() {
             ))}
           </div>
         </div>
+      )}
+
+      {showIntimacy && (
+        <section className="log-intimacy" aria-label={lang === 'zh' ? '成人亲密健康' : 'adult wellness'}>
+          <div className="log-intimacy-copy">
+            <span className="log-intimacy-kicker">{lang === 'zh' ? '私密记录' : 'Private log'}</span>
+            <strong>{lang === 'zh' ? '成人亲密健康' : 'Adult wellness'}</strong>
+          </div>
+          <div className="log-intimacy-controls">
+            <select className="th-input" value={intimacyCat} onChange={(e) => setIntimacyCat(e.target.value as IntimacyCategory)}>
+              {INTIMACY_CATEGORIES.map((c) => (
+                <option key={c} value={c}>{intimacyLabel(c, lang)}</option>
+              ))}
+            </select>
+            <input className="th-input log-intimacy-count" inputMode="numeric" value={intimacyCount} onChange={(e) => setIntimacyCount(e.target.value)} aria-label="count" />
+            <button className="th-btn log-intimacy-save" type="button" onClick={saveIntimacy} disabled={saving}>
+              {lang === 'zh' ? '记录' : 'Log'}
+            </button>
+          </div>
+        </section>
       )}
 
       <ExercisePicker

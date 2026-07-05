@@ -14,7 +14,7 @@ import {
   Legend,
 } from 'chart.js'
 import { Doughnut, Bar, Line } from 'react-chartjs-2'
-import { getEntries, getExercises, getSetsByEntryIds, getSportSessions, getInjuries, getSports } from '../../db'
+import { getEntries, getExercises, getSetsByEntryIds, getSportSessions, getInjuries, getSports, getTrackerEntries } from '../../db'
 import { useLanguage } from '../../i18n'
 import {
   BODY_PARTS,
@@ -22,12 +22,20 @@ import {
   type Exercise,
   type ExerciseSet,
   type Injury,
+  type OptionalTracker,
   type Sport,
   type SportSession,
   type WorkoutEntry,
 } from '../../supabase/types'
 import { ActiveInjuryBanner } from '../injuries'
 import { SportCharts, sportName } from '../sports'
+import {
+  INTIMACY_CATEGORIES,
+  INTIMACY_COLORS,
+  intimacyCategory,
+  intimacyLabel,
+  intimacyVisible,
+} from '../intimacy'
 import {
   bodyPartCounts,
   bodyweightVolume,
@@ -57,13 +65,17 @@ export function DashboardScreen() {
   const [sessions, setSessions] = useState<SportSession[]>([])
   const [sports, setSports] = useState<Sport[]>([])
   const [injuries, setInjuries] = useState<Injury[]>([])
+  const [intimacyRows, setIntimacyRows] = useState<OptionalTracker[]>([])
+  const [showIntimacy, setShowIntimacy] = useState(false)
   const [progId, setProgId] = useState('')
   const [sportId, setSportId] = useState('')
 
   useEffect(() => {
     void (async () => {
-      const [es, exs, sess, inj, sp] = await Promise.all([
+      const visible = intimacyVisible()
+      const [es, exs, sess, inj, sp, ir] = await Promise.all([
         getEntries(), getExercises(), getSportSessions(), getInjuries(), getSports(),
+        visible ? getTrackerEntries('intimacy') : Promise.resolve([]),
       ])
       const sm = await getSetsByEntryIds(es.map((e) => e.id))
       setEntries(es)
@@ -72,6 +84,8 @@ export function DashboardScreen() {
       setSessions(sess)
       setInjuries(inj)
       setSports(sp)
+      setIntimacyRows(ir)
+      setShowIntimacy(visible)
       setSportId((prev) => prev || sp.find((s) => s.is_default)?.id || sp[0]?.id || '')
     })()
   }, [])
@@ -81,19 +95,24 @@ export function DashboardScreen() {
   const bpCounts = useMemo(() => bodyPartCounts(entries, exById), [entries, exById])
   const stCounts = useMemo(() => setTypeCounts(allSets), [allSets])
   const weekly = useMemo(() => weeklyEntryVolume(entries), [entries])
-  const heat = useMemo(() => intensityHeatmap(entries, sessions), [entries, sessions])
+  const heat = useMemo(() => intensityHeatmap(entries, sessions, showIntimacy ? intimacyRows : []), [entries, sessions, intimacyRows, showIntimacy])
   const bwVol = useMemo(() => bodyweightVolume(entries, setMap, exById), [entries, setMap, exById])
 
   const kpis = useMemo(() => {
     const gymDays = new Set(entries.map((e) => e.date)).size
-    const trainingDays = new Set([...entries.map((e) => e.date), ...sessions.map((s) => s.date)]).size
+    const trainingDays = new Set([
+      ...entries.map((e) => e.date),
+      ...sessions.map((s) => s.date),
+      ...(showIntimacy ? intimacyRows.map((r) => r.date) : []),
+    ]).size
     const sportHours = sessions.reduce((sum, s) => sum + s.hours, 0)
     const active = injuries.filter((i) => i.status !== 'recovered').length
     const pushReps = totalBodyweightReps(allSets, entries, exById)
     const lvls = heat.flat().map((c) => c.level).filter((l) => l > 0)
     const avg = lvls.length ? (lvls.reduce((a, b) => a + b, 0) / lvls.length) : 0
-    return { trainingDays, gymDays, sportHours, active, pushReps, avg }
-  }, [entries, sessions, injuries, allSets, exById, heat])
+    const intimacyCount = showIntimacy ? intimacyRows.reduce((sum, r) => sum + r.count, 0) : 0
+    return { trainingDays, gymDays, sportHours, active, pushReps, avg, intimacyCount }
+  }, [entries, sessions, injuries, allSets, exById, heat, intimacyRows, showIntimacy])
 
   const progExercises = useMemo(
     () => Object.values(exById).filter((ex) => ex.measure_type === 'weight_reps' && entries.some((e) => e.exercise_id === ex.id)),
@@ -116,12 +135,25 @@ export function DashboardScreen() {
 
   const selectedSport = sports.find((s) => s.id === sportId) ?? null
   const sportSessionsFor = sessions.filter((s) => s.sport_id === sportId)
+  const intimacyStats = useMemo(() => {
+    const since = new Date()
+    since.setDate(since.getDate() - 29)
+    const sinceIso = `${since.getFullYear()}-${String(since.getMonth() + 1).padStart(2, '0')}-${String(since.getDate()).padStart(2, '0')}`
+    const total = intimacyRows.reduce((sum, r) => sum + r.count, 0)
+    const recent = intimacyRows.filter((r) => r.date >= sinceIso).reduce((sum, r) => sum + r.count, 0)
+    const byCat = INTIMACY_CATEGORIES.map((c) =>
+      intimacyRows.filter((r) => intimacyCategory(r) === c).reduce((sum, r) => sum + r.count, 0),
+    )
+    const days = new Set(intimacyRows.map((r) => r.date)).size
+    return { total, recent, days, byCat }
+  }, [intimacyRows])
 
   const KPI = [
     { label: lang === 'zh' ? '训练天数' : 'Training days', value: kpis.trainingDays },
     { label: lang === 'zh' ? '健身房次数' : 'Gym days', value: kpis.gymDays },
     { label: lang === 'zh' ? '自重累计' : 'Bodyweight reps', value: kpis.pushReps },
     { label: lang === 'zh' ? '运动小时' : 'Sport hrs', value: Math.round(kpis.sportHours * 10) / 10 },
+    ...(showIntimacy ? [{ label: lang === 'zh' ? '亲密记录' : 'Wellness logs', value: kpis.intimacyCount }] : []),
     { label: lang === 'zh' ? '平均强度' : 'Avg intensity', value: kpis.avg ? kpis.avg.toFixed(1) : '–' },
     { label: lang === 'zh' ? '活动伤病' : 'Injuries', value: kpis.active },
   ]
@@ -140,7 +172,7 @@ export function DashboardScreen() {
       </div>
 
       <section className="dash-heat-sec">
-        <span className="th-label">{lang === 'zh' ? '每日训练强度' : 'Daily intensity'} <em className="dash-sub">0 {lang === 'zh' ? '无' : 'rest'} · 4 {lang === 'zh' ? '比赛/双练' : 'comp/double'}</em></span>
+        <span className="th-label">{lang === 'zh' ? '每日强度' : 'Daily intensity'} <em className="dash-sub">0 {lang === 'zh' ? '无' : 'rest'} · 4 {lang === 'zh' ? '比赛/双练' : 'comp/double'}{showIntimacy ? (lang === 'zh' ? ' · 含私密' : ' · includes private') : ''}</em></span>
         <Heatmap cols={heat} lang={lang} />
       </section>
 
@@ -205,6 +237,45 @@ export function DashboardScreen() {
             )}
           </div>
           {selectedSport && <SportCharts sport={selectedSport} sessions={sportSessionsFor} lang={lang} />}
+        </section>
+      )}
+
+      {showIntimacy && (
+        <section className="dash-intimacy">
+          <div className="dash-intimacy-head">
+            <div>
+              <span className="dash-intimacy-kicker">{lang === 'zh' ? '私密' : 'Private'}</span>
+              <h3>{lang === 'zh' ? '成人亲密健康' : 'Adult wellness'}</h3>
+            </div>
+            <div className="dash-intimacy-total">
+              <strong>{intimacyStats.total}</strong>
+              <span>{lang === 'zh' ? '总记录' : 'total'}</span>
+            </div>
+          </div>
+          <div className="dash-intimacy-grid">
+            <div className="dash-intimacy-metric">
+              <span>{lang === 'zh' ? '近 30 天' : 'Last 30 days'}</span>
+              <strong>{intimacyStats.recent}</strong>
+            </div>
+            <div className="dash-intimacy-metric">
+              <span>{lang === 'zh' ? '记录天数' : 'Logged days'}</span>
+              <strong>{intimacyStats.days}</strong>
+            </div>
+          </div>
+          <div className="dash-intimacy-bars">
+            {INTIMACY_CATEGORIES.map((c, i) => {
+              const max = Math.max(1, ...intimacyStats.byCat)
+              return (
+                <div key={c} className="dash-intimacy-bar-row">
+                  <span>{intimacyLabel(c, lang, true)}</span>
+                  <div className="dash-intimacy-bar-track">
+                    <i style={{ width: `${Math.max(6, (intimacyStats.byCat[i] / max) * 100)}%`, background: INTIMACY_COLORS[c] }} />
+                  </div>
+                  <b>{intimacyStats.byCat[i]}</b>
+                </div>
+              )
+            })}
+          </div>
         </section>
       )}
     </div>

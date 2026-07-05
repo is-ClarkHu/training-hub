@@ -17,3 +17,10 @@ alter table public.sports          alter column tiers drop not null;
 alter table public.sport_sessions  drop constraint if exists sport_sessions_tier_check;
 alter table public.sport_sessions  alter column tier drop not null;
 alter table public.sport_sessions  alter column estimated drop not null;
+
+-- Private adult wellness tracker categories
+alter table public.optional_trackers add column if not exists category text;
+alter table public.optional_trackers drop constraint if exists optional_trackers_category_check;
+alter table public.optional_trackers
+  add constraint optional_trackers_category_check
+  check (category is null or category in ('solo','partner_low','partner_active'));

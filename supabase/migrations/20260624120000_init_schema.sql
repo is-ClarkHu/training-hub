@@ -168,6 +168,7 @@ create table public.optional_trackers (
   tracker     text not null check (tracker in ('intimacy')), -- v1: one type
   date        date not null,
   count       integer not null default 1,          -- frequency point-log only
+  category    text check (category in ('solo','partner_low','partner_active')),
   updated_at  timestamptz not null default now(),
   deleted     boolean not null default false
 );
