@@ -96,13 +96,29 @@ export function HistoryScreen() {
       return next
     })
   }
+  // All selectable ids in this view = entries + sport sessions (respecting filters).
+  const selectableIds = useMemo(
+    () => [
+      ...sessions.flatMap((s) => s.items.map((e) => e.id)),
+      ...sessions.flatMap((s) => s.sports.map((ss) => ss.id)),
+      ...sessions.flatMap((s) => s.intimacy.map((r) => r.id)),
+    ],
+    [sessions],
+  )
+  const sportIdSet = useMemo(() => new Set(sportSessions.map((s) => s.id)), [sportSessions])
+  const intimacyIdSet = useMemo(() => new Set(intimacyRows.map((r) => r.id)), [intimacyRows])
+
   function toggleSelectAll() {
-    setSelected((prev) => (prev.size === entries.length ? new Set() : new Set(entries.map((e) => e.id))))
+    setSelected((prev) => (prev.size === selectableIds.length ? new Set() : new Set(selectableIds)))
   }
   async function deleteSelected() {
     if (selected.size === 0) return
     if (!confirm(lang === 'zh' ? `删除选中的 ${selected.size} 条?` : `Delete ${selected.size} selected?`)) return
-    for (const id of selected) await softDeleteEntry(id)
+    for (const id of selected) {
+      if (sportIdSet.has(id)) await softDeleteSportSession(id)
+      else if (intimacyIdSet.has(id)) await deleteTrackerEntry(id)
+      else await softDeleteEntry(id)
+    }
     setSelected(new Set())
     setSelectMode(false)
     await reload()
@@ -139,7 +155,7 @@ export function HistoryScreen() {
         </button>
         {selectMode && (
           <button className="hist-link" type="button" onClick={toggleSelectAll}>
-            {selected.size === entries.length ? (lang === 'zh' ? '全不选' : 'none') : (lang === 'zh' ? '全选' : 'all')}
+            {selected.size === selectableIds.length ? (lang === 'zh' ? '全不选' : 'none') : (lang === 'zh' ? '全选' : 'all')}
           </button>
         )}
         {selectMode && (
@@ -169,8 +185,11 @@ export function HistoryScreen() {
             {s.sports.map((ss) => {
               const sp = sportById[ss.sport_id]
               return (
-                <div key={ss.id} className="hist-entry hist-sport">
+                <div key={ss.id} className={`hist-entry hist-sport ${selected.has(ss.id) ? 'sel' : ''}`}>
                   <div className="hist-entry-head">
+                    {selectMode && (
+                      <input type="checkbox" className="hist-check" checked={selected.has(ss.id)} onChange={() => toggleSel(ss.id)} aria-label="select" />
+                    )}
                     <span className="hist-name">🏃 {sp ? sportName(sp, lang) : '(sport)'}</span>
                     {!selectMode && (
                       <div className="hist-actions">
@@ -190,8 +209,11 @@ export function HistoryScreen() {
               )
             })}
             {showIntimacy && s.intimacy.map((r) => (
-              <div key={r.id} className="hist-entry hist-intimacy">
+              <div key={r.id} className={`hist-entry hist-intimacy ${selected.has(r.id) ? 'sel' : ''}`}>
                 <div className="hist-entry-head">
+                  {selectMode && (
+                    <input type="checkbox" className="hist-check" checked={selected.has(r.id)} onChange={() => toggleSel(r.id)} aria-label="select" />
+                  )}
                   <span className="hist-name">{lang === 'zh' ? '成人亲密健康' : 'Adult wellness'}</span>
                   {!selectMode && (
                     <div className="hist-actions">

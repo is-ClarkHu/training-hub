@@ -1,18 +1,25 @@
 import type { NewSetInput } from '../../db'
 import type { ParsedNote, TranslationTarget } from '../../translation'
-import type { Exercise, ExerciseSet, MeasureType, SetType } from '../../supabase/types'
+import type { Exercise, ExerciseSet, MeasureType, SetType, SubSet } from '../../supabase/types'
 
-/** One editable set row in the Log form (strings; parsed on save). */
-export interface SetDraft {
+/** One sub-set's editable strings (weight×reps or duration). */
+export interface SubDraft {
   weight: string
   reps: string
   duration: string // 'mm:ss' or seconds
+}
+export const emptySub = (): SubDraft => ({ weight: '', reps: '', duration: '' })
+
+/** One editable SET in the Log form. `subs` has 1 row for a normal set, 2+ for a
+ *  superset/dropset (each sub-set its own weight×reps). */
+export interface SetDraft {
+  subs: SubDraft[]
   per_side: boolean
   set_type: SetType
   note: string
 }
 
-export const emptySet = (): SetDraft => ({ weight: '', reps: '', duration: '', per_side: false, set_type: 'normal', note: '' })
+export const emptySet = (): SetDraft => ({ subs: [emptySub()], per_side: false, set_type: 'normal', note: '' })
 
 export function exerciseName(ex: Exercise, lang: TranslationTarget): string {
   const primary = lang === 'zh' ? ex.name_zh : ex.name_en
@@ -74,54 +81,75 @@ export function toInt(text: string): number | null {
   return Number.isNaN(n) ? null : n
 }
 
-/** Convert editable drafts → set rows, applying note semantics (§5.3) + superset. */
+/** Parse one sub-draft → {weight,reps,duration_sec} for the given measure type,
+ *  or null if it's empty. */
+function subToValues(d: SubDraft, mt: MeasureType): SubSet | null {
+  if (mt === 'weight_reps') {
+    const w = toNumber(d.weight)
+    const r = toInt(d.reps)
+    if (w === null && r === null) return null
+    return { weight: w, reps: r, duration_sec: null }
+  }
+  if (mt === 'reps_only') {
+    const r = toInt(d.reps)
+    if (r === null) return null
+    return { weight: null, reps: r, duration_sec: null }
+  }
+  const s = parseDuration(d.duration)
+  if (s === null) return null
+  return { weight: null, reps: null, duration_sec: s }
+}
+
+/** Convert editable drafts → set rows. Each draft becomes ONE set; its extra
+ *  sub-sets ride in `sub_sets`. Note semantics (§5.3) still apply per set. */
 export function draftsToSetInputs(
   sets: SetDraft[],
   mt: MeasureType,
   parsed: ParsedNote,
 ): NewSetInput[] {
-  // Set type is per-set now (§ superset/dropset are single sets, not the whole
-  // exercise). A note-parsed warmup only fills sets left as 'normal'.
   const globalType: SetType = parsed.warmup ? 'warmup' : 'normal'
   const out: NewSetInput[] = []
   for (const d of sets) {
-    let row: NewSetInput | null = null
-    if (mt === 'weight_reps') {
-      const w = toNumber(d.weight)
-      const r = toInt(d.reps)
-      if (w !== null || r !== null) row = { weight: w, reps: r, per_side: d.per_side }
-    } else if (mt === 'reps_only') {
-      const r = toInt(d.reps)
-      if (r !== null) row = { reps: r, per_side: d.per_side }
-    } else {
-      const s = parseDuration(d.duration)
-      if (s !== null) row = { duration_sec: s }
-    }
-    if (!row) continue
-    if (parsed.perSide && mt !== 'duration') row.per_side = true
-    // per-set type wins; otherwise fall back to the entry-level warmup/superset
-    row.set_type = d.set_type !== 'normal' ? d.set_type : globalType
-    if (d.note.trim()) row.note = d.note.trim()
-    out.push(row)
+    const vals = d.subs.map((s) => subToValues(s, mt)).filter((v): v is SubSet => v !== null)
+    if (vals.length === 0) continue
+    const [primary, ...rest] = vals
+    const perSide = d.per_side || (parsed.perSide && mt !== 'duration')
+    out.push({
+      weight: primary.weight,
+      reps: primary.reps,
+      duration_sec: primary.duration_sec,
+      per_side: perSide,
+      sub_sets: rest,
+      set_type: d.set_type !== 'normal' ? d.set_type : globalType,
+      ...(d.note.trim() ? { note: d.note.trim() } : {}),
+    })
   }
   return out
 }
 
 /** Existing set row → editable draft (for History edit mode). */
 export function setToDraft(s: ExerciseSet): SetDraft {
-  return {
+  const primary: SubDraft = {
     weight: s.weight != null ? String(s.weight) : '',
     reps: s.reps != null ? String(s.reps) : '',
     duration: s.duration_sec != null ? formatDuration(s.duration_sec) : '',
-    per_side: s.per_side,
-    set_type: s.set_type,
-    note: s.note ?? '',
   }
+  const rest: SubDraft[] = (s.sub_sets ?? []).map((ss) => ({
+    weight: ss.weight != null ? String(ss.weight) : '',
+    reps: ss.reps != null ? String(ss.reps) : '',
+    duration: ss.duration_sec != null ? formatDuration(ss.duration_sec) : '',
+  }))
+  return { subs: [primary, ...rest], per_side: s.per_side, set_type: s.set_type, note: s.note ?? '' }
 }
 
-/** One-line bilingual-agnostic summary of a set (numbers only). */
+function fmtSub(v: { weight: number | null; reps: number | null; duration_sec: number | null }, mt: MeasureType): string {
+  if (mt === 'duration') return v.duration_sec != null ? formatDuration(v.duration_sec) : '–'
+  if (mt === 'reps_only') return `${v.reps ?? '–'}`
+  return `${v.weight ?? '–'}×${v.reps ?? '–'}`
+}
+
+/** One-line summary of a set — sub-sets joined by '+' (e.g. "25×13 + 20×13"). */
 export function formatSet(s: ExerciseSet, mt: MeasureType): string {
-  if (mt === 'duration') return s.duration_sec != null ? formatDuration(s.duration_sec) : '–'
-  if (mt === 'reps_only') return `${s.reps ?? '–'}${s.per_side ? '/side' : ''}`
-  return `${s.weight ?? '–'}×${s.reps ?? '–'}${s.per_side ? '/side' : ''}`
+  const parts = [fmtSub(s, mt), ...(s.sub_sets ?? []).map((v) => fmtSub(v, mt))]
+  return parts.join(' + ') + (s.per_side ? '/side' : '')
 }

@@ -2,8 +2,9 @@
 -- schema changes. (A brand-new install just runs 20260624120000_init_schema.sql and
 -- needs none of this.) All statements are idempotent — safe to run more than once.
 
--- Per-set note + exercise flags (warmup / per-side defaults)
+-- Per-set note + sub-sets (superset/dropset) + exercise flags (warmup / per-side)
 alter table public.sets       add column if not exists note text;
+alter table public.sets       add column if not exists sub_sets jsonb not null default '[]'::jsonb;
 alter table public.exercises  add column if not exists default_per_side boolean not null default false;
 alter table public.exercises  add column if not exists is_warmup        boolean not null default false;
 

@@ -71,6 +71,7 @@ create table public.sets (
   reps          integer,                          -- weight_reps / reps_only
   duration_sec  integer,                          -- duration
   per_side      boolean not null default false,   -- reps are per-side (e.g. Bulgarian split squat)
+  sub_sets      jsonb not null default '[]'::jsonb, -- extra sub-sets: [{weight,reps,duration_sec}] (superset/dropset)
   note          text,                             -- per-set note (e.g. to-failure); §5.3
   updated_at    timestamptz not null default now(),
   deleted       boolean not null default false

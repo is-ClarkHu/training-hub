@@ -20,6 +20,7 @@ import type {
   Sport,
   SportSession,
   SportField,
+  SubSet,
   TrackerType,
   TrainingCycle,
   WorkoutEntry,
@@ -98,6 +99,7 @@ export interface NewSetInput {
   reps?: number | null
   duration_sec?: number | null
   per_side?: boolean
+  sub_sets?: SubSet[]
   note?: string
 }
 
@@ -138,6 +140,7 @@ export async function createEntryWithSets(
     reps: null,
     duration_sec: null,
     per_side: false,
+    sub_sets: [],
     note: '',
     ...s,
   }))
@@ -441,7 +444,8 @@ export async function updateEntry(
       reps: null,
       duration_sec: null,
       per_side: false,
-    note: '',
+      sub_sets: [],
+      note: '',
       ...s,
     }))
     await db.sets.bulkAdd(fresh)

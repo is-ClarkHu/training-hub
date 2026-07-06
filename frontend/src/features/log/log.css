@@ -87,8 +87,23 @@
 }
 
 /* sets */
-.log-sets { display: flex; flex-direction: column; gap: 8px; }
+.log-sets { display: flex; flex-direction: column; gap: 10px; }
+.log-set-block {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 8px; border: 1px solid var(--border); border-radius: 8px;
+}
+.log-set-top { display: flex; align-items: center; gap: 8px; }
 .log-set { display: flex; align-items: center; gap: 8px; }
+.log-settype { width: auto; padding: 5px 8px; font-size: 12px; }
+.log-sub { display: flex; align-items: center; gap: 8px; padding-left: 22px; }
+.log-sub-idx { width: 16px; text-align: center; font: 600 11px/1 var(--mono); color: var(--amber); }
+.log-sub-del {
+  width: 24px; height: 24px; font-size: 14px; color: var(--text-dim);
+  background: transparent; border: 1px solid var(--border); border-radius: 5px;
+}
+.log-sub-del:hover { color: var(--danger); border-color: var(--danger); }
+.log-addsub { width: auto; align-self: flex-start; margin-left: 22px; padding: 5px 10px; font-size: 12px; }
+.log-set-note { font-size: 13px; }
 .log-set-idx {
   width: 22px;
   text-align: center;

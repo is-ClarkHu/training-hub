@@ -131,14 +131,23 @@ export interface WorkoutEntry extends SyncFields {
   needs_translation: boolean
 }
 
-export interface ExerciseSet extends SyncFields {
-  entry_id: string
-  set_index: number                  // 1-based
-  set_type: SetType
+// A sub-set is one weight×reps (or duration) pair inside a set. A normal set has
+// just its primary values; a superset/dropset set carries extra sub-sets here.
+export interface SubSet {
   weight: number | null
   reps: number | null
   duration_sec: number | null
+}
+
+export interface ExerciseSet extends SyncFields {
+  entry_id: string
+  set_index: number                  // 1-based order of the SET (not the sub-set)
+  set_type: SetType
+  weight: number | null              // primary (first) sub-set's weight
+  reps: number | null                // primary sub-set's reps
+  duration_sec: number | null        // primary sub-set's duration
   per_side: boolean
+  sub_sets?: SubSet[]                // ADDITIONAL sub-sets (superset/dropset); empty = single
   note?: string                      // per-set note (e.g. to-failure); §5.3
 }
 

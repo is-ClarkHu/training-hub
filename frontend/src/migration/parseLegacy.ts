@@ -41,10 +41,12 @@ export interface DraftEntry {
   cycle_day_label: null; injury_modified: null; injury_id: null
   needs_review: boolean; needs_translation: boolean; deleted: boolean
 }
+export interface SubVal { weight: number | null; reps: number | null; duration_sec: number | null }
 export interface DraftSet {
-  id: string; entry_id: string; set_index: number; set_type: 'normal'
+  id: string; entry_id: string; set_index: number
+  set_type: 'normal' | 'superset' | 'dropset'
   weight: number | null; reps: number | null; duration_sec: number | null
-  per_side: boolean; deleted: boolean
+  per_side: boolean; sub_sets: SubVal[]; deleted: boolean
 }
 export interface DraftSport {
   id: string; name_zh: string; name_en: string; is_default: boolean
@@ -124,6 +126,48 @@ function frisbeeTier(text: string): 1 | 2 | 3 | 4 {
   return 2
 }
 
+interface ParsedSet { subs: SubVal[]; set_type: 'normal' | 'superset' | 'dropset' }
+
+// Parse one "a×b" (or "a×b×c…") token → sub-set(s). weight = first, reps follow.
+function subsFromToken(tok: string): SubVal[] {
+  const parts = tok.split('×').map((x) => x.trim()).filter(Boolean)
+  if (parts.length === 0) return []
+  const w = parseFloat(parts[0])
+  const weight = Number.isNaN(w) ? null : w
+  if (parts.length === 1) return [{ weight, reps: null, duration_sec: null }]
+  // weight × rep1 × rep2 … → multiple sub-sets at the same weight
+  return parts.slice(1).map((r) => ({ weight, reps: parseInt(r, 10) || null, duration_sec: null }))
+}
+
+// Detect + parse the superset formats, e.g.
+//   超级组(25×13+20×13);(27.5×8+20×10);(25×10+20×10)   → 3 superset sets
+//   超级组(17.5×13+10×13)×2                              → 2 identical superset sets
+//   22.5×15;32.5×12;超级组(37.5×8+32.5×8)                → 2 normal + 1 superset
+// Returns null when the body isn't a superset shape.
+function parseSuperset(body: string, dropset: boolean): ParsedSet[] | null {
+  if (!/超级组|\)\s*[;；]?\s*\(/.test(body) && !/超级组?\(/.test(body)) return null
+  const type: 'superset' | 'dropset' = dropset ? 'dropset' : 'superset'
+  const out: ParsedSet[] = []
+  for (let seg of body.split(/[;；]/)) {
+    seg = seg.trim()
+    if (!seg) continue
+    let repeat = 1
+    const rep = seg.match(/[)）]\s*×\s*(\d+)\s*$/)
+    if (rep) { repeat = parseInt(rep[1], 10) || 1; seg = seg.replace(/×\s*\d+\s*$/, '').trim() }
+    const paren = seg.match(/[(（]([^)）]*)[)）]/)
+    if (paren) {
+      // one superset set: sub-sets separated by '+'
+      const subs = paren[1].split('+').flatMap((t) => subsFromToken(t)).filter((s) => s.weight !== null || s.reps !== null)
+      if (subs.length) for (let r = 0; r < repeat; r++) out.push({ subs, set_type: type })
+    } else {
+      const clean = seg.replace(/超级组/g, '').trim()
+      const subs = subsFromToken(clean).filter((s) => s.weight !== null || s.reps !== null)
+      if (subs.length) for (let r = 0; r < repeat; r++) out.push({ subs, set_type: 'normal' })
+    }
+  }
+  return out.length ? out : null
+}
+
 export function parseLegacyCsv(csv: string): ParseResult {
   const lines = csv.replace(/^﻿/, '').split(/\r?\n/).filter((l) => l.trim().length > 0)
   const exercises = new Map<string, DraftExercise>()
@@ -191,11 +235,22 @@ export function parseLegacyCsv(csv: string): ParseResult {
     const weight = weightRaw.trim() ? parseFloat(weightRaw) : null
 
     // decide measure type + parse sets
-    let measureType: MeasureType
+    let measureType: MeasureType = 'weight_reps'
     const setRows: { weight: number | null; reps: number | null; duration_sec: number | null }[] = []
+    let parsedSets: ParsedSet[] | null = null
 
-    const isDuration = /[:分秒]|小时/.test(body) || /[:分秒]/.test(raw)
-    if (isDuration) {
+    // Superset / dropset (multi-sub-set) — try first; body has 超级组 or (a+b) groups.
+    const isDropset = /递减/.test(note) || /递减/.test(body)
+    const superset = weight !== null || /×/.test(body) ? parseSuperset(body, isDropset) : null
+    if (superset) {
+      measureType = 'weight_reps'
+      parsedSets = superset
+    }
+
+    const isDuration = !parsedSets && (/[:分秒]|小时/.test(body) || /[:分秒]/.test(raw))
+    if (parsedSets) {
+      // already parsed above
+    } else if (isDuration) {
       measureType = 'duration'
       if (/共|组/.test(body)) {
         // "2组共2.5分钟" / "1组" — ambiguous split across sets
@@ -258,17 +313,23 @@ export function parseLegacyCsv(csv: string): ParseResult {
     const n = (occ.get(occKey) ?? 0) + 1
     occ.set(occKey, n)
     const entryId = seededUuid(`entry:${date}:${canon}:${n}`)
+    // Unify: either the superset-parsed sets, or the flat setRows as single-sub sets.
+    const finalSets: ParsedSet[] =
+      parsedSets ?? setRows.map((s) => ({ subs: [s], set_type: 'normal' as const }))
+    const hasSuperset = finalSets.some((s) => s.set_type !== 'normal')
+
     entries.push({
-      id: entryId, date, exercise_id: exId, is_superset: false, superset_group: null,
+      id: entryId, date, exercise_id: exId, is_superset: hasSuperset, superset_group: null,
       note_raw: note, note_tags: noteTags, cycle_day_label: null, injury_modified: null,
       injury_id: null, needs_review: needsReview, needs_translation: false, deleted: false,
     })
     report.entries++
-    setRows.forEach((s, idx) => {
+    finalSets.forEach((ps, idx) => {
+      const [primary, ...rest] = ps.subs
       sets.push({
         id: seededUuid(`set:${entryId}:${idx + 1}`), entry_id: entryId, set_index: idx + 1,
-        set_type: 'normal', weight: s.weight ?? null, reps: s.reps ?? null,
-        duration_sec: s.duration_sec ?? null, per_side: perSide, deleted: false,
+        set_type: ps.set_type, weight: primary.weight ?? null, reps: primary.reps ?? null,
+        duration_sec: primary.duration_sec ?? null, per_side: perSide, sub_sets: rest, deleted: false,
       })
     })
     if (needsReview) report.needsReview.push({ date, exercise: canon, raw, reason: catReview ? 'category not a body part' : 'ambiguous sets/reps' })
