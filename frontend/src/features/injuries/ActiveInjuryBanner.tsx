@@ -10,14 +10,16 @@ export function ActiveInjuryBanner({ injuries, lang }: { injuries: Injury[]; lan
 
   return (
     <div className="inj-banner" role="status">
-      <span className="inj-banner-icon" aria-hidden="true">▲</span>
-      <div className="inj-banner-list">
-        {active.map((i) => (
-          <span key={i.id} className="inj-banner-item">
-            <strong>{i.body_area}</strong> · {INJURY_STATUS_LABELS[i.status][lang]} · {daysSince(i.started_on)}
-            {lang === 'zh' ? '天' : 'd'}
-          </span>
-        ))}
+      <span className="inj-banner-icon" aria-hidden="true">⚠️</span>
+      <div>
+        <div className="inj-banner-title">{lang === 'zh' ? `活动伤病 · ${active.length}` : `Active injuries · ${active.length}`}</div>
+        <div className="inj-banner-list">
+          {active.map((i) => (
+            <span key={i.id} className="inj-banner-item">
+              <strong>{i.body_area}</strong> · {INJURY_STATUS_LABELS[i.status][lang]} · {daysSince(i.started_on)}{lang === 'zh' ? '天' : 'd'}
+            </span>
+          ))}
+        </div>
       </div>
     </div>
   )

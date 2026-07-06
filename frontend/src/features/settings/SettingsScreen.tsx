@@ -8,7 +8,7 @@ import {
   getSports,
   softDeleteSport,
 } from '../../db'
-import { useLanguage } from '../../i18n'
+import { useLanguage, useTheme, type ThemePref } from '../../i18n'
 import { useAuth } from '../auth'
 import { syncNow } from '../../sync'
 import { importLegacyCsv, downloadBackup, importBackup } from '../../migration'
@@ -32,6 +32,12 @@ import './settings.css'
 
 export function SettingsScreen() {
   const { lang } = useLanguage()
+  const { pref: themePref, setPref: setThemePref } = useTheme()
+  const THEMES: { key: ThemePref; zh: string; en: string }[] = [
+    { key: 'light', zh: '浅色', en: 'Light' },
+    { key: 'dark', zh: '深色', en: 'Dark' },
+    { key: 'auto', zh: '自动', en: 'Auto' },
+  ]
   const { session, signOut } = useAuth()
   const [sports, setSports] = useState<Sport[]>([])
   const [sportDialog, setSportDialog] = useState<{ open: boolean; sport?: Sport }>({ open: false })
@@ -131,6 +137,20 @@ export function SettingsScreen() {
         <div className="set-row">
           <div className="set-desc">{session?.user.email}</div>
           <button className="th-btn-ghost set-log" type="button" onClick={() => void signOut()}>{lang === 'zh' ? '登出' : 'Sign out'}</button>
+        </div>
+      </section>
+
+      <section className="set-section">
+        <span className="th-label">{lang === 'zh' ? '外观' : 'Appearance'}</span>
+        <div className="set-row">
+          <div className="set-desc">{lang === 'zh' ? '主题' : 'Theme'}</div>
+          <div className="set-theme">
+            {THEMES.map((th) => (
+              <button key={th.key} type="button" className={`th-pill ${themePref === th.key ? 'on' : ''}`} onClick={() => setThemePref(th.key)}>
+                {lang === 'zh' ? th.zh : th.en}
+              </button>
+            ))}
+          </div>
         </div>
       </section>
 

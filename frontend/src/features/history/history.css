@@ -1,77 +1,79 @@
 .hist-screen { display: flex; flex-direction: column; gap: 22px; }
-.hist-empty { color: var(--text-dim); }
+.hist-empty { color: var(--faint); font: 12px var(--mono); }
 
-.hist-toolbar { display: flex; gap: 16px; align-items: center; }
-.hist-check { width: 16px; height: 16px; accent-color: var(--teal); }
-.hist-entry.sel { border-color: var(--teal); }
-.hist-intimacy {
-  background: linear-gradient(135deg, rgba(244, 114, 182, 0.1), rgba(167, 139, 250, 0.07));
-  border-color: rgba(244, 114, 182, 0.28);
-}
-.hist-intimacy .hist-name { color: #ffe4f1; }
-.hist-intimacy-pill {
-  padding: 5px 9px;
-  font: 600 12px/1 var(--mono);
-  color: #ffe4f1;
-  background: rgba(244, 114, 182, 0.2);
-  border: 1px solid rgba(244, 114, 182, 0.32);
-  border-radius: 999px;
-}
+.hist-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.hist-check { width: 17px; height: 17px; accent-color: var(--lime); flex: none; }
 
-.hist-session { display: flex; flex-direction: column; gap: 10px; }
+/* date group */
+.hist-session { display: flex; flex-direction: column; gap: 8px; }
 .hist-date {
   margin: 0;
-  font: 600 13px/1 var(--mono);
-  letter-spacing: 0.08em;
-  color: var(--amber);
+  font: 20px/1 var(--display);
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  padding-bottom: 8px;
   border-bottom: 1px solid var(--border);
-  padding-bottom: 6px;
 }
 .hist-entries { display: flex; flex-direction: column; gap: 8px; }
 
-.hist-entry {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px 14px;
+/* rows — neutral chrome; a small colored dot marks the type, not the whole border */
+.hist-row {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 13px 15px;
   background: var(--bg-panel);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 12px;
+  transition: border-color 0.2s, background 0.15s;
 }
-.hist-entry.needs { border-color: var(--amber); }
+.hist-row.clickable { cursor: pointer; }
+.hist-row.clickable:hover { border-color: var(--accent); background: var(--accent-soft); }
+.hist-row.clickable:hover .hist-name { color: var(--accent); }
+.hist-row.sel { border-color: var(--accent); background: var(--accent-soft); }
+.hist-row.needs { border-color: color-mix(in srgb, var(--amber) 45%, var(--border)); }
 
-.hist-entry-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.hist-name { font: 600 14px/1.2 var(--mono); color: var(--text-bright); }
-.hist-actions { display: flex; gap: 10px; }
-.hist-link {
-  background: none; border: none; padding: 0;
-  font: 12px/1 var(--mono); color: var(--ice); text-decoration: underline;
-}
-.hist-link.danger { color: var(--danger); }
-.hist-link:disabled { opacity: 0.5; }
+.hist-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.hist-row-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.hist-name { font: 700 14px/1.2 var(--sans); color: var(--text-bright); display: flex; align-items: center; gap: 7px; }
+/* type dot before the name */
+.hist-name::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--gym); flex: none; }
+.hist-sport .hist-name::before { background: var(--disc); }
+.hist-intimacy .hist-name::before { background: var(--comp); }
 
 .hist-sets { display: flex; flex-wrap: wrap; gap: 10px; }
-.hist-set { font: 13px/1.4 var(--mono); color: var(--teal); }
-.hist-settype { color: var(--text-dim); font-style: normal; font-size: 11px; }
+.hist-set { font: 13px/1.4 var(--mono); color: var(--text-bright); }
+.hist-settype {
+  color: var(--text-dim); font-style: normal; font-size: 10px;
+  padding: 1px 6px; background: rgba(255,255,255,0.05); border-radius: 4px; margin-left: 2px;
+}
+.hist-setnote { color: var(--faint); font-style: italic; }
 
-.hist-note { margin: 0; font-size: 13px; color: var(--text); }
-.hist-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.hist-tags { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.hist-note-inline { font: 12px var(--mono); color: var(--text-dim); }
 
-.hist-badges { display: flex; gap: 6px; }
 .hist-badge {
-  padding: 2px 7px;
-  font: 600 10px/1.4 var(--mono);
-  letter-spacing: 0.06em;
+  padding: 2px 8px;
+  font: 700 10px/1.4 var(--mono);
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  border-radius: 4px;
+  border-radius: 999px;
 }
 .hist-badge.review { color: #2a1500; background: var(--amber); }
-.hist-badge.translate { color: #04181a; background: var(--ice); }
+.hist-badge.translate { color: #04181a; background: var(--cyan); }
 .hist-badge.injury { color: #2a0000; background: var(--danger); }
-.hist-sport { border-left: 3px solid var(--ice); }
-.hist-setnote { color: var(--text-dim); font-style: italic; }
 
-.hist-edit { display: flex; flex-direction: column; gap: 10px; }
-.hist-superset { display: inline-flex; align-items: center; gap: 6px; font: 12px/1 var(--mono); color: var(--text-dim); }
-.hist-edit-actions { display: flex; gap: 10px; }
-.hist-edit-actions .th-btn, .hist-edit-actions .th-btn-ghost { flex: 1; }
+.hist-intimacy-pill {
+  padding: 4px 10px;
+  font: 700 12px/1 var(--mono);
+  color: #ffe4f1;
+  background: rgba(255, 107, 157, 0.2);
+  border: 1px solid rgba(255, 107, 157, 0.35);
+  border-radius: 999px;
+}
+
+.hist-link {
+  background: none; border: none; padding: 0;
+  font: 12px/1 var(--mono); color: var(--cyan); cursor: pointer;
+}
+.hist-link.danger { color: var(--danger); }
+.hist-link.on { color: var(--lime); }
+.hist-link:disabled { opacity: 0.5; }

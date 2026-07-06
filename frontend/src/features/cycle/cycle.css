@@ -63,15 +63,17 @@
 .cyc-del { width: 32px; background: transparent; border: 1px solid var(--border); border-radius: 6px; color: var(--text-dim); }
 .cyc-del:hover { color: var(--danger); border-color: var(--danger); }
 .cyc-bp-row { display: flex; flex-wrap: wrap; gap: 4px; }
-.cyc-bp { padding: 4px 8px; font: 11px/1 var(--mono); color: var(--text-dim); background: var(--bg-input); border: 1px solid var(--border); border-radius: 4px; }
-.cyc-bp.on { color: #04181a; background: var(--ice); border-color: var(--ice); }
+.cyc-bp { padding: 4px 8px; font: 11px/1 var(--mono); color: var(--text-dim); background: var(--bg-input); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; transition: color 0.15s, border-color 0.15s; }
+.cyc-bp:hover:not(.on) { color: var(--text-bright); border-color: var(--faint); }
+.cyc-bp.on { color: var(--on-accent); background: var(--cyan); border-color: var(--cyan); }
 .cyc-add-day { width: auto; align-self: flex-start; padding: 7px 12px; }
 
 /* attach exercises to a day */
 .cyc-ex-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .cyc-ex-hint { font: 11px/1 var(--mono); color: var(--text-dim); margin-right: 4px; }
-.cyc-ex { padding: 4px 8px; font: 11px/1 var(--mono); color: var(--text-dim); background: var(--bg-input); border: 1px solid var(--border); border-radius: 4px; }
-.cyc-ex.on { color: #04181a; background: var(--teal); border-color: var(--teal); }
+.cyc-ex { padding: 4px 8px; font: 11px/1 var(--mono); color: var(--text-dim); background: var(--bg-input); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; transition: color 0.15s, border-color 0.15s; }
+.cyc-ex:hover:not(.on) { color: var(--text-bright); border-color: var(--faint); }
+.cyc-ex.on { color: var(--on-accent); background: var(--accent); border-color: var(--accent); }
 
 /* library browser */
 .cyc-lib-toggle {

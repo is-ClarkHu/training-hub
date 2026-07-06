@@ -34,7 +34,7 @@ export function CycleScreen() {
   const [exById, setExById] = useState<Record<string, Exercise>>({})
   const [newName, setNewName] = useState('')
   const [editId, setEditId] = useState<string | null>(null)
-  const [showLibrary, setShowLibrary] = useState(true)
+  const [showLibrary, setShowLibrary] = useState(false)
 
   const reload = useCallback(async () => {
     const [cs, act, es, exs] = await Promise.all([getCycles(), getActiveCycle(), getEntries(), getExercises()])
@@ -203,7 +203,8 @@ function CycleDaysEditor({
     <div className="cyc-editor">
       <input className="th-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="cycle name" />
       {days.map((d, i) => {
-        const dayExercises = exercises.filter((e) => d.body_parts.includes(e.body_part))
+        const dayExercises = exercises.filter((e) => !e.is_warmup && d.body_parts.includes(e.body_part))
+        const warmups = exercises.filter((e) => e.is_warmup)
         return (
           <div key={i} className="cyc-edit-day">
             <div className="cyc-edit-row">
@@ -218,6 +219,16 @@ function CycleDaysEditor({
                 </button>
               ))}
             </div>
+            {warmups.length > 0 && (
+              <div className="cyc-ex-pick">
+                <span className="cyc-ex-hint">{lang === 'zh' ? '热身:' : 'Warmup:'}</span>
+                {warmups.map((e) => (
+                  <button key={e.id} type="button" className={`cyc-ex ${(d.exercise_ids ?? []).includes(e.id) ? 'on' : ''}`} onClick={() => toggleEx(i, e.id)}>
+                    {exName(e)}
+                  </button>
+                ))}
+              </div>
+            )}
             {d.body_parts.length > 0 && (
               <div className="cyc-ex-pick">
                 <span className="cyc-ex-hint">{lang === 'zh' ? '挂动作:' : 'Attach exercises:'}</span>

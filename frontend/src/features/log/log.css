@@ -62,7 +62,9 @@
   border: 1px solid var(--border);
   border-radius: 6px;
 }
-.log-chip.is-selected { border-color: var(--teal); color: var(--text-bright); box-shadow: 0 0 0 1px var(--teal); }
+.log-chip { cursor: pointer; transition: border-color 0.15s, color 0.15s; }
+.log-chip:hover { border-color: var(--accent); color: var(--text-bright); }
+.log-chip.is-selected { border-color: var(--accent); color: var(--on-accent); background: var(--accent); box-shadow: none; }
 
 /* entry */
 .log-entry {

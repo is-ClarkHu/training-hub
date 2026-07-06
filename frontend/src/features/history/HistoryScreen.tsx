@@ -18,7 +18,7 @@ import { parseNote, noteTagLabel } from '../../translation'
 import { useLanguage } from '../../i18n'
 import type { Exercise, ExerciseSet, OptionalTracker, Sport, SportSession, WorkoutEntry } from '../../supabase/types'
 import { SetEditor } from '../log/SetEditor'
-import { sportName, attrLabel } from '../sports'
+import { sportName, attrLabel, SportSessionDialog } from '../sports'
 import { intimacyCategory, intimacyLabel, intimacyVisible } from '../intimacy'
 import {
   draftsToSetInputs,
@@ -40,6 +40,7 @@ export function HistoryScreen() {
   const [intimacyRows, setIntimacyRows] = useState<OptionalTracker[]>([])
   const [showIntimacy, setShowIntimacy] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [sportEditing, setSportEditing] = useState<SportSession | null>(null)
   const [selectMode, setSelectMode] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [discreet, setDiscreet] = useState(false)
@@ -124,11 +125,6 @@ export function HistoryScreen() {
     await reload()
   }
 
-  async function delSport(id: string) {
-    if (!confirm(lang === 'zh' ? '删除这条运动记录?' : 'Delete this session?')) return
-    await softDeleteSportSession(id)
-    await reload()
-  }
 
   async function delIntimacy(id: string) {
     if (!confirm(lang === 'zh' ? '隐藏这条私密记录?' : 'Hide this private record?')) return
@@ -144,23 +140,23 @@ export function HistoryScreen() {
   return (
     <div className="hist-screen">
       <div className="hist-toolbar">
-        <button className={`hist-link ${reviewOnly ? 'on' : ''}`} type="button" onClick={() => setReviewOnly((v) => !v)}>
-          {lang === 'zh' ? '只看待复核' : 'review only'}
+        <button className={`th-pill ${reviewOnly ? 'on' : ''}`} type="button" onClick={() => setReviewOnly((v) => !v)}>
+          ⚑ {lang === 'zh' ? '待复核' : 'review'}
         </button>
-        <button className="hist-link" type="button" onClick={() => setDiscreet((v) => !v)}>
-          {discreet ? (lang === 'zh' ? '显示数值' : 'show values') : (lang === 'zh' ? '隐藏数值' : 'hide values')}
+        <button className={`th-pill ${discreet ? 'on' : ''}`} type="button" onClick={() => setDiscreet((v) => !v)}>
+          {discreet ? '🙈' : '👁'} {lang === 'zh' ? '数值' : 'values'}
         </button>
-        <button className="hist-link" type="button" onClick={() => { setSelectMode((v) => !v); setSelected(new Set()) }}>
-          {selectMode ? (lang === 'zh' ? '取消' : 'cancel') : (lang === 'zh' ? '批量选择' : 'select')}
+        <button className={`th-pill ${selectMode ? 'on' : ''}`} type="button" onClick={() => { setSelectMode((v) => !v); setSelected(new Set()) }}>
+          {selectMode ? (lang === 'zh' ? '取消' : 'cancel') : (lang === 'zh' ? '选择' : 'select')}
         </button>
         {selectMode && (
-          <button className="hist-link" type="button" onClick={toggleSelectAll}>
+          <button className="th-pill" type="button" onClick={toggleSelectAll}>
             {selected.size === selectableIds.length ? (lang === 'zh' ? '全不选' : 'none') : (lang === 'zh' ? '全选' : 'all')}
           </button>
         )}
         {selectMode && (
-          <button className="hist-link danger" type="button" onClick={deleteSelected} disabled={selected.size === 0}>
-            {lang === 'zh' ? `删除 (${selected.size})` : `delete (${selected.size})`}
+          <button className="th-pill danger" type="button" onClick={deleteSelected} disabled={selected.size === 0}>
+            🗑 {lang === 'zh' ? `删除 ${selected.size}` : `delete ${selected.size}`}
           </button>
         )}
       </div>
@@ -185,26 +181,27 @@ export function HistoryScreen() {
             {s.sports.map((ss) => {
               const sp = sportById[ss.sport_id]
               return (
-                <div key={ss.id} className={`hist-entry hist-sport ${selected.has(ss.id) ? 'sel' : ''}`}>
-                  <div className="hist-entry-head">
-                    {selectMode && (
-                      <input type="checkbox" className="hist-check" checked={selected.has(ss.id)} onChange={() => toggleSel(ss.id)} aria-label="select" />
-                    )}
-                    <span className="hist-name">🏃 {sp ? sportName(sp, lang) : '(sport)'}</span>
-                    {!selectMode && (
-                      <div className="hist-actions">
-                        <button className="hist-link danger" type="button" onClick={() => void delSport(ss.id)}>delete</button>
-                      </div>
-                    )}
+                <div
+                  key={ss.id}
+                  className={`hist-row hist-sport ${selected.has(ss.id) ? 'sel' : ''} ${selectMode ? '' : 'clickable'}`}
+                  onClick={() => (selectMode ? toggleSel(ss.id) : setSportEditing(ss))}
+                >
+                  {selectMode && (
+                    <input type="checkbox" className="hist-check" checked={selected.has(ss.id)} onChange={() => toggleSel(ss.id)} onClick={(e) => e.stopPropagation()} aria-label="select" />
+                  )}
+                  <div className="hist-row-main">
+                    <div className="hist-row-top">
+                      <span className="hist-name">🏃 {sp ? sportName(sp, lang) : '(sport)'}</span>
+                      {ss.injury && <span className="hist-badge injury">{lang === 'zh' ? '带伤' : 'injury'}</span>}
+                    </div>
+                    <div className="hist-sets">
+                      <span className="hist-set">{formatHours(ss.hours)}</span>
+                      {(sp?.fields ?? []).map((f) => ss.attributes?.[f.key] && (
+                        <span key={f.key} className="hist-settype">{attrLabel(f, ss.attributes[f.key], lang)}</span>
+                      ))}
+                    </div>
+                    {ss.note_raw && <div className="hist-tags"><span className="hist-note-inline">{ss.note_raw}</span></div>}
                   </div>
-                  <div className="hist-sets">
-                    <span className="hist-set">{formatHours(ss.hours)}</span>
-                    {(sp?.fields ?? []).map((f) => ss.attributes?.[f.key] && (
-                      <span key={f.key} className="hist-settype">{attrLabel(f, ss.attributes[f.key], lang)}</span>
-                    ))}
-                    {ss.injury && <span className="hist-badge injury">injury</span>}
-                  </div>
-                  {ss.note_raw && <p className="hist-note">{ss.note_raw}</p>}
                 </div>
               )
             })}
@@ -232,6 +229,16 @@ export function HistoryScreen() {
           </div>
         </section>
       ))}
+
+      {sportEditing && (
+        <SportSessionDialog
+          lang={lang}
+          sport={sportById[sportEditing.sport_id]}
+          session={sportEditing}
+          onSaved={() => { setSportEditing(null); void reload() }}
+          onClose={() => setSportEditing(null)}
+        />
+      )}
     </div>
   )
 }
@@ -298,53 +305,25 @@ function EntryCard({
   const name = exercise ? exerciseName(exercise, lang) : '(deleted exercise)'
 
   return (
-    <div className={`hist-entry ${needsAttention ? 'needs' : ''} ${selected ? 'sel' : ''}`}>
-      <div className="hist-entry-head">
+    <>
+      <div
+        className={`hist-row ${needsAttention ? 'needs' : ''} ${selected ? 'sel' : ''} ${selectMode ? '' : 'clickable'}`}
+        onClick={() => (selectMode ? onToggleSelect() : exercise && startEdit())}
+      >
         {selectMode && (
-          <input type="checkbox" className="hist-check" checked={selected} onChange={onToggleSelect} aria-label="select" />
+          <input type="checkbox" className="hist-check" checked={selected} onChange={onToggleSelect} onClick={(e) => e.stopPropagation()} aria-label="select" />
         )}
-        <span className="hist-name">{name}</span>
-        {!selectMode && (
-          <div className="hist-actions">
-            {exercise && !editing && (
-              <button className="hist-link" type="button" onClick={startEdit} disabled={busy}>edit</button>
+        <div className="hist-row-main">
+          <div className="hist-row-top">
+            <span className="hist-name">{name}</span>
+            {entry.injury_modified && (
+              <span className="hist-badge injury">{entry.injury_modified === 'paused' ? (lang === 'zh' ? '因伤暂停' : 'paused') : (lang === 'zh' ? '因伤减量' : 'reduced')}</span>
             )}
-            <button className="hist-link danger" type="button" onClick={remove} disabled={busy}>delete</button>
+            {entry.needs_review && <span className="hist-badge review">{lang === 'zh' ? '待复核' : 'review'}</span>}
+            {(entry.needs_translation || (exercise && (exercise.needs_translation || !exercise.name_en || !exercise.name_zh))) && (
+              <span className="hist-badge translate">{lang === 'zh' ? '待翻译' : 'translate'}</span>
+            )}
           </div>
-        )}
-      </div>
-
-      {entry.injury_modified && (
-        <div className="hist-badges">
-          <span className="hist-badge injury">
-            {entry.injury_modified === 'paused'
-              ? lang === 'zh' ? '因伤暂停' : 'paused (injury)'
-              : lang === 'zh' ? '因伤减量' : 'reduced (injury)'}
-          </span>
-        </div>
-      )}
-
-      {needsAttention && (
-        <div className="hist-badges">
-          {entry.needs_review && <span className="hist-badge review">needs review</span>}
-          {(entry.needs_translation || (exercise && (exercise.needs_translation || !exercise.name_en || !exercise.name_zh))) && (
-            <span className="hist-badge translate">needs translation</span>
-          )}
-        </div>
-      )}
-
-      {editing && exercise ? (
-        <div className="hist-edit">
-          <SetEditor lang={lang} measureType={exercise.measure_type} sets={drafts} onChange={setDrafts} />
-          <input className="th-input" value={note} onChange={(e) => setNote(e.target.value)}
-            placeholder={lang === 'zh' ? '笔记' : 'note'} />
-          <div className="hist-edit-actions">
-            <button className="th-btn-ghost" type="button" onClick={() => setEditing(false)} disabled={busy}>Cancel</button>
-            <button className="th-btn" type="button" onClick={save} disabled={busy}>Save</button>
-          </div>
-        </div>
-      ) : (
-        <>
           <div className="hist-sets">
             {discreet ? (
               <span className="hist-set">{sets.length} {lang === 'zh' ? '组' : sets.length === 1 ? 'set' : 'sets'}</span>
@@ -358,16 +337,28 @@ function EntryCard({
               ))
             )}
           </div>
-          {entry.note_raw && <p className="hist-note">{entry.note_raw}</p>}
-          {entry.note_tags.length > 0 && (
+          {(entry.note_raw || entry.note_tags.length > 0) && (
             <div className="hist-tags">
-              {entry.note_tags.map((k) => (
-                <span key={k} className="log-tagchip sm">{noteTagLabel(k, lang)}</span>
-              ))}
+              {entry.note_tags.map((k) => (<span key={k} className="log-tagchip sm">{noteTagLabel(k, lang)}</span>))}
+              {entry.note_raw && <span className="hist-note-inline">{entry.note_raw}</span>}
             </div>
           )}
-        </>
+        </div>
+      </div>
+
+      {editing && exercise && (
+        <div className="log-dialog-backdrop" onClick={() => !busy && setEditing(false)}>
+          <div className="log-dialog" onClick={(e) => e.stopPropagation()}>
+            <h3>{name}</h3>
+            <SetEditor lang={lang} measureType={exercise.measure_type} sets={drafts} onChange={setDrafts} />
+            <input className="th-input" value={note} onChange={(e) => setNote(e.target.value)} placeholder={lang === 'zh' ? '笔记' : 'note'} />
+            <div className="log-dialog-actions">
+              <button className="th-btn-ghost" type="button" onClick={remove} disabled={busy}>{lang === 'zh' ? '删除' : 'Delete'}</button>
+              <button className="th-btn" type="button" onClick={save} disabled={busy}>{lang === 'zh' ? '保存' : 'Save'}</button>
+            </div>
+          </div>
+        </div>
       )}
-    </div>
+    </>
   )
 }

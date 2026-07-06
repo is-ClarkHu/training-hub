@@ -113,8 +113,8 @@
   border-radius: 7px;
   cursor: pointer;
 }
-.app-drawer-item:hover:not(:disabled) { background: var(--bg-input); }
-.app-drawer-item.is-active { color: #04181a; background: var(--teal); }
+.app-drawer-item:hover:not(.is-active):not(:disabled) { background: var(--bg-input); color: var(--text-bright); }
+.app-drawer-item.is-active { color: var(--on-accent); background: var(--accent); }
 .app-drawer-item:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* ── wide screens: persistent sidebar, no hamburger/overlay ── */

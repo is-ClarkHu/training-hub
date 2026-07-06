@@ -20,6 +20,7 @@ export {
   createSportSession,
   getSportSessions,
   softDeleteSportSession,
+  updateSportSession,
   createInjury,
   getInjuries,
   updateInjury,

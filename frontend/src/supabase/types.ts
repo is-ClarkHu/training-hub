@@ -115,6 +115,7 @@ export interface Exercise extends SyncFields {
   name_locked: boolean   // user-edited translation; AI must never overwrite
   needs_translation: boolean
   default_per_side?: boolean // this movement is inherently per-side (prefills the toggle)
+  is_warmup?: boolean        // classified as a warmup movement (own group in the picker)
 }
 
 export interface WorkoutEntry extends SyncFields {

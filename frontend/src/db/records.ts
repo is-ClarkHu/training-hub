@@ -242,6 +242,14 @@ export async function softDeleteSportSession(id: string): Promise<void> {
   if (s) await db.sport_sessions.put({ ...s, deleted: true, updated_at: nowIso() })
 }
 
+export async function updateSportSession(
+  id: string,
+  patch: Partial<Pick<SportSession, 'date' | 'hours' | 'attributes' | 'injury' | 'note_raw'>>,
+): Promise<void> {
+  const s = await db.sport_sessions.get(id)
+  if (s) await db.sport_sessions.put({ ...s, ...patch, updated_at: nowIso() })
+}
+
 // ── injuries (§4.8, §6A) ─────────────────────────────────────
 export interface NewInjuryInput {
   body_area: string

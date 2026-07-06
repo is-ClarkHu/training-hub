@@ -100,3 +100,5 @@
   .set-ai-row { flex-wrap: wrap; }
   .set-ai-task { flex-basis: 100%; }
 }
+
+.set-theme { display: flex; gap: 6px; }

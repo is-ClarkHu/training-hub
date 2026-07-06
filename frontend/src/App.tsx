@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AuthProvider, AuthGate, useAuth } from './features/auth'
-import { LanguageProvider, useLanguage } from './i18n'
+import { LanguageProvider, ThemeProvider, useLanguage } from './i18n'
 import { startSync } from './sync'
 import { LogScreen } from './features/log'
 import { HistoryScreen } from './features/history'
@@ -58,7 +58,6 @@ function AppShell() {
       <div className="app-body">
         <aside className={`app-drawer ${drawerOpen ? 'open' : ''}`}>
           <div className="app-drawer-head">
-            <span className="app-logo">training&middot;hub</span>
             <span className="app-drawer-email">{session?.user.email}</span>
           </div>
           <nav aria-label="sections">
@@ -95,12 +94,14 @@ function AppShell() {
 
 export default function App() {
   return (
-    <LanguageProvider>
-      <AuthProvider>
-        <AuthGate>
-          <AppShell />
-        </AuthGate>
-      </AuthProvider>
-    </LanguageProvider>
+    <ThemeProvider>
+      <LanguageProvider>
+        <AuthProvider>
+          <AuthGate>
+            <AppShell />
+          </AuthGate>
+        </AuthProvider>
+      </LanguageProvider>
+    </ThemeProvider>
   )
 }

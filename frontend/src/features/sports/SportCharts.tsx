@@ -45,31 +45,32 @@ export function SportCharts({
       {selectField && byField && byField.data.some((n) => n > 0) && (
         <div className="sport-chart">
           <span className="th-label">{lang === 'zh' ? '按' : 'Hours by '}{fieldLabel(selectField, lang)}{lang === 'zh' ? '分组时长' : ''}</span>
-          <Doughnut
-            data={{
-              labels: byField.labels.map((v) => attrLabel(selectField, v, lang)),
-              datasets: [{ data: byField.data, backgroundColor: TIER_COLORS, borderColor: '#0c151c', borderWidth: 2 }],
-            }}
-            options={{ plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, padding: 10 } } } }}
-          />
+          <div className="dash-cbox">
+            <Doughnut
+              data={{
+                labels: byField.labels.map((v) => attrLabel(selectField, v, lang)),
+                datasets: [{ data: byField.data, backgroundColor: TIER_COLORS, borderColor: 'transparent', borderWidth: 2 }],
+              }}
+              options={{ plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, padding: 10 } } } }}
+            />
+          </div>
         </div>
       )}
 
       <div className="sport-chart">
         <span className="th-label">{lang === 'zh' ? '每周时长' : 'Weekly hours'}</span>
-        <Bar
-          data={{
-            labels: weekly.labels,
-            datasets: [{ data: weekly.data, backgroundColor: '#2dd4bf', borderRadius: 3 }],
-          }}
-          options={{
-            plugins: { legend: { display: false } },
-            scales: {
-              x: { grid: { color: GRID }, ticks: { maxRotation: 0 } },
-              y: { grid: { color: GRID }, beginAtZero: true },
-            },
-          }}
-        />
+        <div className="dash-cbox">
+          <Bar
+            data={{ labels: weekly.labels, datasets: [{ data: weekly.data, backgroundColor: '#8ab4f8', borderRadius: 4 }] }}
+            options={{
+              plugins: { legend: { display: false } },
+              scales: {
+                x: { grid: { color: GRID }, ticks: { maxRotation: 0 } },
+                y: { grid: { color: GRID }, beginAtZero: true },
+              },
+            }}
+          />
+        </div>
       </div>
     </div>
   )
