@@ -77,7 +77,54 @@
 .log-chip.is-selected { border-color: var(--accent); color: var(--on-accent); background: var(--accent); box-shadow: none; }
 .log-chip.rehab { border-left: 3px solid var(--ice); }
 
-/* Multi-select body-part chips in the add/edit exercise dialogs. */
+/* Exercise library manager (Cycle → 动作库). Mirrors the Log picker look — big
+ * chips grouped by category — with drag-to-reclassify. The drop target lights up
+ * with a filled accent wash instead of a bare "drop here" line. */
+.exmgr { display: flex; flex-direction: column; gap: 14px; }
+.exmgr-desc { margin: 0; font: 12px/1.5 var(--mono); color: var(--text-dim); }
+.exmgr-groups { display: flex; flex-direction: column; gap: 4px; }
+.exmgr-group {
+  padding: 10px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  transition: background 0.15s, border-color 0.15s;
+}
+/* Filled highlight over the whole target category while dragging onto it. */
+.exmgr-group.drag-over {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+}
+.exmgr-label {
+  display: flex; align-items: center; gap: 8px;
+  font: 700 12px/1.4 var(--mono);
+  letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--amber);
+}
+.exmgr-count {
+  font: 600 10px/1 var(--mono); font-style: normal;
+  color: var(--text-dim);
+  padding: 2px 6px; border: 1px solid var(--border); border-radius: 99px;
+}
+.exmgr-drop-tag {
+  margin-left: auto; font: 700 10px/1 var(--mono); font-style: normal;
+  letter-spacing: 0.06em; color: var(--accent);
+}
+.exmgr-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.exmgr-chip {
+  padding: 8px 13px;
+  font: 13px/1 var(--mono);
+  color: var(--text);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: grab;
+  transition: border-color 0.15s, color 0.15s, background 0.15s, transform 0.08s;
+}
+.exmgr-chip:hover { border-color: var(--accent); color: var(--text-bright); }
+.exmgr-chip:active { cursor: grabbing; transform: scale(0.97); }
+/* Fade non-target categories a touch while a drag is in progress. */
+.exmgr.is-dragging .exmgr-group:not(.drag-over) { opacity: 0.55; }
+.exmgr-empty { font: 12px/1 var(--mono); color: var(--text-dim); opacity: 0.6; }
 .log-cat-pick { display: flex; flex-wrap: wrap; gap: 6px; }
 .log-cat {
   padding: 6px 11px;

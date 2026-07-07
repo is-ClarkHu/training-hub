@@ -55,46 +55,54 @@ export function ExerciseManager({ lang, onChanged }: { lang: TranslationTarget; 
   }
 
   if (exercises.length === 0) {
-    return <p className="set-desc">{lang === 'zh' ? '还没有动作(去 Log 添加)。' : 'No exercises yet — add them in Log.'}</p>
+    return <p className="exmgr-desc">{lang === 'zh' ? '还没有动作(去 Log 添加)。' : 'No exercises yet — add them in Log.'}</p>
   }
 
   return (
-    <div className="set-ai">
-      <p className="set-desc">{lang === 'zh' ? '编辑动作名/部位/类型,或把两个相同的动作合并。拖到别的分类=移动,按住 Shift 拖=额外加入(可属于多个分类)。改动会自动同步到历史与图表。' : 'Edit name/parts/type or merge duplicates. Drag onto another category to move it; hold Shift to add it (an exercise can belong to several). Changes propagate to History and charts.'}</p>
-      {cats.map((c) => {
-        const items = sortExercises(exercises.filter((e) => e.body_parts.includes(c.key) && !e.is_rehab), lang, catOrder)
-        // While dragging, keep every category visible so empty ones are droppable too.
-        if (items.length === 0 && !dragging) return null
-        return (
-          <div
-            key={c.key}
-            className={`set-ex-group ${dragOver === c.key ? 'drag-over' : ''}`}
-            onDragOver={(e) => { if (dragging) { e.preventDefault(); setDragOver(c.key) } }}
-            onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver((d) => (d === c.key ? null : d)) }}
-            onDrop={(e) => { e.preventDefault(); void onDropCategory(c.key, e.shiftKey) }}
-          >
-            <span className="log-group-label">{categoryLabel(c.key, lang)}</span>
-            <div className="set-ex-list">
-              {items.length === 0 && dragging && (
-                <span className="set-ex-drop-hint">{lang === 'zh' ? '拖到这里' : 'drop here'}</span>
-              )}
-              {items.map((e) => (
-                <button
-                  key={e.id}
-                  type="button"
-                  className="set-ex-item"
-                  draggable
-                  onDragStart={() => setDragging({ id: e.id, from: c.key })}
-                  onDragEnd={() => { setDragging(null); setDragOver(null) }}
-                  onClick={() => setEditing(e)}
-                >
-                  {exerciseName(e, lang)}
-                </button>
-              ))}
+    <div className={`exmgr ${dragging ? 'is-dragging' : ''}`}>
+      <p className="exmgr-desc">{lang === 'zh' ? '点动作可编辑 / 合并;拖到别的分类改归属(按住 Shift 拖 = 加入多个分类)。' : 'Tap to edit / merge; drag onto another category to reclassify (hold Shift to add to several).'}</p>
+      <div className="exmgr-groups">
+        {cats.map((c) => {
+          const items = sortExercises(exercises.filter((e) => e.body_parts.includes(c.key) && !e.is_rehab), lang, catOrder)
+          // While dragging, keep every category visible so empty ones are droppable too.
+          if (items.length === 0 && !dragging) return null
+          return (
+            <div
+              key={c.key}
+              className={`exmgr-group ${dragOver === c.key ? 'drag-over' : ''}`}
+              onDragOver={(e) => { if (dragging) { e.preventDefault(); setDragOver(c.key) } }}
+              onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver((d) => (d === c.key ? null : d)) }}
+              onDrop={(e) => { e.preventDefault(); void onDropCategory(c.key, e.shiftKey) }}
+            >
+              <span className="exmgr-label">
+                {categoryLabel(c.key, lang)}
+                <i className="exmgr-count">{items.length}</i>
+                {dragOver === c.key && (
+                  <em className="exmgr-drop-tag">{lang === 'zh' ? '放到这里' : 'drop here'}</em>
+                )}
+              </span>
+              <div className="exmgr-chips">
+                {items.map((e) => (
+                  <button
+                    key={e.id}
+                    type="button"
+                    className="exmgr-chip"
+                    draggable
+                    onDragStart={() => setDragging({ id: e.id, from: c.key })}
+                    onDragEnd={() => { setDragging(null); setDragOver(null) }}
+                    onClick={() => setEditing(e)}
+                  >
+                    {exerciseName(e, lang)}
+                  </button>
+                ))}
+                {items.length === 0 && dragging && (
+                  <span className="exmgr-empty">{lang === 'zh' ? '(空)' : '(empty)'}</span>
+                )}
+              </div>
             </div>
-          </div>
-        )
-      })}
+          )
+        })}
+      </div>
 
       {editing && (
         <EditExerciseDialog
