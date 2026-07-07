@@ -19,7 +19,14 @@ import {
 import { AddInjuryDialog } from './AddInjuryDialog'
 import { ActiveInjuryBanner } from './ActiveInjuryBanner'
 import { RehabTimeline } from './RehabTimeline'
-import { INJURY_STATUSES, INJURY_STATUS_LABELS, daysSince } from './util'
+import {
+  INJURY_LATERALITY_LABELS,
+  INJURY_SCENARIO_LABELS,
+  INJURY_STATUSES,
+  INJURY_STATUS_LABELS,
+  INJURY_TYPE_LABELS,
+  daysSince,
+} from './util'
 import './injuries.css'
 
 export function InjuriesScreen() {
@@ -85,12 +92,17 @@ export function InjuriesScreen() {
                 </div>
 
                 <div className="inj-meta">
-                  <span>{lang === 'zh' ? '发病' : 'onset'}: {i.started_on} ({daysSince(i.started_on)}{lang === 'zh' ? '天前' : 'd ago'})</span>
+                  <span>{lang === 'zh' ? '受伤' : 'onset'}: {i.started_on} ({daysSince(i.started_on)}{lang === 'zh' ? '天前' : 'd ago'})</span>
+                  {i.laterality && <span>{INJURY_LATERALITY_LABELS[i.laterality][lang]}</span>}
                   {i.body_part && <span>{categoryLabel(i.body_part, lang)}</span>}
+                  {i.injury_type && <span>{INJURY_TYPE_LABELS[i.injury_type][lang]}</span>}
+                  {i.scenario && <span>{INJURY_SCENARIO_LABELS[i.scenario][lang]}</span>}
                   {i.severity != null && <span>{lang === 'zh' ? '严重度' : 'severity'} {i.severity}/5</span>}
                 </div>
 
-                {i.note_raw && <p className="inj-note">{i.note_raw}</p>}
+                {(lang === 'zh' ? i.note_zh : i.note_en) || i.note_raw ? (
+                  <p className="inj-note">{(lang === 'zh' ? i.note_zh : i.note_en) || i.note_raw}</p>
+                ) : null}
 
                 <div className="inj-status-switch" role="group" aria-label="status">
                   {INJURY_STATUSES.map((s) => (

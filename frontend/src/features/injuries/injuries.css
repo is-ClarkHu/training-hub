@@ -35,8 +35,14 @@
   border-radius: 10px;
   border-left: 3px solid var(--border);
 }
-.inj-card.status-acute { border-left-color: var(--danger); }
-.inj-card.status-rehab { border-left-color: var(--amber); }
+.inj-card.status-acute,
+.inj-card.status-newly_occurred,
+.inj-card.status-relapsed { border-left-color: var(--danger); }
+.inj-card.status-observing,
+.inj-card.status-treating { border-left-color: var(--amber); }
+.inj-card.status-rehab,
+.inj-card.status-rehab_training,
+.inj-card.status-returning { border-left-color: var(--ice); }
 .inj-card.status-recovered { border-left-color: var(--teal); }
 
 .inj-card-head { display: flex; align-items: center; gap: 10px; }
@@ -49,8 +55,14 @@
   border-radius: 4px;
   color: #04181a;
 }
-.inj-status-badge.acute { background: var(--danger); }
-.inj-status-badge.rehab { background: var(--amber); }
+.inj-status-badge.acute,
+.inj-status-badge.newly_occurred,
+.inj-status-badge.relapsed { background: var(--danger); }
+.inj-status-badge.observing,
+.inj-status-badge.treating { background: var(--amber); }
+.inj-status-badge.rehab,
+.inj-status-badge.rehab_training,
+.inj-status-badge.returning { background: var(--ice); }
 .inj-status-badge.recovered { background: var(--teal); }
 .inj-card-actions { margin-left: auto; display: flex; gap: 10px; }
 
@@ -58,7 +70,7 @@
 .inj-note { margin: 0; font-size: 13px; color: var(--text); }
 
 /* status switch */
-.inj-status-switch { display: inline-flex; gap: 2px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 6px; padding: 2px; align-self: flex-start; }
+.inj-status-switch { display: flex; flex-wrap: wrap; gap: 2px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 6px; padding: 2px; align-self: flex-start; }
 .inj-status-opt {
   padding: 5px 12px;
   font: 600 11px/1 var(--mono);
@@ -112,5 +124,19 @@
 .inj-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .inj-dialog-actions { display: flex; gap: 10px; margin-top: 4px; }
 .inj-dialog-actions .th-btn, .inj-dialog-actions .th-btn-ghost { flex: 1; }
+
+/* bilingual note + attachments in the dialog */
+.inj-note-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px; }
+.inj-translate { width: auto; padding: 4px 10px; font-size: 11px; }
+.inj-field > .th-input + .th-input { margin-top: 6px; }
+.inj-attach-row { margin-top: 6px; }
+.inj-attach-row .log-row { display: flex; gap: 6px; align-items: center; }
+.inj-hint { margin: 4px 0 0; font: 11px/1.4 var(--mono); color: var(--amber); }
+
+/* timeline extras */
+.inj-stage-date { font: 9px/1 var(--mono); color: var(--text-dim); opacity: 0.7; }
+.inj-timeline.relapsed .inj-stage.done .inj-stage-dot { background: var(--danger); border-color: var(--danger); }
+.inj-timeline.relapsed .inj-stage.done:not(:last-child)::after { background: var(--danger); }
+.inj-relapse-flag { font: 600 12px/1.4 var(--mono); color: var(--danger); }
 
 @media (max-width: 520px) { .inj-grid2 { grid-template-columns: 1fr; } }

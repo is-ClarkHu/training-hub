@@ -7,7 +7,20 @@
 export type BodyPart = string
 export type MeasureType = 'weight_reps' | 'reps_only' | 'duration'        // §6
 export type SetType = 'normal' | 'warmup' | 'superset' | 'dropset'
-export type InjuryStatus = 'acute' | 'rehab' | 'recovered'
+// Injury lifecycle as an EVENT (§6A, redesigned): the middle stages are what the
+// user manages, not a binary healed/not. Legacy rows may still carry the old
+// 'acute' | 'rehab' | 'recovered' — normalizeInjury() (src/db) maps those forward.
+export type InjuryStatus =
+  | 'newly_occurred'   // 新发生
+  | 'observing'        // 观察中
+  | 'treating'         // 治疗中
+  | 'rehab_training'   // 康复训练中
+  | 'returning'        // 逐步复训
+  | 'recovered'        // 已康复
+  | 'relapsed'         // 复发
+export type InjuryLaterality = 'left' | 'right' | 'bilateral'
+export type InjuryType = 'sprain' | 'strain' | 'contusion' | 'overuse' | 'fracture' | 'other'
+export type InjuryScenario = 'running' | 'strength' | 'competition' | 'daily' | 'other'
 export type InjuryModified = 'paused' | 'reduced'
 export type TrackerType = 'intimacy'                                       // private adult wellness tracker
 export type IntimacyCategory = 'solo' | 'partner_low' | 'partner_active'
@@ -86,6 +99,22 @@ export interface ProfileInjury {
   area: string
   since: string         // ISO date
   status: string
+}
+
+// A stage transition in an injury's history (§6A). Auto-recorded when status
+// changes; an optional note lets the user annotate the checkpoint.
+export interface InjuryCheckpoint {
+  status: InjuryStatus
+  date: string          // ISO date the injury entered this stage
+  note?: string
+}
+
+// A text/link reference to an external artifact (exam report, imaging, photo,
+// prescription). Phase 1 stores references only — no binary upload.
+export interface InjuryAttachmentRef {
+  label: string         // e.g. 'MRI report', '处方'
+  url?: string          // optional external link
+  note?: string
 }
 
 // ─── Tables (§4) ─────────────────────────────────────────────────────────────
@@ -167,12 +196,19 @@ export interface Profile extends SyncFields {
 
 export interface Injury extends SyncFields {
   body_area: string                  // free text, e.g. 'left hamstring'
-  body_part: BodyPart | null         // optional link to one of the 7
-  started_on: string                 // ISO date
+  body_part: BodyPart | null         // optional category link
+  laterality: InjuryLaterality | null // left / right / bilateral
+  injury_type: InjuryType | null     // sprain / strain / contusion / overuse / fracture
+  scenario: InjuryScenario | null    // where it happened: running / strength / competition / daily
+  started_on: string                 // ISO date (onset)
   status: InjuryStatus
   resolved_on: string | null
   severity: number | null            // 1–5
-  note_raw: string
+  note_raw: string                   // legacy raw note (pre-bilingual rows)
+  note_zh: string                    // bilingual note — AI-translated pair (§5)
+  note_en: string
+  checkpoints: InjuryCheckpoint[]    // stage-transition history (§6A)
+  attachments: InjuryAttachmentRef[] // text/link references only (Phase 1)
 }
 
 export interface TrainingCycle extends SyncFields {

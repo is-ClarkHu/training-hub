@@ -83,3 +83,19 @@ export async function requestTranslation(
   }
   return { text: translation, suggested_body_part: bp, suggested_measure_type: mt, source: 'ai', row }
 }
+
+// Free-text translation for prose (e.g. an injury note). Unlike requestTranslation
+// this does NOT write a dictionary row — freeform sentences aren't reusable terms
+// and would pollute the term cache. Returns the translated text only.
+export async function translateFreeText(text: string, target: TranslationTarget): Promise<string> {
+  const trimmed = text.trim()
+  if (!trimmed) return ''
+  const langName = target === 'en' ? 'English' : 'Chinese'
+  const system =
+    `You are a bilingual (Chinese⇄English) sports-medicine / rehab translator. ` +
+    `Translate the user's injury note into natural ${langName}, keeping medical/anatomical ` +
+    `terms accurate. Respond with ONLY the translated text, no quotes or extra commentary.`
+  const cfg = getTaskCfg('translation')
+  const reply = await chatComplete(cfg.provider, cfg.model, getKey(cfg.provider), system, trimmed, 256)
+  return reply.trim()
+}

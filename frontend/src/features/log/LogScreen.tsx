@@ -29,6 +29,7 @@ import type {
   Sport,
   TrainingCycle,
 } from '../../supabase/types'
+import { AddInjuryDialog } from '../injuries'
 import { ExercisePicker } from './ExercisePicker'
 import { SetEditor } from './SetEditor'
 import { AddExerciseDialog } from './AddExerciseDialog'
@@ -60,6 +61,7 @@ export function LogScreen() {
   const [sets, setSets] = useState<SetDraft[]>([emptySet()])
   const [injuryMod, setInjuryMod] = useState<InjuryModified | 'none'>('none')
   const [injuryId, setInjuryId] = useState('')
+  const [injuryDialog, setInjuryDialog] = useState(false)
   // sport form
   const [hours, setHours] = useState('')
   const [attrs, setAttrs] = useState<Record<string, string>>({})
@@ -100,6 +102,16 @@ export function LogScreen() {
     setExercises((prev) => [...prev, ex])
     setDialog({ open: false, name: '' })
     selectExercise(ex)
+  }
+
+  // Log → injury one-step: register a new injury here and auto-link it to the
+  // exercise being logged (defaults the impact to "reduced"). Fresh injuries are
+  // active, so they belong in the active list immediately.
+  function onInjuryCreated(inj: Injury) {
+    setActiveInjuries((prev) => (inj.status !== 'recovered' ? [inj, ...prev] : prev))
+    setInjuryId(inj.id)
+    if (injuryMod === 'none') setInjuryMod('reduced')
+    setInjuryDialog(false)
   }
 
   // day's planned exercises (§6B) as a quick-pick
@@ -279,24 +291,25 @@ export function LogScreen() {
 
           <NoteField lang={lang} note={note} setNote={setNote} tagKeys={parsed.tagKeys} />
 
-          {activeInjuries.length > 0 && (
-            <div className="log-field">
-              <label className="th-label">{lang === 'zh' ? '伤病影响' : 'Injury impact'}</label>
-              <div className="log-row">
-                <select className="th-input" value={injuryMod} onChange={(e) => setInjuryMod(e.target.value as InjuryModified | 'none')}>
-                  <option value="none">{lang === 'zh' ? '无' : 'none'}</option>
-                  <option value="reduced">{lang === 'zh' ? '减量' : 'reduced'}</option>
-                  <option value="paused">{lang === 'zh' ? '暂停' : 'paused'}</option>
+          <div className="log-field">
+            <label className="th-label">{lang === 'zh' ? '伤病影响' : 'Injury impact'}</label>
+            <div className="log-row">
+              <select className="th-input" value={injuryMod} onChange={(e) => setInjuryMod(e.target.value as InjuryModified | 'none')}>
+                <option value="none">{lang === 'zh' ? '无' : 'none'}</option>
+                <option value="reduced">{lang === 'zh' ? '减量' : 'reduced'}</option>
+                <option value="paused">{lang === 'zh' ? '暂停' : 'paused'}</option>
+              </select>
+              {injuryMod !== 'none' && activeInjuries.length > 0 && (
+                <select className="th-input" value={injuryId} onChange={(e) => setInjuryId(e.target.value)}>
+                  <option value="">{lang === 'zh' ? '关联伤病…' : 'link injury…'}</option>
+                  {activeInjuries.map((i) => (<option key={i.id} value={i.id}>{i.body_area}</option>))}
                 </select>
-                {injuryMod !== 'none' && (
-                  <select className="th-input" value={injuryId} onChange={(e) => setInjuryId(e.target.value)}>
-                    <option value="">{lang === 'zh' ? '关联伤病…' : 'link injury…'}</option>
-                    {activeInjuries.map((i) => (<option key={i.id} value={i.id}>{i.body_area}</option>))}
-                  </select>
-                )}
-              </div>
+              )}
+              <button className="th-btn-ghost log-suggest" type="button" onClick={() => setInjuryDialog(true)}>
+                {lang === 'zh' ? '+ 新建伤病' : '+ New injury'}
+              </button>
             </div>
-          )}
+          </div>
 
           <button className="th-btn" type="button" onClick={saveExercise} disabled={!canSaveExercise}>
             {saving ? 'Saving…' : lang === 'zh' ? '保存' : 'Save exercise'}
@@ -330,6 +343,11 @@ export function LogScreen() {
           {activeInjuries.length > 0 && (
             <p className="log-hint">{lang === 'zh' ? '⚠ 有活动伤病,本场次自动标记为带伤(可在 Injuries 里管理状态)' : '⚠ Active injury — this session is auto-flagged as injured (manage status in Injuries)'}</p>
           )}
+          <div className="log-row">
+            <button className="th-btn-ghost log-suggest" type="button" onClick={() => setInjuryDialog(true)}>
+              {lang === 'zh' ? '+ 新建伤病' : '+ New injury'}
+            </button>
+          </div>
           <NoteField lang={lang} note={note} setNote={setNote} tagKeys={parsed.tagKeys} />
           <button className="th-btn" type="button" onClick={saveSport} disabled={!canSaveSport}>
             {saving ? 'Saving…' : lang === 'zh' ? '保存场次' : 'Save session'}
@@ -355,6 +373,10 @@ export function LogScreen() {
 
       {dialog.open && (
         <AddExerciseDialog lang={lang} initialName={dialog.name} existing={exercises} onCreated={onExerciseCreated} onClose={() => setDialog({ open: false, name: '' })} />
+      )}
+
+      {injuryDialog && (
+        <AddInjuryDialog lang={lang} onSaved={onInjuryCreated} onClose={() => setInjuryDialog(false)} />
       )}
     </div>
   )

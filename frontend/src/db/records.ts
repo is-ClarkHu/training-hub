@@ -11,8 +11,12 @@ import type {
   Exercise,
   ExerciseSet,
   Injury,
+  InjuryAttachmentRef,
+  InjuryLaterality,
   InjuryModified,
+  InjuryScenario,
   InjuryStatus,
+  InjuryType,
   IntimacyCategory,
   MeasureType,
   OptionalTracker,
@@ -254,22 +258,82 @@ export async function updateSportSession(
 export interface NewInjuryInput {
   body_area: string
   body_part?: BodyPart | null
+  laterality?: InjuryLaterality | null
+  injury_type?: InjuryType | null
+  scenario?: InjuryScenario | null
   started_on: string
   status?: InjuryStatus
   resolved_on?: string | null
   severity?: number | null
   note_raw?: string
+  note_zh?: string
+  note_en?: string
+  attachments?: InjuryAttachmentRef[]
+}
+
+const HAS_CJK = /[一-鿿]/
+
+// Legacy 3-state → 7-state (§6A redesign). Old exports/rows still parse.
+const LEGACY_STATUS: Record<string, InjuryStatus> = {
+  acute: 'observing',
+  rehab: 'rehab_training',
+  recovered: 'recovered',
+}
+
+// Rank for list ordering: active stages first, recovered last. relapsed is active.
+const STATUS_RANK: Record<InjuryStatus, number> = {
+  newly_occurred: 0,
+  relapsed: 1,
+  observing: 2,
+  treating: 3,
+  rehab_training: 4,
+  returning: 5,
+  recovered: 9,
+}
+
+/** Backfill old/partial rows so every read yields a full current-shape Injury. */
+function normalizeInjury(raw: Injury): Injury {
+  const status = LEGACY_STATUS[raw.status as string] ?? raw.status
+  const noteRaw = raw.note_raw ?? ''
+  const note_zh = raw.note_zh ?? (HAS_CJK.test(noteRaw) ? noteRaw : '')
+  const note_en = raw.note_en ?? (HAS_CJK.test(noteRaw) ? '' : noteRaw)
+  const checkpoints =
+    raw.checkpoints && raw.checkpoints.length > 0
+      ? raw.checkpoints
+      : [{ status, date: raw.started_on }]
+  return {
+    ...raw,
+    status,
+    laterality: raw.laterality ?? null,
+    injury_type: raw.injury_type ?? null,
+    scenario: raw.scenario ?? null,
+    note_raw: noteRaw,
+    note_zh,
+    note_en,
+    checkpoints,
+    attachments: raw.attachments ?? [],
+  }
 }
 
 export async function createInjury(input: NewInjuryInput): Promise<Injury> {
-  const row: Injury = {
+  const base = {
     ...syncFields(),
     body_part: null,
-    status: 'acute',
+    laterality: null,
+    injury_type: null,
+    scenario: null,
+    status: 'newly_occurred' as InjuryStatus,
     resolved_on: null,
     severity: null,
     note_raw: '',
+    note_zh: '',
+    note_en: '',
+    attachments: [] as InjuryAttachmentRef[],
     ...input,
+  }
+  const row: Injury = {
+    ...base,
+    checkpoints: [{ status: base.status, date: base.started_on }],
   }
   await db.injuries.add(row)
   return row
@@ -277,12 +341,12 @@ export async function createInjury(input: NewInjuryInput): Promise<Injury> {
 
 export async function getInjuries(): Promise<Injury[]> {
   const all = await db.injuries.toArray()
-  const order: Record<InjuryStatus, number> = { acute: 0, rehab: 1, recovered: 2 }
   return all
     .filter((i) => !i.deleted)
+    .map(normalizeInjury)
     .sort((a, b) =>
-      order[a.status] !== order[b.status]
-        ? order[a.status] - order[b.status]
+      STATUS_RANK[a.status] !== STATUS_RANK[b.status]
+        ? STATUS_RANK[a.status] - STATUS_RANK[b.status]
         : a.started_on < b.started_on
           ? 1
           : -1,
@@ -291,12 +355,23 @@ export async function getInjuries(): Promise<Injury[]> {
 
 export async function updateInjury(
   id: string,
-  patch: Partial<Pick<Injury, 'body_area' | 'body_part' | 'started_on' | 'status' | 'resolved_on' | 'severity' | 'note_raw'>>,
+  patch: Partial<Pick<Injury, 'body_area' | 'body_part' | 'laterality' | 'injury_type' | 'scenario' | 'started_on' | 'status' | 'resolved_on' | 'severity' | 'note_raw' | 'note_zh' | 'note_en' | 'attachments'>>,
 ): Promise<void> {
-  const cur = await db.injuries.get(id)
-  if (!cur) return
+  const stored = await db.injuries.get(id)
+  if (!stored) return
+  const cur = normalizeInjury(stored)
   const next: Injury = { ...cur, ...patch, updated_at: nowIso() }
-  // Keep resolved_on consistent with status (§6A acute → rehab → recovered).
+
+  // Record a checkpoint whenever the stage changes (§6A) — the middle stages are
+  // what the user manages, so the transition history is the point.
+  if (patch.status && patch.status !== cur.status) {
+    const last = next.checkpoints[next.checkpoints.length - 1]
+    if (!last || last.status !== next.status) {
+      next.checkpoints = [...next.checkpoints, { status: next.status, date: today() }]
+    }
+  }
+
+  // Keep resolved_on consistent with status. relapsed re-opens the injury.
   if (next.status === 'recovered' && !next.resolved_on) next.resolved_on = today()
   if (next.status !== 'recovered') next.resolved_on = null
   await db.injuries.put(next)
