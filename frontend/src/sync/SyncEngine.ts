@@ -20,6 +20,7 @@ const TABLES: TableName[] = [
   'sport_sessions',
   'profile',
   'training_cycle',
+  'cycle_rounds',
   'optional_trackers',
   'translation_dictionary',
   'chat_messages',

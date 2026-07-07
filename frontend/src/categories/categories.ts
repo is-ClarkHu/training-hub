@@ -18,6 +18,8 @@ export const DEFAULT_CATEGORIES: Category[] = [
   { key: 'shoulders', zh: '肩', en: 'Shoulders' },
   { key: 'legs', zh: '腿', en: 'Legs' },
   { key: 'arms', zh: '手臂', en: 'Arms' },
+  { key: 'biceps', zh: '二头', en: 'Biceps' },
+  { key: 'triceps', zh: '三头', en: 'Triceps' },
   { key: 'core', zh: '腹', en: 'Core' },
   { key: 'cardio', zh: '有氧', en: 'Cardio' },
   { key: 'warmup', zh: '热身', en: 'Warmup' },

@@ -3,6 +3,8 @@
 // cleanup. Reads the local-first store; edits/deletes are soft (sync-safe, §3).
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
+  getActiveCycle,
+  getCycleRounds,
   getEntries,
   getExercises,
   getSetsByEntryIds,
@@ -16,7 +18,7 @@ import {
 } from '../../db'
 import { parseNote, noteTagLabel } from '../../translation'
 import { useLanguage } from '../../i18n'
-import type { Exercise, ExerciseSet, OptionalTracker, Sport, SportSession, WorkoutEntry } from '../../supabase/types'
+import type { CycleRound, Exercise, ExerciseSet, OptionalTracker, Sport, SportSession, TrainingCycle, WorkoutEntry } from '../../supabase/types'
 import { SetEditor } from '../log/SetEditor'
 import { sportName, attrLabel, SportSessionDialog } from '../sports'
 import { intimacyCategory, intimacyLabel, intimacyVisible } from '../intimacy'
@@ -38,6 +40,8 @@ export function HistoryScreen() {
   const [sportSessions, setSportSessions] = useState<SportSession[]>([])
   const [sportById, setSportById] = useState<Record<string, Sport>>({})
   const [intimacyRows, setIntimacyRows] = useState<OptionalTracker[]>([])
+  const [activeCycle, setActiveCycle] = useState<TrainingCycle | null>(null)
+  const [rounds, setRounds] = useState<CycleRound[]>([])
   const [showIntimacy, setShowIntimacy] = useState(false)
   const [loading, setLoading] = useState(true)
   const [sportEditing, setSportEditing] = useState<SportSession | null>(null)
@@ -64,6 +68,9 @@ export function HistoryScreen() {
     setSportById(Object.fromEntries(sp.map((s) => [s.id, s])))
     setIntimacyRows(ir)
     setShowIntimacy(visible)
+    const cyc = await getActiveCycle()
+    setActiveCycle(cyc)
+    setRounds(cyc ? await getCycleRounds(cyc.id) : [])
     setLoading(false)
   }, [])
 
@@ -160,6 +167,28 @@ export function HistoryScreen() {
           </button>
         )}
       </div>
+
+      {activeCycle && rounds.length > 0 && !reviewOnly && (
+        <section className="hist-rounds">
+          <div className="hist-rounds-head">
+            <span className="th-label">{lang === 'zh' ? '循环轮次' : 'Cycle rounds'}</span>
+            <span className="hist-rounds-cyc">{activeCycle.name}</span>
+          </div>
+          <ul className="hist-rounds-list">
+            {[...rounds].reverse().map((r) => (
+              <li key={r.id} className="hist-round-row">
+                <span className="hist-round-idx">R{r.index}</span>
+                <span className="hist-round-dates">{r.started_on} → {r.ended_on ?? '…'}</span>
+                <span className="hist-round-days">{r.completed_labels.join('') || '—'}</span>
+                {r.skipped && <span className="hist-round-badge skip">{lang === 'zh' ? '跳过' : 'skipped'}</span>}
+                {!r.ended_on && <span className="hist-round-badge open">{lang === 'zh' ? '进行中' : 'open'}</span>}
+                {r.ended_on && !r.skipped && <span className="hist-round-badge done">{lang === 'zh' ? '完成' : 'done'}</span>}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {sessions.map((s) => (
         <section key={s.date} className="hist-session">
           <h3 className="hist-date">{s.date}</h3>

@@ -4,6 +4,24 @@
 .hist-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .hist-check { width: 17px; height: 17px; accent-color: var(--lime); flex: none; }
 
+/* Cycle rounds band (§6B) */
+.hist-rounds { display: flex; flex-direction: column; gap: 8px; }
+.hist-rounds-head { display: flex; align-items: baseline; gap: 10px; }
+.hist-rounds-cyc { font: 600 12px/1 var(--mono); color: var(--teal); }
+.hist-rounds-list { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.hist-round-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 10px; font: 12px/1 var(--mono); color: var(--text);
+  background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px;
+}
+.hist-round-idx { font-weight: 700; color: var(--teal); min-width: 26px; }
+.hist-round-dates { color: var(--text-dim); }
+.hist-round-days { margin-left: auto; letter-spacing: 2px; }
+.hist-round-badge { padding: 2px 7px; font: 600 10px/1.4 var(--mono); text-transform: uppercase; border-radius: 4px; }
+.hist-round-badge.done { color: #04181a; background: var(--teal); }
+.hist-round-badge.skip { color: var(--text-dim); border: 1px solid var(--border); }
+.hist-round-badge.open { color: #2a1500; background: var(--amber); }
+
 /* date group */
 .hist-session { display: flex; flex-direction: column; gap: 8px; }
 .hist-date {

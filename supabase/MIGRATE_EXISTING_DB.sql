@@ -35,3 +35,24 @@ alter table public.optional_trackers drop constraint if exists optional_trackers
 alter table public.optional_trackers
   add constraint optional_trackers_category_check
   check (category is null or category in ('solo','partner_low','partner_active'));
+
+-- Cycle rounds (§6B) — one pass through a cycle's day sequence (see the matching
+-- migration 20260707120000_cycle_rounds.sql for the canonical definition).
+create table if not exists public.cycle_rounds (
+  id               uuid primary key default gen_random_uuid(),
+  user_id          uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  cycle_id         uuid not null,
+  index            integer not null,
+  started_on       date not null,
+  ended_on         date,
+  completed_labels jsonb not null default '[]'::jsonb,
+  skipped          boolean not null default false,
+  updated_at       timestamptz not null default now(),
+  deleted          boolean not null default false
+);
+create index if not exists cycle_rounds_cycle_idx on public.cycle_rounds (cycle_id);
+create index if not exists cycle_rounds_sync_idx  on public.cycle_rounds (user_id, updated_at);
+alter table public.cycle_rounds enable row level security;
+drop policy if exists cycle_rounds_owner on public.cycle_rounds;
+create policy cycle_rounds_owner on public.cycle_rounds
+  for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());

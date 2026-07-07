@@ -3,11 +3,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   createCycle,
+  createDefaultSplitCycle,
   getActiveCycle,
+  getCycleRounds,
   getCycles,
   getEntries,
   getExercises,
   setActiveCycle,
+  skipCycleRound,
   softDeleteCycle,
   updateCycle,
   withUndo,
@@ -17,6 +20,7 @@ import { useUndo } from '../../undo'
 import {
   type BodyPart,
   type CycleDay,
+  type CycleRound,
   type Exercise,
   type TrainingCycle,
   type WorkoutEntry,
@@ -26,6 +30,7 @@ import { muscleRecovery } from '../dashboard/stats'
 import { ExerciseManager } from '../log'
 import { RehabLoop } from '../injuries'
 import { CategoryManager } from './CategoryManager'
+import { currentRound } from './rounds'
 import './cycle.css'
 
 export function CycleScreen() {
@@ -36,6 +41,7 @@ export function CycleScreen() {
   const [entries, setEntries] = useState<WorkoutEntry[]>([])
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [exById, setExById] = useState<Record<string, Exercise>>({})
+  const [rounds, setRounds] = useState<CycleRound[]>([])
   const [newName, setNewName] = useState('')
   const [editId, setEditId] = useState<string | null>(null)
   const [showLibrary, setShowLibrary] = useState(false)
@@ -47,7 +53,10 @@ export function CycleScreen() {
     setEntries(es)
     setExercises(exs)
     setExById(Object.fromEntries(exs.map((e) => [e.id, e])))
+    setRounds(act ? await getCycleRounds(act.id) : [])
   }, [])
+
+  const round = useMemo(() => (active ? currentRound(active, rounds) : null), [active, rounds])
 
   useEffect(() => {
     void reload()
@@ -89,6 +98,25 @@ export function CycleScreen() {
     push(lang === 'zh' ? `已启用循环「${c.name}」` : `Activated “${c.name}”`, async () => { await undo(); await reload() })
   }
 
+  async function addDefaultSplit() {
+    const { undo } = await withUndo(['training_cycle'], () => createDefaultSplitCycle())
+    await reload()
+    push(lang === 'zh' ? '已创建四分化循环' : 'Added 4-split cycle', async () => { await undo(); await reload() })
+  }
+
+  async function skipRound() {
+    if (!active || !round) return
+    const msg = lang === 'zh'
+      ? `结束第 ${round.index} 轮?未完成的 ${round.remaining.join('/') || '—'} 会被跳过。`
+      : `End round ${round.index}? Unfinished days (${round.remaining.join('/') || '—'}) will be skipped.`
+    if (!confirm(msg)) return
+    const idx = round.index
+    const { result: ok, undo } = await withUndo(['cycle_rounds'], () => skipCycleRound(active.id))
+    await reload()
+    if (!ok) return
+    push(lang === 'zh' ? `已结束第 ${idx} 轮` : `Ended round ${idx}`, async () => { await undo(); await reload() })
+  }
+
   return (
     <div className="cyc-screen">
       <RehabLoop lang={lang} />
@@ -106,6 +134,48 @@ export function CycleScreen() {
               </span>
             )}
           </div>
+        </section>
+      )}
+
+      {active && round && active.days.length > 0 && (
+        <section className="cyc-round">
+          <div className="cyc-round-head">
+            <span className="th-label">{lang === 'zh' ? '当前轮次' : 'Current round'}</span>
+            <span className="cyc-round-num">Round {round.index}</span>
+            {round.open && (
+              <button className="hist-link danger cyc-round-skip-btn" type="button" onClick={() => void skipRound()}>
+                {lang === 'zh' ? '结束本轮' : 'Skip round'}
+              </button>
+            )}
+          </div>
+          <div className="cyc-round-days">
+            {round.labels.map((l) => (
+              <span key={l} className={`cyc-round-day ${round.completed.includes(l) ? 'done' : ''} ${round.open && l === round.nextLabel ? 'next' : ''}`}>{l}</span>
+            ))}
+          </div>
+          <span className="cyc-round-hint">
+            {round.open
+              ? (lang === 'zh' ? `还差 ${round.remaining.join(' / ') || '—'}` : `remaining: ${round.remaining.join(' / ') || '—'}`)
+              : (lang === 'zh' ? '下一轮未开始 — 在 Log 里记录带循环日的训练即可开启' : 'next round not started — log a cycle-day workout to begin')}
+          </span>
+        </section>
+      )}
+
+      {active && rounds.length > 0 && (
+        <section className="cyc-rounds-hist">
+          <span className="th-label">{lang === 'zh' ? '轮次历史' : 'Round history'}</span>
+          <ul className="cyc-rounds-list">
+            {[...rounds].reverse().map((r) => (
+              <li key={r.id} className="cyc-round-row">
+                <span className="cyc-round-row-idx">R{r.index}</span>
+                <span className="cyc-round-row-dates">{r.started_on} → {r.ended_on ?? '…'}</span>
+                <span className="cyc-round-row-days">{r.completed_labels.join('') || '—'}</span>
+                {r.skipped && <span className="cyc-round-badge skip">{lang === 'zh' ? '跳过' : 'skipped'}</span>}
+                {!r.ended_on && <span className="cyc-round-badge open">{lang === 'zh' ? '进行中' : 'open'}</span>}
+                {r.ended_on && !r.skipped && <span className="cyc-round-badge done">{lang === 'zh' ? '完成' : 'done'}</span>}
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 
@@ -139,6 +209,9 @@ export function CycleScreen() {
             placeholder={lang === 'zh' ? '新循环名,如 A/B/C/D' : 'New cycle, e.g. A/B/C/D'} />
           <button className="th-btn-ghost cyc-add-btn" type="button" onClick={addCycle} disabled={!newName.trim()}>+ Cycle</button>
         </div>
+        <button className="th-btn-ghost cyc-tmpl-btn" type="button" onClick={() => void addDefaultSplit()}>
+          {lang === 'zh' ? '+ 四分化模板 (A胸腹/B背二头/C腿腹/D肩三头)' : '+ 4-split template (A/B/C/D)'}
+        </button>
 
         {cycles.map((c) =>
           editId === c.id ? (

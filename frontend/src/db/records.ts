@@ -29,6 +29,7 @@ import type {
   SubSet,
   TrackerType,
   TrainingCycle,
+  CycleRound,
   WorkoutEntry,
 } from '../supabase/types'
 
@@ -537,6 +538,68 @@ export async function setActiveCycle(id: string): Promise<void> {
 export async function softDeleteCycle(id: string): Promise<void> {
   const c = await db.training_cycle.get(id)
   if (c) await db.training_cycle.put({ ...c, deleted: true, active: false, updated_at: nowIso() })
+}
+
+// The classic 4-split template (§6B): A 胸+腹 / B 背+二头 / C 腿+腹 / D 肩+三头.
+// Created active; body_parts reference the default categories (biceps/triceps
+// were added for this split). Titles stay empty — the UI renders the parts.
+export async function createDefaultSplitCycle(): Promise<TrainingCycle> {
+  const days: CycleDay[] = [
+    { label: 'A', title: '', body_parts: ['chest', 'core'], exercise_ids: [] },
+    { label: 'B', title: '', body_parts: ['back', 'biceps'], exercise_ids: [] },
+    { label: 'C', title: '', body_parts: ['legs', 'core'], exercise_ids: [] },
+    { label: 'D', title: '', body_parts: ['shoulders', 'triceps'], exercise_ids: [] },
+  ]
+  return createCycle({ name: '4-Split · 四分化', days, active: true })
+}
+
+// ── cycle rounds (§6B) ───────────────────────────────
+export async function getCycleRounds(cycleId: string): Promise<CycleRound[]> {
+  const all = await db.cycle_rounds.where('cycle_id').equals(cycleId).toArray()
+  return all.filter((r) => !r.deleted).sort((a, b) => a.index - b.index)
+}
+
+/** The open (in-progress) round for a cycle, or null. */
+export async function getOpenRound(cycleId: string): Promise<CycleRound | null> {
+  const rounds = await getCycleRounds(cycleId)
+  return rounds.filter((r) => r.ended_on == null).sort((a, b) => b.index - a.index)[0] ?? null
+}
+
+/**
+ * Record that a cycle day was logged: open a round if none is in progress, mark
+ * the label done, and auto-close the round once every day label is covered.
+ * Idempotent per (round, label) — logging the same day twice won't double-count.
+ */
+export async function recordCycleDay(cycle: TrainingCycle, label: string, date: string): Promise<void> {
+  const labels = cycle.days.map((d) => d.label)
+  if (!labels.includes(label)) return
+  const rounds = await getCycleRounds(cycle.id)
+  let open = rounds.filter((r) => r.ended_on == null).sort((a, b) => b.index - a.index)[0]
+  if (!open) {
+    const maxIdx = rounds.reduce((m, r) => Math.max(m, r.index), 0)
+    open = {
+      ...syncFields(),
+      cycle_id: cycle.id,
+      index: maxIdx + 1,
+      started_on: date,
+      ended_on: null,
+      completed_labels: [],
+      skipped: false,
+    }
+    await db.cycle_rounds.add(open)
+  }
+  if (open.completed_labels.includes(label)) return
+  const completed = [...open.completed_labels, label]
+  const done = labels.every((l) => completed.includes(l))
+  await db.cycle_rounds.put({ ...open, completed_labels: completed, ended_on: done ? date : null, updated_at: nowIso() })
+}
+
+/** End the open round early (skip). Returns false when nothing is open. */
+export async function skipCycleRound(cycleId: string): Promise<boolean> {
+  const open = await getOpenRound(cycleId)
+  if (!open) return false
+  await db.cycle_rounds.put({ ...open, ended_on: today(), skipped: true, updated_at: nowIso() })
+  return true
 }
 
 // ── optional trackers (§4.10, §6C) ───────────────────────────

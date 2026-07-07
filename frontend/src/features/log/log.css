@@ -13,6 +13,16 @@
 .log-date { width: auto; }
 .log-lang { width: auto; padding: 9px 12px; font-size: 12px; }
 
+/* Round context (§6B): which round the tagged cycle-day feeds into. */
+.log-round-hint {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 10px;
+  padding: 8px 12px; margin-top: -8px;
+  background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px;
+  font: 12px/1 var(--mono); color: var(--text-dim);
+}
+.log-round-badge { font-weight: 700; color: var(--teal); }
+.log-round-pick { margin-left: auto; }
+
 .log-field { display: flex; flex-direction: column; }
 .log-row { display: flex; gap: 8px; }
 .log-row .th-input { flex: 1; }

@@ -251,6 +251,18 @@ export interface TrainingCycle extends SyncFields {
   days: CycleDay[]
 }
 
+// One pass through a cycle's day sequence (§6B rounds). Opened when the first
+// cycle-tagged workout of the pass is logged; auto-closes when every day label is
+// covered, or early via "skip". Recorded in History and linked to Log.
+export interface CycleRound extends SyncFields {
+  cycle_id: string
+  index: number                      // 1-based round number within the cycle
+  started_on: string                 // ISO date of the first day logged this round
+  ended_on: string | null            // ISO date it closed; null = in progress
+  completed_labels: string[]         // day labels done this round, in log order
+  skipped: boolean                   // closed early (not all days done)
+}
+
 export interface OptionalTracker extends SyncFields {
   tracker: TrackerType
   date: string
@@ -290,6 +302,7 @@ export interface Database {
   profile: Profile
   injuries: Injury
   training_cycle: TrainingCycle
+  cycle_rounds: CycleRound
   optional_trackers: OptionalTracker
   translation_dictionary: TranslationDictionaryRow
   chat_messages: ChatMessage

@@ -16,6 +16,7 @@ import type {
   Injury,
   InjuryPhoto,
   TrainingCycle,
+  CycleRound,
   OptionalTracker,
   TranslationDictionaryRow,
   ChatMessage,
@@ -31,6 +32,7 @@ export class TrainingHubDB extends Dexie {
   profile!: Table<Profile, string>
   injuries!: Table<Injury, string>
   training_cycle!: Table<TrainingCycle, string>
+  cycle_rounds!: Table<CycleRound, string>
   optional_trackers!: Table<OptionalTracker, string>
   translation_dictionary!: Table<TranslationDictionaryRow, string>
   chat_messages!: Table<ChatMessage, string>
@@ -72,6 +74,10 @@ export class TrainingHubDB extends Dexie {
           delete e.body_part
         })
       })
+    // v4: training-cycle rounds (§6B) — one pass through the cycle's days.
+    this.version(4).stores({
+      cycle_rounds: 'id, cycle_id, updated_at',
+    })
   }
 }
 
