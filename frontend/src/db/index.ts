@@ -1,5 +1,6 @@
 export { db, clearLocalDb, TrainingHubDB } from './db'
 export { newId, nowIso, today } from './helpers'
+export { withUndo } from './undo'
 export {
   createExercise,
   getExercises,

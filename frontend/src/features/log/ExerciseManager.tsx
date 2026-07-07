@@ -4,10 +4,11 @@
 // (drops the source category); hold Shift to ADD the target while keeping the rest
 // (an exercise can belong to multiple categories). Click still opens the dialog.
 import { useCallback, useEffect, useState } from 'react'
-import { getExercises, updateExercise } from '../../db'
+import { getExercises, updateExercise, withUndo } from '../../db'
 import { type BodyPart, type Exercise } from '../../supabase/types'
 import { useCategories, categoryLabel } from '../../categories'
 import type { TranslationTarget } from '../../translation'
+import { useUndo } from '../../undo'
 import { EditExerciseDialog } from './EditExerciseDialog'
 import { exerciseName } from './util'
 
@@ -15,6 +16,7 @@ interface DragInfo { id: string; from: BodyPart }
 
 export function ExerciseManager({ lang, onChanged }: { lang: TranslationTarget; onChanged?: () => void }) {
   const cats = useCategories()
+  const { push } = useUndo()
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [editing, setEditing] = useState<Exercise | null>(null)
   const [dragging, setDragging] = useState<DragInfo | null>(null)
@@ -39,8 +41,16 @@ export function ExerciseManager({ lang, onChanged }: { lang: TranslationTarget; 
     const base = add ? ex.body_parts : ex.body_parts.filter((bp) => bp !== info.from)
     const next = base.includes(target) ? base : [...base, target]
     if (next.length === ex.body_parts.length && next.every((bp) => ex.body_parts.includes(bp))) return
-    await updateExercise(ex.id, { body_parts: next })
+    const { undo } = await withUndo(['exercises'], () => updateExercise(ex.id, { body_parts: next }))
     await reload()
+    const name = exerciseName(ex, lang)
+    const to = categoryLabel(target, lang)
+    push(
+      add
+        ? (lang === 'zh' ? `已把「${name}」加入 ${to}` : `Added “${name}” to ${to}`)
+        : (lang === 'zh' ? `已把「${name}」移到 ${to}` : `Moved “${name}” to ${to}`),
+      async () => { await undo(); await reload() },
+    )
   }
 
   if (exercises.length === 0) {

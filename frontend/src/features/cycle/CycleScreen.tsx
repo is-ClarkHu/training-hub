@@ -10,8 +10,10 @@ import {
   setActiveCycle,
   softDeleteCycle,
   updateCycle,
+  withUndo,
 } from '../../db'
 import { useLanguage } from '../../i18n'
+import { useUndo } from '../../undo'
 import {
   type BodyPart,
   type CycleDay,
@@ -28,6 +30,7 @@ import './cycle.css'
 
 export function CycleScreen() {
   const { lang } = useLanguage()
+  const { push } = useUndo()
   const [cycles, setCycles] = useState<TrainingCycle[]>([])
   const [active, setActive] = useState<TrainingCycle | null>(null)
   const [entries, setEntries] = useState<WorkoutEntry[]>([])
@@ -66,10 +69,24 @@ export function CycleScreen() {
 
   async function addCycle() {
     if (!newName.trim()) return
-    const c = await createCycle({ name: newName.trim(), days: [], active: cycles.length === 0 })
+    const name = newName.trim()
+    const { result: c, undo } = await withUndo(['training_cycle'], () => createCycle({ name, days: [], active: cycles.length === 0 }))
     setNewName('')
     await reload()
     setEditId(c.id)
+    push(lang === 'zh' ? `已新建循环「${name}」` : `Added cycle “${name}”`, async () => { await undo(); setEditId(null); await reload() })
+  }
+
+  async function deleteCycle(c: TrainingCycle) {
+    const { undo } = await withUndo(['training_cycle'], () => softDeleteCycle(c.id))
+    await reload()
+    push(lang === 'zh' ? `已删除循环「${c.name}」` : `Deleted cycle “${c.name}”`, async () => { await undo(); await reload() })
+  }
+
+  async function activateCycle(c: TrainingCycle) {
+    const { undo } = await withUndo(['training_cycle'], () => setActiveCycle(c.id))
+    await reload()
+    push(lang === 'zh' ? `已启用循环「${c.name}」` : `Activated “${c.name}”`, async () => { await undo(); await reload() })
   }
 
   return (
@@ -135,11 +152,11 @@ export function CycleScreen() {
                 {c.active ? (
                   <span className="cyc-active-badge">active</span>
                 ) : (
-                  <button className="hist-link" type="button" onClick={() => void setActiveCycle(c.id).then(reload)}>set active</button>
+                  <button className="hist-link" type="button" onClick={() => void activateCycle(c)}>set active</button>
                 )}
                 <div className="cyc-card-actions">
                   <button className="hist-link" type="button" onClick={() => setEditId(c.id)}>edit</button>
-                  <button className="hist-link danger" type="button" onClick={() => void softDeleteCycle(c.id).then(reload)}>delete</button>
+                  <button className="hist-link danger" type="button" onClick={() => void deleteCycle(c)}>delete</button>
                 </div>
               </div>
               <div className="cyc-days">
@@ -175,6 +192,7 @@ function CycleDaysEditor({
   onCancel: () => void
 }) {
   const cats = useCategories()
+  const { push } = useUndo()
   const [name, setName] = useState(cycle.name)
   const [days, setDays] = useState<CycleDay[]>(
     cycle.days.map((d) => ({ ...d, body_parts: [...d.body_parts], exercise_ids: [...(d.exercise_ids ?? [])] })),
@@ -207,6 +225,12 @@ function CycleDaysEditor({
   }
 
   const exName = (e: Exercise) => (lang === 'zh' ? e.name_zh : e.name_en) || e.name_zh || e.name_en
+
+  async function save() {
+    const { undo } = await withUndo(['training_cycle'], () => updateCycle(cycle.id, { name, days }))
+    onSaved()
+    push(lang === 'zh' ? `已保存循环「${name}」` : `Saved cycle “${name}”`, async () => { await undo(); onSaved() })
+  }
 
   return (
     <div className="cyc-editor">
@@ -258,7 +282,7 @@ function CycleDaysEditor({
       <button className="th-btn-ghost cyc-add-day" type="button" onClick={addDay}>+ day</button>
       <div className="cyc-editor-actions">
         <button className="th-btn-ghost" type="button" onClick={onCancel}>Cancel</button>
-        <button className="th-btn" type="button" onClick={() => void updateCycle(cycle.id, { name, days }).then(onSaved)}>Save</button>
+        <button className="th-btn" type="button" onClick={() => void save()}>Save</button>
       </div>
     </div>
   )

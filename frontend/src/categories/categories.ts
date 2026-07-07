@@ -19,6 +19,7 @@ export const DEFAULT_CATEGORIES: Category[] = [
   { key: 'legs', zh: '腿', en: 'Legs' },
   { key: 'arms', zh: '手臂', en: 'Arms' },
   { key: 'core', zh: '腹', en: 'Core' },
+  { key: 'cardio', zh: '有氧', en: 'Cardio' },
   { key: 'warmup', zh: '热身', en: 'Warmup' },
   { key: 'sports', zh: '运动', en: 'Sports' },
 ]
@@ -75,6 +76,16 @@ export function updateCategory(key: string, patch: { zh?: string; en?: string })
 }
 export function removeCategory(key: string): void {
   saveCustom(loadCustom().filter((c) => c.key !== key))
+}
+
+/** Capture the custom-category store; returns a fn that restores it (for undo). */
+export function snapshotCategories(): () => void {
+  const raw = localStorage.getItem(LS)
+  return () => {
+    if (raw == null) localStorage.removeItem(LS)
+    else localStorage.setItem(LS, raw)
+    notify()
+  }
 }
 
 /** Reactive list — re-renders when categories change. */

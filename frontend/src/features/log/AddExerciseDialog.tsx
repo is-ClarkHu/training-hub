@@ -3,7 +3,8 @@
 // auto-fills the other-language name + classification when the backend/key is set.
 // De-duplicates against the existing library on create.
 import { useState } from 'react'
-import { createExercise } from '../../db'
+import { createExercise, withUndo } from '../../db'
+import { useUndo } from '../../undo'
 import { suggestExercise } from '../../translation'
 import {
   MEASURE_TYPE_LABELS,
@@ -23,14 +24,17 @@ export function AddExerciseDialog({
   initialName = '',
   existing = [],
   onCreated,
+  onChanged,
   onClose,
 }: {
   lang: TranslationTarget
   initialName?: string
   existing?: Exercise[]
   onCreated: (ex: Exercise) => void
+  onChanged?: () => void
   onClose: () => void
 }) {
+  const { push } = useUndo()
   const startZh = HAS_CJK.test(initialName)
   const [raw, setRaw] = useState(initialName)
   const [nameZh, setNameZh] = useState(startZh ? initialName : '')
@@ -70,16 +74,17 @@ export function AddExerciseDialog({
       return
     }
     setBusy(true)
-    const ex = await createExercise({
+    const { result: ex, undo } = await withUndo(['exercises'], () => createExercise({
       name_zh: zh,
       name_en: en,
       body_parts: bodyParts,
       measure_type: measureType,
       is_custom: true,
       needs_translation: !zh || !en,
-    })
+    }))
     setBusy(false)
     onCreated(ex)
+    push(lang === 'zh' ? `已新建「${zh || en}」` : `Added “${en || zh}”`, async () => { await undo(); onChanged?.() })
   }
 
   return (

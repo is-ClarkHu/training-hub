@@ -15,10 +15,12 @@ import {
   softDeleteSportSession,
   deleteTrackerEntry,
   today,
+  withUndo,
   type NewSetInput,
 } from '../../db'
 import { parseNote, noteTagLabel } from '../../translation'
 import { useLanguage } from '../../i18n'
+import { useUndo } from '../../undo'
 import { fieldLabel } from '../sports'
 import { INTIMACY_CATEGORIES, intimacyLabel, intimacyVisible } from '../intimacy'
 import type {
@@ -45,6 +47,7 @@ interface LoggedItem { id: string; name: string; detail: string; tagKeys: string
 
 export function LogScreen() {
   const { lang } = useLanguage()
+  const { push } = useUndo()
   const [date, setDate] = useState(today())
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [sports, setSports] = useState<Sport[]>([])
@@ -134,7 +137,9 @@ export function LogScreen() {
     const setInputs = buildSets()
     if (setInputs.length === 0) return
     setSaving(true)
-    const { entry } = await createEntryWithSets(
+    const exName = exerciseName(sel.ex, lang)
+    const measureType = sel.ex.measure_type
+    const { result: { entry }, undo } = await withUndo(['workout_entries', 'sets'], () => createEntryWithSets(
       {
         date,
         exercise_id: sel.ex.id,
@@ -148,17 +153,21 @@ export function LogScreen() {
         injury_id: sel.ex.is_rehab ? injuryId || null : injuryMod === 'none' ? null : injuryId || null,
       },
       setInputs,
-    )
+    ))
     const detail = setInputs
       .map((s) =>
-        sel.ex.measure_type === 'duration'
+        measureType === 'duration'
           ? `${s.duration_sec}s`
-          : sel.ex.measure_type === 'reps_only'
+          : measureType === 'reps_only'
             ? `${s.reps}${s.per_side ? '/side' : ''}`
             : `${s.weight ?? '–'}×${s.reps ?? '–'}`,
       )
       .join(', ')
-    finishSave(exerciseName(sel.ex, lang), detail, 'exercise', entry.id)
+    const loggedId = finishSave(exName, detail, 'exercise', entry.id)
+    push(lang === 'zh' ? `已记录「${exName}」` : `Logged “${exName}”`, async () => {
+      await undo()
+      setLogged((prev) => prev.filter((x) => x.id !== loggedId))
+    })
   }
 
   async function saveSport() {
@@ -167,7 +176,9 @@ export function LogScreen() {
     if (!h || h <= 0) return
     setSaving(true)
     const injured = activeInjuries.length > 0 // auto: derived from active injuries (§6A)
-    const session = await createSportSession({
+    const sportName = (lang === 'zh' ? sel.sport.name_zh : sel.sport.name_en) || sel.sport.name_zh
+    const fields = sel.sport.fields ?? []
+    const { result: session, undo } = await withUndo(['sport_sessions'], () => createSportSession({
       date,
       sport_id: sel.sport.id,
       hours: h,
@@ -175,27 +186,33 @@ export function LogScreen() {
       injury: injured,
       note_raw: note,
       note_tags: parsed.tagKeys,
-    })
-    const attrSummary = (sel.sport.fields ?? [])
+    }))
+    const attrSummary = fields
       .map((f) => attrs[f.key])
       .filter(Boolean)
       .join(' · ')
-    finishSave(
-      (lang === 'zh' ? sel.sport.name_zh : sel.sport.name_en) || sel.sport.name_zh,
+    const loggedId = finishSave(
+      sportName,
       `${formatHours(h)}${attrSummary ? ' · ' + attrSummary : ''}${injured ? ' · injury' : ''}`,
       'sport',
       session.id,
     )
+    push(lang === 'zh' ? `已记录「${sportName}」` : `Logged “${sportName}”`, async () => {
+      await undo()
+      setLogged((prev) => prev.filter((x) => x.id !== loggedId))
+    })
   }
 
   async function saveIntimacy() {
     const n = parseInt(intimacyCount, 10)
     if (!Number.isFinite(n) || n <= 0 || saving) return
     setSaving(true)
-    const row = await logTracker('intimacy', date, n, intimacyCat)
+    const { result: row, undo } = await withUndo(['optional_trackers'], () => logTracker('intimacy', date, n, intimacyCat))
+    const loggedId = crypto.randomUUID()
+    const name = lang === 'zh' ? '成人亲密健康' : 'Adult wellness'
     setLogged((prev) => [{
-      id: crypto.randomUUID(),
-      name: lang === 'zh' ? '成人亲密健康' : 'Adult wellness',
+      id: loggedId,
+      name,
       detail: `${intimacyLabel(intimacyCat, lang, true)} ×${n}`,
       tagKeys: [],
       kind: 'intimacy',
@@ -203,20 +220,33 @@ export function LogScreen() {
     }, ...prev])
     setIntimacyCount('1')
     setSaving(false)
+    push(lang === 'zh' ? `已记录「${name}」` : `Logged “${name}”`, async () => {
+      await undo()
+      setLogged((prev) => prev.filter((x) => x.id !== loggedId))
+    })
   }
 
-  function finishSave(name: string, detail: string, kind: 'exercise' | 'sport' | 'intimacy', realId: string) {
-    setLogged((prev) => [{ id: crypto.randomUUID(), name, detail, tagKeys: parsed.tagKeys, kind, realId }, ...prev])
+  function finishSave(name: string, detail: string, kind: 'exercise' | 'sport' | 'intimacy', realId: string): string {
+    const id = crypto.randomUUID()
+    setLogged((prev) => [{ id, name, detail, tagKeys: parsed.tagKeys, kind, realId }, ...prev])
     setSel(null)
     resetForms()
     setSaving(false)
+    return id
   }
 
   async function deleteLogged(item: LoggedItem) {
-    if (item.kind === 'exercise') await softDeleteEntry(item.realId)
-    else if (item.kind === 'sport') await softDeleteSportSession(item.realId)
-    else await deleteTrackerEntry(item.realId)
+    const tables = item.kind === 'exercise' ? ['workout_entries', 'sets'] : item.kind === 'sport' ? ['sport_sessions'] : ['optional_trackers']
+    const { undo } = await withUndo(tables, async () => {
+      if (item.kind === 'exercise') await softDeleteEntry(item.realId)
+      else if (item.kind === 'sport') await softDeleteSportSession(item.realId)
+      else await deleteTrackerEntry(item.realId)
+    })
     setLogged((prev) => prev.filter((x) => x.id !== item.id))
+    push(lang === 'zh' ? `已删除「${item.name}」` : `Deleted “${item.name}”`, async () => {
+      await undo()
+      setLogged((prev) => (prev.some((x) => x.id === item.id) ? prev : [item, ...prev]))
+    })
   }
 
   return (
@@ -397,7 +427,9 @@ export function LogScreen() {
       )}
 
       {dialog.open && (
-        <AddExerciseDialog lang={lang} initialName={dialog.name} existing={exercises} onCreated={onExerciseCreated} onClose={() => setDialog({ open: false, name: '' })} />
+        <AddExerciseDialog lang={lang} initialName={dialog.name} existing={exercises} onCreated={onExerciseCreated}
+          onChanged={() => { void getExercises().then(setExercises); setSel(null) }}
+          onClose={() => setDialog({ open: false, name: '' })} />
       )}
 
       {injuryDialog && (

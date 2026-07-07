@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AuthProvider, AuthGate, useAuth } from './features/auth'
 import { LanguageProvider, ThemeProvider, useLanguage } from './i18n'
+import { UndoProvider } from './undo'
 import { startSync } from './sync'
 import { LogScreen } from './features/log'
 import { HistoryScreen } from './features/history'
@@ -98,7 +99,9 @@ export default function App() {
       <LanguageProvider>
         <AuthProvider>
           <AuthGate>
-            <AppShell />
+            <UndoProvider>
+              <AppShell />
+            </UndoProvider>
           </AuthGate>
         </AuthProvider>
       </LanguageProvider>

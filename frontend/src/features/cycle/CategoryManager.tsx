@@ -9,10 +9,12 @@ import {
   updateCategory,
   removeCategory,
   isCustomCategory,
+  snapshotCategories,
   type Category,
 } from '../../categories'
 import { requestTranslation } from '../../translation'
 import type { TranslationTarget } from '../../translation'
+import { useUndo } from '../../undo'
 
 const HAS_CJK = /[一-鿿]/
 
@@ -55,6 +57,7 @@ function CategoryDialog({
   category: Category | null
   onClose: () => void
 }) {
+  const { push } = useUndo()
   const editing = !!category
   const custom = category ? isCustomCategory(category.key) : true
   const [raw, setRaw] = useState('')
@@ -80,15 +83,26 @@ function CategoryDialog({
 
   function save() {
     if (!zh.trim() && !en.trim()) return
+    const restore = snapshotCategories()
+    const label = (lang === 'zh' ? zh : en).trim() || (lang === 'zh' ? en : zh).trim()
     if (category) updateCategory(category.key, { zh: zh.trim(), en: en.trim() })
     else addCategory({ zh: zh.trim(), en: en.trim() })
     onClose()
+    push(
+      category
+        ? (lang === 'zh' ? `已保存分类「${label}」` : `Saved category “${label}”`)
+        : (lang === 'zh' ? `已新建分类「${label}」` : `Added category “${label}”`),
+      restore,
+    )
   }
   function del() {
     if (!category) return
     if (!confirm(lang === 'zh' ? '删除该分类?(已用它的动作会保留原分类名)' : 'Delete this category? (exercises keep the raw key)')) return
+    const restore = snapshotCategories()
+    const label = lang === 'zh' ? category.zh : category.en
     removeCategory(category.key)
     onClose()
+    push(lang === 'zh' ? `已删除分类「${label}」` : `Deleted category “${label}”`, restore)
   }
 
   return (

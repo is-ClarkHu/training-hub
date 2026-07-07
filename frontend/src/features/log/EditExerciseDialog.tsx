@@ -2,7 +2,8 @@
 // another, or delete it. Renames reflect everywhere automatically because History
 // and charts render exercises by id — no separate "sync to history" step needed.
 import { useEffect, useState } from 'react'
-import { updateExercise, softDeleteExercise, mergeExercises, exerciseUsage } from '../../db'
+import { updateExercise, softDeleteExercise, mergeExercises, exerciseUsage, withUndo } from '../../db'
+import { useUndo } from '../../undo'
 import {
   MEASURE_TYPE_LABELS,
   type BodyPart,
@@ -29,6 +30,7 @@ export function EditExerciseDialog({
   onClose: () => void
 }) {
   const cats = useCategories()
+  const { push } = useUndo()
   const [nameZh, setNameZh] = useState(exercise.name_zh)
   const [nameEn, setNameEn] = useState(exercise.name_en)
   const [bodyParts, setBodyParts] = useState<BodyPart[]>(exercise.body_parts)
@@ -49,24 +51,26 @@ export function EditExerciseDialog({
 
   async function onSave() {
     setBusy(true)
-    await updateExercise(exercise.id, {
+    const { undo } = await withUndo(['exercises'], () => updateExercise(exercise.id, {
       name_zh: nameZh.trim(),
       name_en: nameEn.trim(),
       body_parts: bodyParts,
       measure_type: measureType,
       default_per_side: perSide,
       name_locked: true,
-    })
+    }))
     setBusy(false)
     onSaved()
+    push(lang === 'zh' ? `已保存「${exName(exercise)}」` : `Saved “${exName(exercise)}”`, async () => { await undo(); onSaved() })
   }
   async function onMerge() {
     if (!mergeTarget) return
     if (!confirm(lang === 'zh' ? '合并后本动作的所有记录会归到目标动作,本动作删除。继续?' : 'All records move to the target and this exercise is removed. Continue?')) return
     setBusy(true)
-    await mergeExercises(exercise.id, mergeTarget)
+    const { undo } = await withUndo(['exercises', 'workout_entries'], () => mergeExercises(exercise.id, mergeTarget))
     setBusy(false)
     onSaved()
+    push(lang === 'zh' ? `已合并「${exName(exercise)}」` : `Merged “${exName(exercise)}”`, async () => { await undo(); onSaved() })
   }
   async function onDelete() {
     const msg = usage
@@ -74,9 +78,10 @@ export function EditExerciseDialog({
       : lang === 'zh' ? '删除该动作?' : 'Delete this exercise?'
     if (!confirm(msg)) return
     setBusy(true)
-    await softDeleteExercise(exercise.id)
+    const { undo } = await withUndo(['exercises'], () => softDeleteExercise(exercise.id))
     setBusy(false)
     onSaved()
+    push(lang === 'zh' ? `已删除「${exName(exercise)}」` : `Deleted “${exName(exercise)}”`, async () => { await undo(); onSaved() })
   }
 
   return (
