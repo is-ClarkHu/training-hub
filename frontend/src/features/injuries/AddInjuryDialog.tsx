@@ -7,8 +7,10 @@ import {
   updateInjury,
   today,
   putInjuryPhoto,
-  getInjuryPhotosByIds,
   deleteInjuryPhoto,
+  uploadInjuryPhotoToStorage,
+  removeInjuryPhotoFromStorage,
+  resolveInjuryPhotoUrls,
   newId,
 } from '../../db'
 import type {
@@ -24,7 +26,7 @@ import { useCategories, categoryLabel } from '../../categories'
 import { suggestInjuryNote, type TranslationTarget } from '../../translation'
 import { compressImage } from './photo'
 
-interface PhotoDraft { photo_id: string; label: string; dataUrl: string }
+interface PhotoDraft { photo_id: string; label: string; dataUrl: string; storage_path?: string }
 import {
   INJURY_LATERALITIES,
   INJURY_LATERALITY_LABELS,
@@ -66,19 +68,19 @@ export function AddInjuryDialog({
   )
   const [photos, setPhotos] = useState<PhotoDraft[]>([])
   const pendingPhotoIds = useRef<Set<string>>(new Set())
-  const removedPhotoIds = useRef<Set<string>>(new Set())
+  const removedPhotos = useRef<{ photo_id: string; storage_path?: string }[]>([])
   const fileInput = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
   const [translatingArea, setTranslatingArea] = useState(false)
   const [translatingNote, setTranslatingNote] = useState(false)
   const [hint, setHint] = useState<string | null>(null)
 
-  // Editing: hydrate existing photo attachments with their local data URLs.
+  // Editing: hydrate existing photo attachments (local cache first, else Storage).
   useEffect(() => {
     const refs = (injury?.attachments ?? []).filter((a) => a.kind === 'photo' && a.photo_id)
     if (refs.length === 0) return
-    void getInjuryPhotosByIds(refs.map((a) => a.photo_id!)).then((map) => {
-      setPhotos(refs.filter((a) => map[a.photo_id!]).map((a) => ({ photo_id: a.photo_id!, label: a.label, dataUrl: map[a.photo_id!] })))
+    void resolveInjuryPhotoUrls(refs).then((map) => {
+      setPhotos(refs.filter((a) => map[a.photo_id!]).map((a) => ({ photo_id: a.photo_id!, label: a.label, dataUrl: map[a.photo_id!], storage_path: a.storage_path })))
     })
   }, [injury])
 
@@ -101,7 +103,7 @@ export function AddInjuryDialog({
   function removePhoto(i: number) {
     setPhotos((prev) => {
       const p = prev[i]
-      if (p && !pendingPhotoIds.current.has(p.photo_id)) removedPhotoIds.current.add(p.photo_id)
+      if (p && !pendingPhotoIds.current.has(p.photo_id)) removedPhotos.current.push({ photo_id: p.photo_id, storage_path: p.storage_path })
       pendingPhotoIds.current.delete(p?.photo_id ?? '')
       return prev.filter((_, j) => j !== i)
     })
@@ -147,6 +149,10 @@ export function AddInjuryDialog({
   async function onSave() {
     if (!hasArea) return
     setBusy(true)
+    const linkRefs = attachments
+      .filter((a) => a.label.trim() || a.url?.trim())
+      .map((a): InjuryAttachmentRef => ({ ...a, kind: 'link' }))
+    const photoRefs = photos.map((p): InjuryAttachmentRef => ({ label: p.label.trim(), kind: 'photo', photo_id: p.photo_id, storage_path: p.storage_path }))
     const fields = {
       body_area_zh: bodyAreaZh.trim(),
       body_area_en: bodyAreaEn.trim(),
@@ -159,10 +165,7 @@ export function AddInjuryDialog({
       severity: severity === '' ? null : Number(severity),
       note_zh: noteZh.trim(),
       note_en: noteEn.trim(),
-      attachments: [
-        ...attachments.filter((a) => a.label.trim() || a.url?.trim()).map((a) => ({ ...a, kind: 'link' as const })),
-        ...photos.map((p): InjuryAttachmentRef => ({ label: p.label.trim(), kind: 'photo', photo_id: p.photo_id })),
-      ],
+      attachments: [...linkRefs, ...photoRefs],
     }
     let saved: Injury
     if (injury) {
@@ -171,11 +174,25 @@ export function AddInjuryDialog({
     } else {
       saved = await createInjury(fields)
     }
-    // Persist photo bytes locally (never synced) + clean up removed ones.
-    for (const p of photos) {
-      if (pendingPhotoIds.current.has(p.photo_id)) await putInjuryPhoto(p.photo_id, saved.id, p.dataUrl)
+    // New photos: cache locally (offline) + upload to Storage; record the path.
+    let pathsChanged = false
+    for (let k = 0; k < photos.length; k++) {
+      const p = photos[k]
+      if (!pendingPhotoIds.current.has(p.photo_id)) continue
+      await putInjuryPhoto(p.photo_id, saved.id, p.dataUrl)
+      const path = await uploadInjuryPhotoToStorage(saved.id, p.photo_id, p.dataUrl)
+      if (path) { photoRefs[k].storage_path = path; pathsChanged = true }
     }
-    for (const id of removedPhotoIds.current) await deleteInjuryPhoto(id)
+    if (pathsChanged) {
+      const finalRefs = [...linkRefs, ...photoRefs]
+      await updateInjury(saved.id, { attachments: finalRefs })
+      saved = { ...saved, attachments: finalRefs }
+    }
+    // Removed photos: drop the local cache and the Storage object.
+    for (const r of removedPhotos.current) {
+      await deleteInjuryPhoto(r.photo_id)
+      if (r.storage_path) await removeInjuryPhotoFromStorage(r.storage_path)
+    }
     setBusy(false)
     onSaved(saved)
   }
@@ -303,7 +320,7 @@ export function AddInjuryDialog({
 
         <div className="inj-field">
           <div className="inj-note-head">
-            <label className="th-label">{lang === 'zh' ? '照片 (本地存储,不含影像)' : 'Photos (stored locally, no imaging)'}</label>
+            <label className="th-label">{lang === 'zh' ? '照片 (存到你的云端,不含影像)' : 'Photos (saved to your cloud, no imaging)'}</label>
             <button className="th-btn-ghost inj-translate" type="button" onClick={() => fileInput.current?.click()} disabled={busy}>
               {lang === 'zh' ? '+ 照片' : '+ Photo'}
             </button>

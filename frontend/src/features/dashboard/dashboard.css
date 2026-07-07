@@ -76,6 +76,10 @@
 }
 .dash-heat-days { display: flex; flex-direction: column; gap: 5px; }
 .dash-heat-days span { height: 16px; font: 10px/16px var(--mono); color: var(--faint); }
+.dash-heat-days-spacer { height: 13px; }
+.dash-heat-cols { display: flex; flex-direction: column; gap: 5px; }
+.dash-heat-months { display: flex; gap: 5px; height: 13px; }
+.dash-heat-month { width: 16px; font: 10px/13px var(--mono); color: var(--muted, #8b93a3); white-space: nowrap; overflow: visible; }
 .dash-heat-grid { display: flex; gap: 5px; }
 .dash-heat-col { display: flex; flex-direction: column; gap: 5px; }
 .dash-heat-cell {

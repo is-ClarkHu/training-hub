@@ -437,6 +437,54 @@ export async function deleteInjuryPhoto(id: string): Promise<void> {
   await db.injury_photos.delete(id)
 }
 
+// ── injury photos in Supabase Storage (private bucket, per-user folder) ───
+const PHOTO_BUCKET = 'injury-photos'
+
+function dataUrlToBlob(dataUrl: string): Blob {
+  const [head, b64] = dataUrl.split(',')
+  const mime = /:(.*?);/.exec(head)?.[1] ?? 'image/jpeg'
+  const bin = atob(b64)
+  const arr = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i)
+  return new Blob([arr], { type: mime })
+}
+
+/** Upload a compressed photo to Storage. Path is scoped to the user (RLS). */
+export async function uploadInjuryPhotoToStorage(injuryId: string, photoId: string, dataUrl: string): Promise<string | null> {
+  const uid = currentUserId()
+  if (!uid) return null
+  const path = `${uid}/${injuryId}/${photoId}.jpg`
+  const { error } = await supabase.storage.from(PHOTO_BUCKET).upload(path, dataUrlToBlob(dataUrl), {
+    upsert: true,
+    contentType: 'image/jpeg',
+  })
+  return error ? null : path
+}
+
+/** Signed URL (1h) for a stored photo, or null. */
+export async function getInjuryPhotoUrl(path: string): Promise<string | null> {
+  const { data, error } = await supabase.storage.from(PHOTO_BUCKET).createSignedUrl(path, 3600)
+  return error || !data ? null : data.signedUrl
+}
+
+export async function removeInjuryPhotoFromStorage(path: string): Promise<void> {
+  await supabase.storage.from(PHOTO_BUCKET).remove([path])
+}
+
+/** Resolve photo refs → displayable URLs: local cache first (offline/instant),
+ *  falling back to a Storage signed URL. Skips refs that resolve to nothing. */
+export async function resolveInjuryPhotoUrls(refs: InjuryAttachmentRef[]): Promise<Record<string, string>> {
+  const photoRefs = refs.filter((a) => a.kind === 'photo' && a.photo_id)
+  const out = await getInjuryPhotosByIds(photoRefs.map((a) => a.photo_id!))
+  for (const a of photoRefs) {
+    if (!out[a.photo_id!] && a.storage_path) {
+      const url = await getInjuryPhotoUrl(a.storage_path)
+      if (url) out[a.photo_id!] = url
+    }
+  }
+  return out
+}
+
 // ── training cycle (§4.9, §6B) ───────────────────────────────
 export interface NewCycleInput {
   name: string

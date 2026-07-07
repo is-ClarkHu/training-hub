@@ -7,7 +7,7 @@ import {
   getSportSessions,
   updateInjury,
   softDeleteInjury,
-  getInjuryPhotosByIds,
+  resolveInjuryPhotoUrls,
 } from '../../db'
 import { useLanguage } from '../../i18n'
 import { categoryLabel } from '../../categories'
@@ -48,8 +48,8 @@ export function InjuriesScreen() {
     setInjuries(inj)
     setEntries(ents)
     setSessions(sess)
-    const photoIds = inj.flatMap((i) => i.attachments.filter((a) => a.kind === 'photo' && a.photo_id).map((a) => a.photo_id!))
-    setPhotoMap(await getInjuryPhotosByIds(photoIds))
+    const photoRefs = inj.flatMap((i) => i.attachments.filter((a) => a.kind === 'photo' && a.photo_id))
+    setPhotoMap(await resolveInjuryPhotoUrls(photoRefs))
     setLoading(false)
   }, [])
 

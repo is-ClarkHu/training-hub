@@ -110,20 +110,21 @@ export interface InjuryCheckpoint {
 }
 
 // A reference to an external artifact (exam report, photo, prescription).
-// kind 'link' = a text/URL reference (synced in the row). kind 'photo' = a
-// compressed photo whose bytes live LOCAL-ONLY in the injury_photos Dexie table
-// (not synced — keeps cloud storage cost/space down); photo_id points to it.
-// Medical imaging is intentionally unsupported (too large).
+// kind 'link' = a text/URL reference. kind 'photo' = a compressed photo uploaded
+// to private Supabase Storage (storage_path), with a LOCAL Dexie copy (photo_id)
+// kept as an offline cache. Medical imaging is intentionally unsupported (too large).
 export interface InjuryAttachmentRef {
   label: string         // e.g. 'MRI report', '处方'
   url?: string          // optional external link (kind 'link')
   note?: string
   kind?: 'link' | 'photo'
-  photo_id?: string     // local injury_photos row id (kind 'photo')
+  photo_id?: string     // local injury_photos cache row id (kind 'photo')
+  storage_path?: string // Supabase Storage object path (kind 'photo')
 }
 
-// Local-only compressed photo bytes (§6A Phase 4). NOT a synced table — lives in
-// Dexie, cleared on logout. Referenced by InjuryAttachmentRef.photo_id.
+// Local offline cache of a compressed photo (§6A Phase 4). The canonical copy
+// lives in Supabase Storage; this Dexie row is a cache, cleared on logout and
+// re-fetched from Storage on demand. Referenced by InjuryAttachmentRef.photo_id.
 export interface InjuryPhoto {
   id: string
   injury_id: string

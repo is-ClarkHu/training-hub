@@ -212,7 +212,7 @@ export function DashboardScreen() {
 
   return (
     <div className="dash-screen">
-      <ActiveInjuryBanner injuries={injuries} lang={lang} />
+      <ActiveInjuryBanner injuries={injuries} lang={lang} showClear />
 
       <div className="dash-kpis">
         {KPI.map((k) => (
@@ -378,6 +378,12 @@ export function DashboardScreen() {
   )
 }
 
+const MONTHS_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+function monthLabel(iso: string, lang: 'en' | 'zh'): string {
+  const mo = Number(iso.slice(5, 7))
+  return lang === 'zh' ? `${mo}月` : MONTHS_EN[mo - 1]
+}
+
 function Heatmap({ cols, lang, detail, injuryDates }: { cols: HeatCell[][]; lang: 'en' | 'zh'; detail: Record<string, string>; injuryDates: Set<string> }) {
   const wd = lang === 'zh' ? ['一', '二', '三', '四', '五', '六', '日'] : ['M', 'T', 'W', 'T', 'F', 'S', 'S']
   const [tip, setTip] = useState<{ x: number; y: number; cell: HeatCell } | null>(null)
@@ -386,22 +392,32 @@ function Heatmap({ cols, lang, detail, injuryDates }: { cols: HeatCell[][]; lang
   return (
     <div className="dash-heat" onMouseLeave={() => setTip(null)}>
       <div className="dash-heat-days">
+        <span className="dash-heat-days-spacer" aria-hidden="true" />
         {wd.map((d, i) => (<span key={i}>{d}</span>))}
       </div>
-      <div className="dash-heat-grid">
-        {cols.map((col, ci) => (
-          <div key={ci} className="dash-heat-col">
-            {col.map((cell) => (
-              <span
-                key={cell.date}
-                className={`dash-heat-cell ${injuryDates.has(cell.date) ? 'inj' : ''}`}
-                style={{ background: HEAT[cell.level] }}
-                onMouseEnter={(e) => setTip({ x: e.clientX, y: e.clientY, cell })}
-                onMouseMove={(e) => setTip((t) => (t ? { ...t, x: e.clientX, y: e.clientY } : t))}
-              />
-            ))}
-          </div>
-        ))}
+      <div className="dash-heat-cols">
+        <div className="dash-heat-months">
+          {cols.map((col, ci) => {
+            const m = col[0].date.slice(0, 7)
+            const show = ci === 0 || m !== cols[ci - 1][0].date.slice(0, 7)
+            return <span key={ci} className="dash-heat-month">{show ? monthLabel(col[0].date, lang) : ''}</span>
+          })}
+        </div>
+        <div className="dash-heat-grid">
+          {cols.map((col, ci) => (
+            <div key={ci} className="dash-heat-col">
+              {col.map((cell) => (
+                <span
+                  key={cell.date}
+                  className={`dash-heat-cell ${injuryDates.has(cell.date) ? 'inj' : ''}`}
+                  style={{ background: HEAT[cell.level] }}
+                  onMouseEnter={(e) => setTip({ x: e.clientX, y: e.clientY, cell })}
+                  onMouseMove={(e) => setTip((t) => (t ? { ...t, x: e.clientX, y: e.clientY } : t))}
+                />
+              ))}
+            </div>
+          ))}
+        </div>
       </div>
       {tip && (
         <div className="dash-heat-tip" style={{ left: tip.x + 14, top: tip.y + 14 }}>

@@ -16,6 +16,13 @@
 }
 .inj-banner-icon { font-size: 24px; line-height: 1; flex: none; }
 .inj-banner-title { font: 700 13px/1 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--danger); margin-bottom: 6px; }
+/* all-clear (no active injuries) — positive green variant */
+.inj-banner.ok {
+  background: linear-gradient(95deg, rgba(45, 212, 191, 0.14), rgba(45, 212, 191, 0.02));
+  border-color: rgba(45, 212, 191, 0.4);
+  border-left-color: var(--teal);
+}
+.inj-banner-title.ok { color: var(--teal); }
 .inj-banner-list { display: flex; flex-direction: column; gap: 4px; }
 .inj-banner-item { font: 13px/1.5 var(--mono); color: var(--text-dim); }
 .inj-banner-item strong { color: var(--text-bright); }
