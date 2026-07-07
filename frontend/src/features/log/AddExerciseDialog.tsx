@@ -36,7 +36,9 @@ export function AddExerciseDialog({
   const [nameZh, setNameZh] = useState(startZh ? initialName : '')
   const [nameEn, setNameEn] = useState(startZh ? '' : initialName)
   const cats = useCategories()
-  const [bodyPart, setBodyPart] = useState<BodyPart>('chest')
+  const [bodyParts, setBodyParts] = useState<BodyPart[]>(['chest'])
+  const toggleBodyPart = (k: BodyPart) =>
+    setBodyParts((ps) => (ps.includes(k) ? ps.filter((p) => p !== k) : [...ps, k]))
   const [measureType, setMeasureType] = useState<MeasureType>('weight_reps')
   const [busy, setBusy] = useState(false)
   const [hint, setHint] = useState<string | null>(null)
@@ -48,7 +50,7 @@ export function AddExerciseDialog({
     const s = await suggestExercise(raw)
     if (s.name_zh) setNameZh(s.name_zh)
     if (s.name_en) setNameEn(s.name_en)
-    if (s.body_part) setBodyPart(s.body_part)
+    if (s.body_part) setBodyParts((ps) => (ps.includes(s.body_part!) ? ps : [...ps, s.body_part!]))
     if (s.measure_type) setMeasureType(s.measure_type)
     if (s.needsTranslation) {
       setHint(lang === 'zh' ? '自动翻译暂不可用(填 key + 跑后端可启用),手动填另一名即可。' : 'Auto-translate unavailable (set a key + run the backend). Fill the other name manually.')
@@ -71,7 +73,7 @@ export function AddExerciseDialog({
     const ex = await createExercise({
       name_zh: zh,
       name_en: en,
-      body_part: bodyPart,
+      body_parts: bodyParts,
       measure_type: measureType,
       is_custom: true,
       needs_translation: !zh || !en,
@@ -107,24 +109,26 @@ export function AddExerciseDialog({
             <input className="th-input" value={nameEn} onChange={(e) => setNameEn(e.target.value)} />
           </div>
         </div>
-        <div className="log-grid2">
-          <div className="log-field">
-            <label className="th-label">{lang === 'zh' ? '部位' : 'Body part'}</label>
-            <select className="th-input" value={bodyPart} onChange={(e) => setBodyPart(e.target.value as BodyPart)}>
-              {cats.map((c) => (<option key={c.key} value={c.key}>{categoryLabel(c.key, lang)}</option>))}
-            </select>
+        <div className="log-field">
+          <label className="th-label">{lang === 'zh' ? '部位(可多选)' : 'Body parts (multi)'}</label>
+          <div className="log-cat-pick">
+            {cats.map((c) => (
+              <button key={c.key} type="button" className={`log-cat ${bodyParts.includes(c.key) ? 'on' : ''}`} onClick={() => toggleBodyPart(c.key)}>
+                {categoryLabel(c.key, lang)}
+              </button>
+            ))}
           </div>
-          <div className="log-field">
-            <label className="th-label">{lang === 'zh' ? '类型' : 'Measure'}</label>
-            <select className="th-input" value={measureType} onChange={(e) => setMeasureType(e.target.value as MeasureType)}>
-              {MEASURE_TYPES.map((mt) => (<option key={mt} value={mt}>{MEASURE_TYPE_LABELS[mt][lang]}</option>))}
-            </select>
-          </div>
+        </div>
+        <div className="log-field">
+          <label className="th-label">{lang === 'zh' ? '类型' : 'Measure'}</label>
+          <select className="th-input" value={measureType} onChange={(e) => setMeasureType(e.target.value as MeasureType)}>
+            {MEASURE_TYPES.map((mt) => (<option key={mt} value={mt}>{MEASURE_TYPE_LABELS[mt][lang]}</option>))}
+          </select>
         </div>
 
         <div className="log-dialog-actions">
           <button className="th-btn-ghost" type="button" onClick={onClose}>Cancel</button>
-          <button className="th-btn" type="button" onClick={onCreate} disabled={busy || (!nameZh.trim() && !nameEn.trim())}>
+          <button className="th-btn" type="button" onClick={onCreate} disabled={busy || bodyParts.length === 0 || (!nameZh.trim() && !nameEn.trim())}>
             {lang === 'zh' ? '创建' : 'Create'}
           </button>
         </div>

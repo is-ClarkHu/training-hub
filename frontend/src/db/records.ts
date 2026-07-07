@@ -40,7 +40,7 @@ function syncFields() {
 export interface NewExerciseInput {
   name_zh: string
   name_en: string
-  body_part: BodyPart
+  body_parts: BodyPart[]
   measure_type: MeasureType
   assisted?: boolean
   is_custom?: boolean
@@ -76,7 +76,7 @@ export async function getExercises(): Promise<Exercise[]> {
 
 export async function updateExercise(
   id: string,
-  patch: Partial<Pick<Exercise, 'name_zh' | 'name_en' | 'body_part' | 'measure_type' | 'assisted' | 'name_locked' | 'needs_translation' | 'default_per_side' | 'is_rehab' | 'rehab_purpose_zh' | 'rehab_purpose_en' | 'rehab_cues_zh' | 'rehab_cues_en' | 'rehab_dosage'>>,
+  patch: Partial<Pick<Exercise, 'name_zh' | 'name_en' | 'body_parts' | 'measure_type' | 'assisted' | 'name_locked' | 'needs_translation' | 'default_per_side' | 'is_rehab' | 'rehab_purpose_zh' | 'rehab_purpose_en' | 'rehab_cues_zh' | 'rehab_cues_en' | 'rehab_dosage'>>,
 ): Promise<void> {
   const e = await db.exercises.get(id)
   if (e) await db.exercises.put({ ...e, ...patch, updated_at: nowIso() })

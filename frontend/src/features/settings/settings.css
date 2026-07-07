@@ -93,6 +93,22 @@
   cursor: pointer;
 }
 .set-ex-item:hover { border-color: var(--teal); color: var(--text-bright); }
+.set-ex-item[draggable='true'] { cursor: grab; }
+.set-ex-item[draggable='true']:active { cursor: grabbing; }
+/* Drop-target highlight while dragging an exercise onto a category. */
+.set-ex-group.drag-over {
+  outline: 1px dashed var(--teal);
+  outline-offset: 4px;
+  border-radius: 6px;
+}
+.set-ex-group.drag-over > .log-group-label { color: var(--teal); }
+.set-ex-drop-hint {
+  padding: 6px 10px;
+  font: 12px/1 var(--mono);
+  color: var(--text-dim);
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+}
 
 .set-note { color: var(--text-dim); font-size: 13px; }
 

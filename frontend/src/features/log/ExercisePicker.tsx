@@ -37,7 +37,7 @@ export function ExercisePicker({
       (e) => !q || e.name_zh.toLowerCase().includes(q) || e.name_en.toLowerCase().includes(q),
     )
     // Rehab moves get their own group (below) — keep them out of the body-part groups.
-    return cats.map((c) => ({ bp: c.key, items: matches.filter((e) => e.body_part === c.key && !e.is_rehab) })).filter(
+    return cats.map((c) => ({ bp: c.key, items: matches.filter((e) => e.body_parts.includes(c.key) && !e.is_rehab) })).filter(
       (g) => g.items.length > 0,
     )
   }, [exercises, q, cats])

@@ -67,6 +67,21 @@
 .log-chip.is-selected { border-color: var(--accent); color: var(--on-accent); background: var(--accent); box-shadow: none; }
 .log-chip.rehab { border-left: 3px solid var(--ice); }
 
+/* Multi-select body-part chips in the add/edit exercise dialogs. */
+.log-cat-pick { display: flex; flex-wrap: wrap; gap: 6px; }
+.log-cat {
+  padding: 6px 11px;
+  font: 12px/1 var(--mono);
+  color: var(--text);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.log-cat:hover { border-color: var(--accent); color: var(--text-bright); }
+.log-cat.on { border-color: var(--accent); color: var(--on-accent); background: var(--accent); }
+
 /* rehab knowledge card (shown when a rehab exercise is selected) */
 .log-rehab-know {
   display: flex; flex-direction: column; gap: 4px;

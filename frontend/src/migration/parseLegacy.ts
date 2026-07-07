@@ -31,7 +31,7 @@ function seededUuid(seed: string): string {
 
 // ── output shapes (business fields; importer stamps user_id/updated_at) ──
 export interface DraftExercise {
-  id: string; name_zh: string; name_en: string; body_part: BodyPart
+  id: string; name_zh: string; name_en: string; body_parts: BodyPart[]
   measure_type: MeasureType; assisted: boolean; is_custom: boolean
   name_locked: boolean; needs_translation: boolean; default_per_side: boolean; deleted: boolean
 }
@@ -300,7 +300,7 @@ export function parseLegacyCsv(csv: string): ParseResult {
       // Movements that are inherently per-side (unilateral) — used as the default toggle.
       const perSideMovement = perSide || /单腿|单臂|单侧|保加利亚|弓步|分腿|箭步|侧平举|哑铃.*(弯举|推举)/.test(canon)
       exercises.set(canon, {
-        id: exId, name_zh: canon, name_en: '', body_part: bodyPart, measure_type: measureType,
+        id: exId, name_zh: canon, name_en: '', body_parts: [bodyPart], measure_type: measureType,
         assisted: /助力|辅助/.test(canon), is_custom: true, name_locked: false,
         needs_translation: true, default_per_side: perSideMovement, deleted: false,
       })

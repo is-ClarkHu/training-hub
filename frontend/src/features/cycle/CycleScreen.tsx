@@ -212,7 +212,7 @@ function CycleDaysEditor({
     <div className="cyc-editor">
       <input className="th-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="cycle name" />
       {days.map((d, i) => {
-        const dayExercises = exercises.filter((e) => !e.is_warmup && !e.is_rehab && d.body_parts.includes(e.body_part))
+        const dayExercises = exercises.filter((e) => !e.is_warmup && !e.is_rehab && e.body_parts.some((bp) => d.body_parts.includes(bp)))
         const warmups = exercises.filter((e) => e.is_warmup)
         return (
           <div key={i} className="cyc-edit-day">

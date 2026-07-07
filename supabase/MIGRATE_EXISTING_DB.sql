@@ -12,6 +12,12 @@ alter table public.exercises  add column if not exists is_warmup        boolean 
 alter table public.exercises  drop constraint if exists exercises_body_part_check;
 alter table public.injuries   drop constraint if exists injuries_body_part_check;
 
+-- An exercise can belong to multiple categories — body_part → body_parts text[].
+alter table public.exercises  add column if not exists body_parts text[] not null default '{}';
+update public.exercises set body_parts = array[body_part]
+  where body_part is not null and body_parts = '{}';
+alter table public.exercises  drop column if exists body_part;
+
 -- Sports redesign: per-sport custom fields (replaces fixed 4 tiers) + session attributes
 alter table public.sports          add column if not exists fields      jsonb not null default '[]'::jsonb;
 alter table public.sport_sessions  add column if not exists attributes  jsonb not null default '{}'::jsonb;

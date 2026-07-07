@@ -30,7 +30,7 @@ export function RehabExerciseDialog({
   const cats = useCategories()
   const [nameZh, setNameZh] = useState(exercise?.name_zh ?? '')
   const [nameEn, setNameEn] = useState(exercise?.name_en ?? '')
-  const [bodyPart, setBodyPart] = useState<BodyPart>(exercise?.body_part ?? cats[0]?.key ?? 'legs')
+  const [bodyPart, setBodyPart] = useState<BodyPart>(exercise?.body_parts[0] ?? cats[0]?.key ?? 'legs')
   const [measureType, setMeasureType] = useState<MeasureType>(exercise?.measure_type ?? 'reps_only')
   const [purposeZh, setPurposeZh] = useState(exercise?.rehab_purpose_zh ?? '')
   const [purposeEn, setPurposeEn] = useState(exercise?.rehab_purpose_en ?? '')
@@ -90,7 +90,7 @@ export function RehabExerciseDialog({
     const fields = {
       name_zh: zh,
       name_en: en,
-      body_part: bodyPart,
+      body_parts: [bodyPart],
       measure_type: measureType,
       rehab_purpose_zh: purposeZh.trim(),
       rehab_purpose_en: purposeEn.trim(),

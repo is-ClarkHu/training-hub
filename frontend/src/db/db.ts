@@ -41,7 +41,7 @@ export class TrainingHubDB extends Dexie {
   constructor() {
     super('training-hub')
     this.version(1).stores({
-      exercises: 'id, body_part, measure_type, updated_at',
+      exercises: 'id, body_part, measure_type, updated_at', // v3 migrates body_part → *body_parts
       workout_entries: 'id, date, exercise_id, injury_id, cycle_day_label, updated_at',
       sets: 'id, entry_id, updated_at',
       sports: 'id, updated_at',
@@ -58,6 +58,20 @@ export class TrainingHubDB extends Dexie {
     this.version(2).stores({
       injury_photos: 'id, injury_id, created_at',
     })
+    // v3: an exercise can belong to multiple categories — single `body_part`
+    // becomes a multiEntry `body_parts` array. Migrate each row in place.
+    this.version(3)
+      .stores({
+        exercises: 'id, *body_parts, measure_type, updated_at',
+      })
+      .upgrade(async (tx) => {
+        await tx.table('exercises').toCollection().modify((e: Record<string, unknown>) => {
+          if (!Array.isArray(e.body_parts)) {
+            e.body_parts = e.body_part != null ? [e.body_part] : []
+          }
+          delete e.body_part
+        })
+      })
   }
 }
 

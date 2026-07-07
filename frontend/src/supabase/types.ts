@@ -143,7 +143,7 @@ export interface InjuryAssessment {
 export interface Exercise extends SyncFields {
   name_zh: string
   name_en: string
-  body_part: BodyPart
+  body_parts: BodyPart[]  // an exercise can belong to multiple categories (§6B)
   measure_type: MeasureType
   assisted: boolean      // lower weight = harder; UI flips the progression narrative
   is_custom: boolean

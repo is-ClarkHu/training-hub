@@ -35,7 +35,7 @@ export function RehabLibrary({ lang }: { lang: TranslationTarget }) {
         <p className="inj-empty">{lang === 'zh' ? '还没有康复动作。' : 'No rehab exercises yet.'}</p>
       ) : (
         cats.map((c) => {
-          const items = exercises.filter((e) => e.body_part === c.key)
+          const items = exercises.filter((e) => e.body_parts.includes(c.key))
           if (items.length === 0) return null
           return (
             <div key={c.key} className="rehab-group">

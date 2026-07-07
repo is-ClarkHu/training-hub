@@ -31,7 +31,9 @@ export function EditExerciseDialog({
   const cats = useCategories()
   const [nameZh, setNameZh] = useState(exercise.name_zh)
   const [nameEn, setNameEn] = useState(exercise.name_en)
-  const [bodyPart, setBodyPart] = useState<BodyPart>(exercise.body_part)
+  const [bodyParts, setBodyParts] = useState<BodyPart[]>(exercise.body_parts)
+  const toggleBodyPart = (k: BodyPart) =>
+    setBodyParts((ps) => (ps.includes(k) ? ps.filter((p) => p !== k) : [...ps, k]))
   const [measureType, setMeasureType] = useState<MeasureType>(exercise.measure_type)
   const [perSide, setPerSide] = useState(exercise.default_per_side ?? false)
   const [mergeTarget, setMergeTarget] = useState('')
@@ -50,7 +52,7 @@ export function EditExerciseDialog({
     await updateExercise(exercise.id, {
       name_zh: nameZh.trim(),
       name_en: nameEn.trim(),
-      body_part: bodyPart,
+      body_parts: bodyParts,
       measure_type: measureType,
       default_per_side: perSide,
       name_locked: true,
@@ -92,19 +94,21 @@ export function EditExerciseDialog({
             <input className="th-input" value={nameEn} onChange={(e) => setNameEn(e.target.value)} />
           </div>
         </div>
-        <div className="log-grid2">
-          <div className="log-field">
-            <label className="th-label">{lang === 'zh' ? '部位' : 'Body part'}</label>
-            <select className="th-input" value={bodyPart} onChange={(e) => setBodyPart(e.target.value as BodyPart)}>
-              {cats.map((c) => (<option key={c.key} value={c.key}>{categoryLabel(c.key, lang)}</option>))}
-            </select>
+        <div className="log-field">
+          <label className="th-label">{lang === 'zh' ? '部位(可多选)' : 'Body parts (multi)'}</label>
+          <div className="log-cat-pick">
+            {cats.map((c) => (
+              <button key={c.key} type="button" className={`log-cat ${bodyParts.includes(c.key) ? 'on' : ''}`} onClick={() => toggleBodyPart(c.key)}>
+                {categoryLabel(c.key, lang)}
+              </button>
+            ))}
           </div>
-          <div className="log-field">
-            <label className="th-label">{lang === 'zh' ? '类型' : 'Measure'}</label>
-            <select className="th-input" value={measureType} onChange={(e) => setMeasureType(e.target.value as MeasureType)}>
-              {MEASURE_TYPES.map((mt) => (<option key={mt} value={mt}>{MEASURE_TYPE_LABELS[mt][lang]}</option>))}
-            </select>
-          </div>
+        </div>
+        <div className="log-field">
+          <label className="th-label">{lang === 'zh' ? '类型' : 'Measure'}</label>
+          <select className="th-input" value={measureType} onChange={(e) => setMeasureType(e.target.value as MeasureType)}>
+            {MEASURE_TYPES.map((mt) => (<option key={mt} value={mt}>{MEASURE_TYPE_LABELS[mt][lang]}</option>))}
+          </select>
         </div>
 
         <label className="log-perside">
@@ -127,7 +131,7 @@ export function EditExerciseDialog({
 
         <div className="log-dialog-actions">
           <button className="th-btn-ghost" type="button" onClick={onDelete} disabled={busy}>{lang === 'zh' ? '删除' : 'Delete'}</button>
-          <button className="th-btn" type="button" onClick={onSave} disabled={busy || (!nameZh.trim() && !nameEn.trim())}>{lang === 'zh' ? '保存' : 'Save'}</button>
+          <button className="th-btn" type="button" onClick={onSave} disabled={busy || bodyParts.length === 0 || (!nameZh.trim() && !nameEn.trim())}>{lang === 'zh' ? '保存' : 'Save'}</button>
         </div>
       </div>
     </div>

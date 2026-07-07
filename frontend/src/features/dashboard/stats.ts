@@ -37,8 +37,10 @@ export function muscleRecovery(entries: WorkoutEntry[], exById: Record<string, E
   for (const e of entries) {
     const ex = exById[e.exercise_id]
     if (!ex) continue
-    const cur = last[ex.body_part]
-    if (!cur || e.date > cur) last[ex.body_part] = e.date
+    for (const bp of ex.body_parts) {
+      const cur = last[bp]
+      if (!cur || e.date > cur) last[bp] = e.date
+    }
   }
   return categoryKeys().map((bp) => {
     const d = last[bp] ?? null
@@ -53,8 +55,10 @@ export function bodyPartCounts(entries: WorkoutEntry[], exById: Record<string, E
   for (const e of entries) {
     const ex = exById[e.exercise_id]
     if (!ex) continue
-    const i = keys.indexOf(ex.body_part)
-    if (i >= 0) counts[i] += 1
+    for (const bp of ex.body_parts) {
+      const i = keys.indexOf(bp)
+      if (i >= 0) counts[i] += 1
+    }
   }
   return counts
 }
