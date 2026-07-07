@@ -65,6 +65,16 @@
 .log-chip { cursor: pointer; transition: border-color 0.15s, color 0.15s; }
 .log-chip:hover { border-color: var(--accent); color: var(--text-bright); }
 .log-chip.is-selected { border-color: var(--accent); color: var(--on-accent); background: var(--accent); box-shadow: none; }
+.log-chip.rehab { border-left: 3px solid var(--ice); }
+
+/* rehab knowledge card (shown when a rehab exercise is selected) */
+.log-rehab-know {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 10px 12px; background: var(--bg-input);
+  border: 1px solid var(--border); border-left: 3px solid var(--ice); border-radius: 8px;
+}
+.log-rehab-know p { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text); }
+.log-rehab-know strong { color: var(--text-bright); }
 
 /* entry */
 .log-entry {

@@ -29,7 +29,7 @@ import type {
   Sport,
   TrainingCycle,
 } from '../../supabase/types'
-import { AddInjuryDialog } from '../injuries'
+import { AddInjuryDialog, bodyAreaLabel } from '../injuries'
 import { ExercisePicker } from './ExercisePicker'
 import { SetEditor } from './SetEditor'
 import { AddExerciseDialog } from './AddExerciseDialog'
@@ -142,8 +142,10 @@ export function LogScreen() {
         note_raw: note,
         note_tags: parsed.tagKeys,
         cycle_day_label: cycleDay || null,
-        injury_modified: injuryMod === 'none' ? null : injuryMod,
-        injury_id: injuryMod === 'none' ? null : injuryId || null,
+        // rehab moves link straight to the injury they rehab (no modified flag);
+        // strength lifts only link when marked reduced/paused.
+        injury_modified: sel.ex.is_rehab ? null : injuryMod === 'none' ? null : injuryMod,
+        injury_id: sel.ex.is_rehab ? injuryId || null : injuryMod === 'none' ? null : injuryId || null,
       },
       setInputs,
     )
@@ -284,32 +286,55 @@ export function LogScreen() {
         <section className="log-entry">
           <div className="log-entry-head">
             <h3>{exerciseName(sel.ex, lang)}</h3>
-            <span className="log-superset-hint">{lang === 'zh' ? '每组可标 超级组/递减/热身' : 'mark each set: superset/dropset/warmup'}</span>
+            <span className="log-superset-hint">
+              {sel.ex.is_rehab
+                ? (lang === 'zh' ? '康复动作' : 'rehab exercise')
+                : (lang === 'zh' ? '每组可标 超级组/递减/热身' : 'mark each set: superset/dropset/warmup')}
+            </span>
           </div>
+
+          {sel.ex.is_rehab && <RehabKnowledge ex={sel.ex} lang={lang} />}
 
           <SetEditor lang={lang} measureType={sel.ex.measure_type} sets={sets} onChange={setSets} />
 
           <NoteField lang={lang} note={note} setNote={setNote} tagKeys={parsed.tagKeys} />
 
-          <div className="log-field">
-            <label className="th-label">{lang === 'zh' ? '伤病影响' : 'Injury impact'}</label>
-            <div className="log-row">
-              <select className="th-input" value={injuryMod} onChange={(e) => setInjuryMod(e.target.value as InjuryModified | 'none')}>
-                <option value="none">{lang === 'zh' ? '无' : 'none'}</option>
-                <option value="reduced">{lang === 'zh' ? '减量' : 'reduced'}</option>
-                <option value="paused">{lang === 'zh' ? '暂停' : 'paused'}</option>
-              </select>
-              {injuryMod !== 'none' && activeInjuries.length > 0 && (
-                <select className="th-input" value={injuryId} onChange={(e) => setInjuryId(e.target.value)}>
-                  <option value="">{lang === 'zh' ? '关联伤病…' : 'link injury…'}</option>
-                  {activeInjuries.map((i) => (<option key={i.id} value={i.id}>{i.body_area}</option>))}
-                </select>
-              )}
-              <button className="th-btn-ghost log-suggest" type="button" onClick={() => setInjuryDialog(true)}>
-                {lang === 'zh' ? '+ 新建伤病' : '+ New injury'}
-              </button>
+          {sel.ex.is_rehab ? (
+            <div className="log-field">
+              <label className="th-label">{lang === 'zh' ? '关联伤病 (本动作康复的)' : 'For which injury'}</label>
+              <div className="log-row">
+                {activeInjuries.length > 0 && (
+                  <select className="th-input" value={injuryId} onChange={(e) => setInjuryId(e.target.value)}>
+                    <option value="">{lang === 'zh' ? '关联伤病…' : 'link injury…'}</option>
+                    {activeInjuries.map((i) => (<option key={i.id} value={i.id}>{bodyAreaLabel(i, lang)}</option>))}
+                  </select>
+                )}
+                <button className="th-btn-ghost log-suggest" type="button" onClick={() => setInjuryDialog(true)}>
+                  {lang === 'zh' ? '+ 新建伤病' : '+ New injury'}
+                </button>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="log-field">
+              <label className="th-label">{lang === 'zh' ? '伤病影响' : 'Injury impact'}</label>
+              <div className="log-row">
+                <select className="th-input" value={injuryMod} onChange={(e) => setInjuryMod(e.target.value as InjuryModified | 'none')}>
+                  <option value="none">{lang === 'zh' ? '无' : 'none'}</option>
+                  <option value="reduced">{lang === 'zh' ? '减量' : 'reduced'}</option>
+                  <option value="paused">{lang === 'zh' ? '暂停' : 'paused'}</option>
+                </select>
+                {injuryMod !== 'none' && activeInjuries.length > 0 && (
+                  <select className="th-input" value={injuryId} onChange={(e) => setInjuryId(e.target.value)}>
+                    <option value="">{lang === 'zh' ? '关联伤病…' : 'link injury…'}</option>
+                    {activeInjuries.map((i) => (<option key={i.id} value={i.id}>{bodyAreaLabel(i, lang)}</option>))}
+                  </select>
+                )}
+                <button className="th-btn-ghost log-suggest" type="button" onClick={() => setInjuryDialog(true)}>
+                  {lang === 'zh' ? '+ 新建伤病' : '+ New injury'}
+                </button>
+              </div>
+            </div>
+          )}
 
           <button className="th-btn" type="button" onClick={saveExercise} disabled={!canSaveExercise}>
             {saving ? 'Saving…' : lang === 'zh' ? '保存' : 'Save exercise'}
@@ -378,6 +403,20 @@ export function LogScreen() {
       {injuryDialog && (
         <AddInjuryDialog lang={lang} onSaved={onInjuryCreated} onClose={() => setInjuryDialog(false)} />
       )}
+    </div>
+  )
+}
+
+// Read-only knowledge card shown when a rehab exercise is selected in Log.
+function RehabKnowledge({ ex, lang }: { ex: Exercise; lang: 'en' | 'zh' }) {
+  const purpose = (lang === 'zh' ? ex.rehab_purpose_zh : ex.rehab_purpose_en) || ex.rehab_purpose_zh || ex.rehab_purpose_en
+  const cues = (lang === 'zh' ? ex.rehab_cues_zh : ex.rehab_cues_en) || ex.rehab_cues_zh || ex.rehab_cues_en
+  if (!purpose && !cues && !ex.rehab_dosage) return null
+  return (
+    <div className="log-rehab-know">
+      {purpose && <p><strong>{lang === 'zh' ? '作用' : 'Purpose'}:</strong> {purpose}</p>}
+      {cues && <p><strong>{lang === 'zh' ? '要领/注意' : 'Cues'}:</strong> {cues}</p>}
+      {ex.rehab_dosage && <p><strong>{lang === 'zh' ? '剂量' : 'Dosage'}:</strong> {ex.rehab_dosage}</p>}
     </div>
   )
 }

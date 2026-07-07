@@ -36,10 +36,17 @@ export function ExercisePicker({
     const matches = exercises.filter(
       (e) => !q || e.name_zh.toLowerCase().includes(q) || e.name_en.toLowerCase().includes(q),
     )
-    return cats.map((c) => ({ bp: c.key, items: matches.filter((e) => e.body_part === c.key) })).filter(
+    // Rehab moves get their own group (below) — keep them out of the body-part groups.
+    return cats.map((c) => ({ bp: c.key, items: matches.filter((e) => e.body_part === c.key && !e.is_rehab) })).filter(
       (g) => g.items.length > 0,
     )
   }, [exercises, q, cats])
+  const rehabMatches = useMemo(
+    () => exercises.filter(
+      (e) => e.is_rehab && (!q || e.name_zh.toLowerCase().includes(q) || e.name_en.toLowerCase().includes(q)),
+    ),
+    [exercises, q],
+  )
   const sportMatches = sports.filter(
     (s) => !q || s.name_zh.toLowerCase().includes(q) || s.name_en.toLowerCase().includes(q),
   )
@@ -76,6 +83,23 @@ export function ExercisePicker({
                     onClick={() => onSelectSport(s)}
                   >
                     {sportLabel(s, lang)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {rehabMatches.length > 0 && (
+            <div className="log-group">
+              <span className="log-group-label">{lang === 'zh' ? '康复' : 'Rehab'}</span>
+              <div className="log-chips">
+                {rehabMatches.map((ex) => (
+                  <button
+                    key={ex.id}
+                    type="button"
+                    className={`log-chip rehab ${selectedId === ex.id ? 'is-selected' : ''}`}
+                    onClick={() => onSelect(ex)}
+                  >
+                    {exerciseName(ex, lang)}
                   </button>
                 ))}
               </div>

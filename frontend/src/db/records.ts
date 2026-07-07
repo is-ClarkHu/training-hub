@@ -45,6 +45,12 @@ export interface NewExerciseInput {
   name_locked?: boolean
   needs_translation?: boolean
   default_per_side?: boolean
+  is_rehab?: boolean
+  rehab_purpose_zh?: string
+  rehab_purpose_en?: string
+  rehab_cues_zh?: string
+  rehab_cues_en?: string
+  rehab_dosage?: string
 }
 
 export async function createExercise(input: NewExerciseInput): Promise<Exercise> {
@@ -54,6 +60,7 @@ export async function createExercise(input: NewExerciseInput): Promise<Exercise>
     is_custom: true,
     name_locked: false,
     needs_translation: false,
+    is_rehab: false,
     ...input,
   }
   await db.exercises.add(row)
@@ -67,7 +74,7 @@ export async function getExercises(): Promise<Exercise[]> {
 
 export async function updateExercise(
   id: string,
-  patch: Partial<Pick<Exercise, 'name_zh' | 'name_en' | 'body_part' | 'measure_type' | 'assisted' | 'name_locked' | 'needs_translation' | 'default_per_side'>>,
+  patch: Partial<Pick<Exercise, 'name_zh' | 'name_en' | 'body_part' | 'measure_type' | 'assisted' | 'name_locked' | 'needs_translation' | 'default_per_side' | 'is_rehab' | 'rehab_purpose_zh' | 'rehab_purpose_en' | 'rehab_cues_zh' | 'rehab_cues_en' | 'rehab_dosage'>>,
 ): Promise<void> {
   const e = await db.exercises.get(id)
   if (e) await db.exercises.put({ ...e, ...patch, updated_at: nowIso() })
@@ -256,7 +263,9 @@ export async function updateSportSession(
 
 // ── injuries (§4.8, §6A) ─────────────────────────────────────
 export interface NewInjuryInput {
-  body_area: string
+  body_area?: string
+  body_area_zh?: string
+  body_area_en?: string
   body_part?: BodyPart | null
   laterality?: InjuryLaterality | null
   injury_type?: InjuryType | null
@@ -297,6 +306,9 @@ function normalizeInjury(raw: Injury): Injury {
   const noteRaw = raw.note_raw ?? ''
   const note_zh = raw.note_zh ?? (HAS_CJK.test(noteRaw) ? noteRaw : '')
   const note_en = raw.note_en ?? (HAS_CJK.test(noteRaw) ? '' : noteRaw)
+  const areaRaw = raw.body_area ?? ''
+  const body_area_zh = raw.body_area_zh ?? (HAS_CJK.test(areaRaw) ? areaRaw : '')
+  const body_area_en = raw.body_area_en ?? (HAS_CJK.test(areaRaw) ? '' : areaRaw)
   const checkpoints =
     raw.checkpoints && raw.checkpoints.length > 0
       ? raw.checkpoints
@@ -304,6 +316,9 @@ function normalizeInjury(raw: Injury): Injury {
   return {
     ...raw,
     status,
+    body_area: areaRaw || body_area_zh || body_area_en,
+    body_area_zh,
+    body_area_en,
     laterality: raw.laterality ?? null,
     injury_type: raw.injury_type ?? null,
     scenario: raw.scenario ?? null,
@@ -318,6 +333,9 @@ function normalizeInjury(raw: Injury): Injury {
 export async function createInjury(input: NewInjuryInput): Promise<Injury> {
   const base = {
     ...syncFields(),
+    body_area: '',
+    body_area_zh: '',
+    body_area_en: '',
     body_part: null,
     laterality: null,
     injury_type: null,
@@ -333,6 +351,7 @@ export async function createInjury(input: NewInjuryInput): Promise<Injury> {
   }
   const row: Injury = {
     ...base,
+    body_area: base.body_area || base.body_area_zh || base.body_area_en,
     checkpoints: [{ status: base.status, date: base.started_on }],
   }
   await db.injuries.add(row)
@@ -355,12 +374,14 @@ export async function getInjuries(): Promise<Injury[]> {
 
 export async function updateInjury(
   id: string,
-  patch: Partial<Pick<Injury, 'body_area' | 'body_part' | 'laterality' | 'injury_type' | 'scenario' | 'started_on' | 'status' | 'resolved_on' | 'severity' | 'note_raw' | 'note_zh' | 'note_en' | 'attachments'>>,
+  patch: Partial<Pick<Injury, 'body_area_zh' | 'body_area_en' | 'body_part' | 'laterality' | 'injury_type' | 'scenario' | 'started_on' | 'status' | 'resolved_on' | 'severity' | 'note_raw' | 'note_zh' | 'note_en' | 'attachments'>>,
 ): Promise<void> {
   const stored = await db.injuries.get(id)
   if (!stored) return
   const cur = normalizeInjury(stored)
   const next: Injury = { ...cur, ...patch, updated_at: nowIso() }
+  // keep legacy body_area in step with the bilingual pair
+  next.body_area = next.body_area_zh || next.body_area_en || next.body_area
 
   // Record a checkpoint whenever the stage changes (§6A) — the middle stages are
   // what the user manages, so the transition history is the point.

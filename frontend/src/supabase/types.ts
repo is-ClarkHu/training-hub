@@ -129,6 +129,14 @@ export interface Exercise extends SyncFields {
   needs_translation: boolean
   default_per_side?: boolean // this movement is inherently per-side (prefills the toggle)
   is_warmup?: boolean        // classified as a warmup movement (own group in the picker)
+  // ── rehab library (§6A Phase 2). is_rehab is orthogonal to body_part — a rehab
+  //    move still belongs to an anatomical part (e.g. knee) but carries knowledge. ──
+  is_rehab?: boolean
+  rehab_purpose_zh?: string  // what it helps / trains (bilingual)
+  rehab_purpose_en?: string
+  rehab_cues_zh?: string     // how to perform / precautions (bilingual)
+  rehab_cues_en?: string
+  rehab_dosage?: string      // dosage guidance, e.g. '3×15 / daily'
 }
 
 export interface WorkoutEntry extends SyncFields {
@@ -195,7 +203,9 @@ export interface Profile extends SyncFields {
 }
 
 export interface Injury extends SyncFields {
-  body_area: string                  // free text, e.g. 'left hamstring'
+  body_area: string                  // legacy raw free text, e.g. 'left hamstring'
+  body_area_zh: string               // bilingual body area — resolved by UI language (§14)
+  body_area_en: string
   body_part: BodyPart | null         // optional category link
   laterality: InjuryLaterality | null // left / right / bilateral
   injury_type: InjuryType | null     // sprain / strain / contusion / overuse / fracture

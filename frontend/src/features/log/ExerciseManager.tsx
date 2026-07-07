@@ -29,7 +29,7 @@ export function ExerciseManager({ lang, onChanged }: { lang: TranslationTarget; 
     <div className="set-ai">
       <p className="set-desc">{lang === 'zh' ? '编辑动作名/部位/类型,或把两个相同的动作合并。改动会自动同步到历史与图表。' : 'Edit an exercise’s name/part/type, or merge duplicates. Changes propagate to History and charts.'}</p>
       {cats.map((c) => {
-        const items = exercises.filter((e) => e.body_part === c.key)
+        const items = exercises.filter((e) => e.body_part === c.key && !e.is_rehab)
         if (items.length === 0) return null
         return (
           <div key={c.key} className="set-ex-group">

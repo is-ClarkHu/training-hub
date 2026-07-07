@@ -19,8 +19,11 @@ alter table public.injuries
     'newly_occurred','observing','treating','rehab_training','returning','recovered','relapsed'
   ));
 
--- 2. new event columns.
+-- 2. new event columns. Free-text fields (body area, note) are stored BILINGUALLY
+--    so a UI language switch never shows the wrong language (§14).
 alter table public.injuries
+  add column if not exists body_area_zh text not null default '',
+  add column if not exists body_area_en text not null default '',
   add column if not exists laterality  text check (laterality in ('left','right','bilateral')),
   add column if not exists injury_type text check (injury_type in ('sprain','strain','contusion','overuse','fracture','other')),
   add column if not exists scenario    text check (scenario in ('running','strength','competition','daily','other')),
@@ -29,7 +32,12 @@ alter table public.injuries
   add column if not exists checkpoints jsonb not null default '[]'::jsonb,
   add column if not exists attachments jsonb not null default '[]'::jsonb;
 
--- 3. backfill bilingual note + an initial checkpoint from existing rows.
+-- 3. backfill bilingual body area + note + an initial checkpoint from existing rows.
+update public.injuries
+  set body_area_zh = case when body_area ~ '[一-鿿]' then body_area else body_area_zh end,
+      body_area_en = case when body_area ~ '[一-鿿]' then body_area_en else body_area end
+  where body_area <> '' and body_area_zh = '' and body_area_en = '';
+
 update public.injuries
   set note_zh = case when note_raw ~ '[一-鿿]' then note_raw else note_zh end,
       note_en = case when note_raw ~ '[一-鿿]' then note_en else note_raw end

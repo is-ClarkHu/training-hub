@@ -19,12 +19,14 @@ import {
 import { AddInjuryDialog } from './AddInjuryDialog'
 import { ActiveInjuryBanner } from './ActiveInjuryBanner'
 import { RehabTimeline } from './RehabTimeline'
+import { RehabLibrary } from './RehabLibrary'
 import {
   INJURY_LATERALITY_LABELS,
   INJURY_SCENARIO_LABELS,
   INJURY_STATUSES,
   INJURY_STATUS_LABELS,
   INJURY_TYPE_LABELS,
+  bodyAreaLabel,
   daysSince,
 } from './util'
 import './injuries.css'
@@ -36,6 +38,7 @@ export function InjuriesScreen() {
   const [sessions, setSessions] = useState<SportSession[]>([])
   const [dialog, setDialog] = useState<{ open: boolean; injury?: Injury }>({ open: false })
   const [loading, setLoading] = useState(true)
+  const [showLibrary, setShowLibrary] = useState(false)
 
   const reload = useCallback(async () => {
     const [inj, ents, sess] = await Promise.all([getInjuries(), getEntries(), getSportSessions()])
@@ -83,7 +86,7 @@ export function InjuriesScreen() {
             return (
               <div key={i.id} className={`inj-card status-${i.status}`}>
                 <div className="inj-card-head">
-                  <span className="inj-area">{i.body_area}</span>
+                  <span className="inj-area">{bodyAreaLabel(i, lang)}</span>
                   <span className={`inj-status-badge ${i.status}`}>{INJURY_STATUS_LABELS[i.status][lang]}</span>
                   <div className="inj-card-actions">
                     <button className="hist-link" type="button" onClick={() => setDialog({ open: true, injury: i })}>edit</button>
@@ -123,6 +126,13 @@ export function InjuriesScreen() {
           })}
         </div>
       )}
+
+      <div className="inj-lib-section">
+        <button className="th-btn-ghost inj-lib-toggle" type="button" onClick={() => setShowLibrary((v) => !v)}>
+          {showLibrary ? '▾ ' : '▸ '}{lang === 'zh' ? '康复动作库' : 'Rehab library'}
+        </button>
+        {showLibrary && <RehabLibrary lang={lang} />}
+      </div>
 
       {dialog.open && (
         <AddInjuryDialog

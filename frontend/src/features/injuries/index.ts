@@ -1,3 +1,5 @@
 export { InjuriesScreen } from './InjuriesScreen'
 export { ActiveInjuryBanner } from './ActiveInjuryBanner'
 export { AddInjuryDialog } from './AddInjuryDialog'
+export { RehabLibrary } from './RehabLibrary'
+export { bodyAreaLabel } from './util'

@@ -1,9 +1,11 @@
 import type {
+  Injury,
   InjuryLaterality,
   InjuryScenario,
   InjuryStatus,
   InjuryType,
 } from '../../supabase/types'
+import type { TranslationTarget } from '../../translation'
 
 // Lifecycle order (§6A). 'relapsed' is a branch off the main line — it re-opens a
 // recovered injury — so it lives at the end of the ordered stage list.
@@ -60,6 +62,16 @@ export const INJURY_LATERALITIES = Object.keys(INJURY_LATERALITY_LABELS) as Inju
 /** True for any stage that still needs managing (everything but recovered). */
 export function isActiveInjury(status: InjuryStatus): boolean {
   return status !== 'recovered'
+}
+
+/** Body area in the current UI language, falling back across the pair + legacy (§14). */
+export function bodyAreaLabel(
+  i: Pick<Injury, 'body_area_zh' | 'body_area_en' | 'body_area'>,
+  lang: TranslationTarget,
+): string {
+  return lang === 'zh'
+    ? i.body_area_zh || i.body_area_en || i.body_area || ''
+    : i.body_area_en || i.body_area_zh || i.body_area || ''
 }
 
 /** Whole days from an ISO date to today (never negative). */

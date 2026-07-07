@@ -139,4 +139,20 @@
 .inj-timeline.relapsed .inj-stage.done:not(:last-child)::after { background: var(--danger); }
 .inj-relapse-flag { font: 600 12px/1.4 var(--mono); color: var(--danger); }
 
+/* rehab library (inside Injuries tab) */
+.inj-lib-section { border-top: 1px solid var(--border); padding-top: 12px; }
+.inj-lib-toggle { width: auto; padding: 6px 10px; font: 600 12px/1 var(--mono); }
+.rehab-lib { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; }
+.rehab-group { display: flex; flex-direction: column; gap: 6px; }
+.rehab-list { display: flex; flex-direction: column; gap: 6px; }
+.rehab-item {
+  display: flex; flex-direction: column; gap: 3px; text-align: left;
+  padding: 10px 12px; background: var(--bg-panel); border: 1px solid var(--border);
+  border-radius: 8px; border-left: 3px solid var(--ice); cursor: pointer;
+}
+.rehab-item-name { font: 600 14px/1.2 var(--mono); color: var(--text-bright); }
+.rehab-item-purpose { font-size: 12px; color: var(--text); }
+.rehab-item-meta { display: flex; flex-wrap: wrap; gap: 10px; font: 11px/1.4 var(--mono); color: var(--text-dim); }
+.rehab-dosage { color: var(--teal); }
+
 @media (max-width: 520px) { .inj-grid2 { grid-template-columns: 1fr; } }

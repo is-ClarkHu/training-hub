@@ -38,7 +38,8 @@ export function AddInjuryDialog({
 }) {
   const editing = !!injury
   const cats = useCategories()
-  const [bodyArea, setBodyArea] = useState(injury?.body_area ?? '')
+  const [bodyAreaZh, setBodyAreaZh] = useState(injury?.body_area_zh ?? '')
+  const [bodyAreaEn, setBodyAreaEn] = useState(injury?.body_area_en ?? '')
   const [bodyPart, setBodyPart] = useState<BodyPart | ''>(injury?.body_part ?? '')
   const [laterality, setLaterality] = useState<InjuryLaterality | ''>(injury?.laterality ?? '')
   const [injuryType, setInjuryType] = useState<InjuryType | ''>(injury?.injury_type ?? '')
@@ -50,32 +51,50 @@ export function AddInjuryDialog({
   const [noteEn, setNoteEn] = useState(injury?.note_en ?? '')
   const [attachments, setAttachments] = useState<InjuryAttachmentRef[]>(injury?.attachments ?? [])
   const [busy, setBusy] = useState(false)
-  const [translating, setTranslating] = useState(false)
+  const [translatingArea, setTranslatingArea] = useState(false)
+  const [translatingNote, setTranslatingNote] = useState(false)
   const [hint, setHint] = useState<string | null>(null)
 
-  async function onTranslate() {
+  const OFFLINE_HINT = lang === 'zh'
+    ? '自动翻译暂不可用(离线或未配 key),手动补另一语即可。'
+    : 'Auto-translate unavailable (offline or no key). Fill the other language manually.'
+
+  async function onTranslateArea() {
+    const src = (bodyAreaZh || bodyAreaEn).trim()
+    if (!src) return
+    setTranslatingArea(true)
+    setHint(null)
+    const s = await suggestInjuryNote(src)
+    setBodyAreaZh(s.note_zh)
+    setBodyAreaEn(s.note_en)
+    if (s.needsTranslation) setHint(OFFLINE_HINT)
+    setTranslatingArea(false)
+  }
+
+  async function onTranslateNote() {
     const src = (noteZh || noteEn).trim()
     if (!src) return
-    setTranslating(true)
+    setTranslatingNote(true)
     setHint(null)
     const s = await suggestInjuryNote(src)
     setNoteZh(s.note_zh)
     setNoteEn(s.note_en)
-    if (s.needsTranslation) {
-      setHint(lang === 'zh' ? '自动翻译暂不可用(离线或未配 key),手动补另一语即可。' : 'Auto-translate unavailable (offline or no key). Fill the other language manually.')
-    }
-    setTranslating(false)
+    if (s.needsTranslation) setHint(OFFLINE_HINT)
+    setTranslatingNote(false)
   }
 
   function setAttachment(i: number, patch: Partial<InjuryAttachmentRef>) {
     setAttachments((prev) => prev.map((a, j) => (j === i ? { ...a, ...patch } : a)))
   }
 
+  const hasArea = !!(bodyAreaZh.trim() || bodyAreaEn.trim())
+
   async function onSave() {
-    if (!bodyArea.trim()) return
+    if (!hasArea) return
     setBusy(true)
     const fields = {
-      body_area: bodyArea.trim(),
+      body_area_zh: bodyAreaZh.trim(),
+      body_area_en: bodyAreaEn.trim(),
       body_part: bodyPart || null,
       laterality: laterality || null,
       injury_type: injuryType || null,
@@ -104,9 +123,16 @@ export function AddInjuryDialog({
         <h3>{editing ? (lang === 'zh' ? '编辑伤病' : 'Edit injury') : (lang === 'zh' ? '登记伤病' : 'Add injury')}</h3>
 
         <div className="inj-field">
-          <label className="th-label" htmlFor="inj-area">{lang === 'zh' ? '受伤部位' : 'Body area'}</label>
-          <input id="inj-area" className="th-input" value={bodyArea} onChange={(e) => setBodyArea(e.target.value)}
-            placeholder={lang === 'zh' ? '例如 左腿后侧 / left hamstring' : 'e.g. left hamstring'} autoFocus />
+          <div className="inj-note-head">
+            <label className="th-label">{lang === 'zh' ? '受伤部位 (双语)' : 'Body area (bilingual)'}</label>
+            <button className="th-btn-ghost inj-translate" type="button" onClick={onTranslateArea} disabled={translatingArea || !hasArea}>
+              {translatingArea ? '…' : (lang === 'zh' ? '翻译' : 'Translate')}
+            </button>
+          </div>
+          <input className="th-input" value={bodyAreaZh} onChange={(e) => setBodyAreaZh(e.target.value)}
+            placeholder={lang === 'zh' ? '中文,如 左腿后侧' : 'Chinese, e.g. 左腿后侧'} autoFocus />
+          <input className="th-input" value={bodyAreaEn} onChange={(e) => setBodyAreaEn(e.target.value)}
+            placeholder={lang === 'zh' ? '英文,如 left hamstring' : 'English, e.g. left hamstring'} />
         </div>
 
         <div className="inj-grid2">
@@ -179,8 +205,8 @@ export function AddInjuryDialog({
         <div className="inj-field">
           <div className="inj-note-head">
             <label className="th-label">{lang === 'zh' ? '记录 (双语)' : 'Note (bilingual)'}</label>
-            <button className="th-btn-ghost inj-translate" type="button" onClick={onTranslate} disabled={translating || (!noteZh.trim() && !noteEn.trim())}>
-              {translating ? '…' : (lang === 'zh' ? '翻译' : 'Translate')}
+            <button className="th-btn-ghost inj-translate" type="button" onClick={onTranslateNote} disabled={translatingNote || (!noteZh.trim() && !noteEn.trim())}>
+              {translatingNote ? '…' : (lang === 'zh' ? '翻译' : 'Translate')}
             </button>
           </div>
           <input className="th-input" value={noteZh} onChange={(e) => setNoteZh(e.target.value)}
@@ -214,7 +240,7 @@ export function AddInjuryDialog({
 
         <div className="inj-dialog-actions">
           <button className="th-btn-ghost" type="button" onClick={onClose}>{lang === 'zh' ? '取消' : 'Cancel'}</button>
-          <button className="th-btn" type="button" onClick={onSave} disabled={busy || !bodyArea.trim()}>
+          <button className="th-btn" type="button" onClick={onSave} disabled={busy || !hasArea}>
             {editing ? (lang === 'zh' ? '保存' : 'Save') : (lang === 'zh' ? '登记' : 'Create')}
           </button>
         </div>
