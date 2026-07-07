@@ -26,7 +26,8 @@ import {
   type WorkoutEntry,
 } from '../../supabase/types'
 import { getCategories, categoryLabel } from '../../categories'
-import { ActiveInjuryBanner } from '../injuries'
+import { ActiveInjuryBanner, bodyAreaLabel } from '../injuries'
+import { INJURY_STATUS_LABELS, daysBetween, daysSince } from '../injuries/util'
 import { SportCharts, sportName } from '../sports'
 import { exerciseName } from '../log/util'
 import {
@@ -117,6 +118,38 @@ export function DashboardScreen() {
   }, [injuries, sessions, entries])
   const bwVol = useMemo(() => bodyweightVolume(entries, setMap, exById), [entries, setMap, exById])
 
+  // injury / rehab overview (§6A dashboard)
+  const injuryStats = useMemo(() => {
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - 14)
+    const cutoffStr = cutoff.toISOString().slice(0, 10)
+    const active = injuries
+      .filter((i) => i.status !== 'recovered')
+      .map((i) => {
+        const latest = i.assessments[i.assessments.length - 1]
+        const rehabLogs = entries.filter(
+          (e) => e.injury_id === i.id && !e.deleted && exById[e.exercise_id]?.is_rehab && e.date >= cutoffStr,
+        ).length
+        return {
+          id: i.id,
+          label: bodyAreaLabel(i, lang),
+          status: i.status,
+          days: daysSince(i.started_on),
+          pain: latest ? latest.pain : null,
+          plan: i.rehab_plan_exercise_ids.length,
+          rehabLogs,
+        }
+      })
+    const recovered = injuries.filter((i) => i.status === 'recovered')
+    const recoveryDays = recovered
+      .filter((i) => i.resolved_on)
+      .map((i) => daysBetween(i.started_on, i.resolved_on!))
+    const avgRecovery = recoveryDays.length
+      ? Math.round(recoveryDays.reduce((a, b) => a + b, 0) / recoveryDays.length)
+      : null
+    return { active, recoveredCount: recovered.length, avgRecovery }
+  }, [injuries, entries, exById, lang])
+
   const kpis = useMemo(() => {
     const gymDays = new Set(entries.map((e) => e.date)).size
     const trainingDays = new Set([
@@ -206,6 +239,40 @@ export function DashboardScreen() {
           ))}
         </div>
       </section>
+
+      {(injuryStats.active.length > 0 || injuryStats.recoveredCount > 0) && (
+        <section className="dash-injury">
+          <div className="th-sectitle">
+            {lang === 'zh' ? '伤病与康复' : 'Injury & rehab'}
+            <small className="dash-sub">
+              {injuryStats.recoveredCount > 0 && `${injuryStats.recoveredCount} ${lang === 'zh' ? '已康复' : 'recovered'}`}
+              {injuryStats.avgRecovery != null && ` · ${lang === 'zh' ? '平均' : 'avg'} ${injuryStats.avgRecovery}${lang === 'zh' ? '天康复' : 'd'}`}
+            </small>
+          </div>
+          {injuryStats.active.length === 0 ? (
+            <p className="dash-empty">{lang === 'zh' ? '当前无活动伤病 🎉' : 'No active injuries 🎉'}</p>
+          ) : (
+            <div className="dash-injury-grid">
+              {injuryStats.active.map((a) => (
+                <div key={a.id} className="dash-injury-card">
+                  <div className="dash-injury-head">
+                    <span className="dash-injury-name">{a.label}</span>
+                    <span className={`inj-status-badge ${a.status}`}>{INJURY_STATUS_LABELS[a.status][lang]}</span>
+                  </div>
+                  <div className="dash-injury-meta">
+                    <span>{a.days}{lang === 'zh' ? '天' : 'd'}</span>
+                    <span className={a.pain != null && a.pain >= 5 ? 'dash-injury-pain hi' : 'dash-injury-pain'}>
+                      {lang === 'zh' ? '疼痛' : 'pain'} {a.pain == null ? '—' : `${a.pain}/10`}
+                    </span>
+                    <span>{lang === 'zh' ? '计划' : 'plan'} {a.plan}</span>
+                    <span className="inj-stat">{a.rehabLogs} {lang === 'zh' ? '次康复(14天)' : 'rehab (14d)'}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       <div className="dash-charts">
         <div className="dash-chart">

@@ -7,6 +7,7 @@ import {
   getSportSessions,
   updateInjury,
   softDeleteInjury,
+  getInjuryPhotosByIds,
 } from '../../db'
 import { useLanguage } from '../../i18n'
 import { categoryLabel } from '../../categories'
@@ -39,12 +40,16 @@ export function InjuriesScreen() {
   const [dialog, setDialog] = useState<{ open: boolean; injury?: Injury }>({ open: false })
   const [loading, setLoading] = useState(true)
   const [showLibrary, setShowLibrary] = useState(false)
+  const [photoMap, setPhotoMap] = useState<Record<string, string>>({})
+  const [lightbox, setLightbox] = useState<string | null>(null)
 
   const reload = useCallback(async () => {
     const [inj, ents, sess] = await Promise.all([getInjuries(), getEntries(), getSportSessions()])
     setInjuries(inj)
     setEntries(ents)
     setSessions(sess)
+    const photoIds = inj.flatMap((i) => i.attachments.filter((a) => a.kind === 'photo' && a.photo_id).map((a) => a.photo_id!))
+    setPhotoMap(await getInjuryPhotosByIds(photoIds))
     setLoading(false)
   }, [])
 
@@ -107,6 +112,20 @@ export function InjuriesScreen() {
                   <p className="inj-note">{(lang === 'zh' ? i.note_zh : i.note_en) || i.note_raw}</p>
                 ) : null}
 
+                {(() => {
+                  const photos = i.attachments.filter((a) => a.kind === 'photo' && a.photo_id && photoMap[a.photo_id!])
+                  if (photos.length === 0) return null
+                  return (
+                    <div className="inj-photos inj-photos-view">
+                      {photos.map((a) => (
+                        <button key={a.photo_id} type="button" className="inj-photo-thumb" onClick={() => setLightbox(photoMap[a.photo_id!])} title={a.label}>
+                          <img src={photoMap[a.photo_id!]} alt={a.label || 'injury photo'} />
+                        </button>
+                      ))}
+                    </div>
+                  )
+                })()}
+
                 <div className="inj-status-switch" role="group" aria-label="status">
                   {INJURY_STATUSES.map((s) => (
                     <button
@@ -144,6 +163,12 @@ export function InjuriesScreen() {
           }}
           onClose={() => setDialog({ open: false })}
         />
+      )}
+
+      {lightbox && (
+        <div className="inj-lightbox" onClick={() => setLightbox(null)}>
+          <img src={lightbox} alt="injury photo" />
+        </div>
       )}
     </div>
   )

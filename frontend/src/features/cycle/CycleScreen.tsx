@@ -22,6 +22,7 @@ import {
 import { useCategories, categoryLabel } from '../../categories'
 import { muscleRecovery } from '../dashboard/stats'
 import { ExerciseManager } from '../log'
+import { RehabLoop } from '../injuries'
 import { CategoryManager } from './CategoryManager'
 import './cycle.css'
 
@@ -73,6 +74,8 @@ export function CycleScreen() {
 
   return (
     <div className="cyc-screen">
+      <RehabLoop lang={lang} />
+
       {todayNext && (
         <section className="cyc-todaynext">
           <span className="th-label">{active?.name} · today / next</span>

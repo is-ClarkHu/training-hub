@@ -11,8 +11,10 @@ import type {
   Exercise,
   ExerciseSet,
   Injury,
+  InjuryAssessment,
   InjuryAttachmentRef,
   InjuryLaterality,
+  InjuryPhoto,
   InjuryModified,
   InjuryScenario,
   InjuryStatus,
@@ -327,6 +329,8 @@ function normalizeInjury(raw: Injury): Injury {
     note_en,
     checkpoints,
     attachments: raw.attachments ?? [],
+    rehab_plan_exercise_ids: raw.rehab_plan_exercise_ids ?? [],
+    assessments: raw.assessments ?? [],
   }
 }
 
@@ -347,6 +351,8 @@ export async function createInjury(input: NewInjuryInput): Promise<Injury> {
     note_zh: '',
     note_en: '',
     attachments: [] as InjuryAttachmentRef[],
+    rehab_plan_exercise_ids: [] as string[],
+    assessments: [] as InjuryAssessment[],
     ...input,
   }
   const row: Injury = {
@@ -374,7 +380,7 @@ export async function getInjuries(): Promise<Injury[]> {
 
 export async function updateInjury(
   id: string,
-  patch: Partial<Pick<Injury, 'body_area_zh' | 'body_area_en' | 'body_part' | 'laterality' | 'injury_type' | 'scenario' | 'started_on' | 'status' | 'resolved_on' | 'severity' | 'note_raw' | 'note_zh' | 'note_en' | 'attachments'>>,
+  patch: Partial<Pick<Injury, 'body_area_zh' | 'body_area_en' | 'body_part' | 'laterality' | 'injury_type' | 'scenario' | 'started_on' | 'status' | 'resolved_on' | 'severity' | 'note_raw' | 'note_zh' | 'note_en' | 'attachments' | 'rehab_plan_exercise_ids' | 'assessments'>>,
 ): Promise<void> {
   const stored = await db.injuries.get(id)
   if (!stored) return
@@ -401,6 +407,34 @@ export async function updateInjury(
 export async function softDeleteInjury(id: string): Promise<void> {
   const i = await db.injuries.get(id)
   if (i) await db.injuries.put({ ...i, deleted: true, updated_at: nowIso() })
+}
+
+/** Append a symptom check-in (pain 0–10) to an injury (§6A Phase 3). */
+export async function addInjuryAssessment(id: string, pain: number, note = ''): Promise<void> {
+  const stored = await db.injuries.get(id)
+  if (!stored) return
+  const cur = normalizeInjury(stored)
+  const entry: InjuryAssessment = { date: today(), pain, note: note.trim() || undefined }
+  await db.injuries.put({ ...cur, assessments: [...cur.assessments, entry], updated_at: nowIso() })
+}
+
+// ── injury photos (§6A Phase 4 — local-only, never synced) ───
+/** Upsert a compressed injury photo (idempotent by id). */
+export async function putInjuryPhoto(id: string, injuryId: string, data: string): Promise<void> {
+  const existing = await db.injury_photos.get(id)
+  const row: InjuryPhoto = { id, injury_id: injuryId, data, created_at: existing?.created_at ?? nowIso() }
+  await db.injury_photos.put(row)
+}
+
+/** Map photo id → data URL for the given ids (skips missing). */
+export async function getInjuryPhotosByIds(ids: string[]): Promise<Record<string, string>> {
+  if (ids.length === 0) return {}
+  const rows = await db.injury_photos.where('id').anyOf(ids).toArray()
+  return Object.fromEntries(rows.map((r) => [r.id, r.data]))
+}
+
+export async function deleteInjuryPhoto(id: string): Promise<void> {
+  await db.injury_photos.delete(id)
 }
 
 // ── training cycle (§4.9, §6B) ───────────────────────────────

@@ -153,3 +153,16 @@
 .dash-heat-tip .tint { font: 11px var(--mono); color: var(--accent); margin-bottom: 5px; }
 .dash-heat-tip .tbody { font: 11.5px/1.45 var(--sans); color: var(--text); }
 .dash-heat-tip .tinj { margin-top: 5px; font: 700 11px var(--mono); color: var(--danger); }
+
+/* injury & rehab overview (§6A dashboard) */
+.dash-injury { display: flex; flex-direction: column; gap: 10px; }
+.dash-injury-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.dash-injury-card {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 12px; background: var(--panel); border: 1px solid var(--faint);
+  border-radius: 10px; border-left: 3px solid var(--ice, #4fd1e0);
+}
+.dash-injury-head { display: flex; align-items: center; gap: 8px; }
+.dash-injury-name { font: 600 14px/1.2 var(--mono); color: var(--text); }
+.dash-injury-meta { display: flex; flex-wrap: wrap; gap: 10px; font: 11px/1.4 var(--mono); color: var(--muted, #8b93a3); }
+.dash-injury-pain.hi { color: var(--danger); font-weight: 700; }

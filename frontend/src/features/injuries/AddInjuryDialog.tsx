@@ -1,8 +1,16 @@
 // Add / edit an injury (SPEC §4.8, §6A). An injury is an EVENT: body area +
 // laterality + type + scenario + onset + stage, a bilingual note (AI-translated,
 // like AddExerciseDialog's Suggest), and text/link attachment references.
-import { useState } from 'react'
-import { createInjury, updateInjury, today } from '../../db'
+import { useEffect, useRef, useState } from 'react'
+import {
+  createInjury,
+  updateInjury,
+  today,
+  putInjuryPhoto,
+  getInjuryPhotosByIds,
+  deleteInjuryPhoto,
+  newId,
+} from '../../db'
 import type {
   BodyPart,
   Injury,
@@ -14,6 +22,9 @@ import type {
 } from '../../supabase/types'
 import { useCategories, categoryLabel } from '../../categories'
 import { suggestInjuryNote, type TranslationTarget } from '../../translation'
+import { compressImage } from './photo'
+
+interface PhotoDraft { photo_id: string; label: string; dataUrl: string }
 import {
   INJURY_LATERALITIES,
   INJURY_LATERALITY_LABELS,
@@ -49,11 +60,55 @@ export function AddInjuryDialog({
   const [severity, setSeverity] = useState<number | ''>(injury?.severity ?? '')
   const [noteZh, setNoteZh] = useState(injury?.note_zh ?? '')
   const [noteEn, setNoteEn] = useState(injury?.note_en ?? '')
-  const [attachments, setAttachments] = useState<InjuryAttachmentRef[]>(injury?.attachments ?? [])
+  // link refs and photo refs are edited separately, merged back on save.
+  const [attachments, setAttachments] = useState<InjuryAttachmentRef[]>(
+    (injury?.attachments ?? []).filter((a) => a.kind !== 'photo'),
+  )
+  const [photos, setPhotos] = useState<PhotoDraft[]>([])
+  const pendingPhotoIds = useRef<Set<string>>(new Set())
+  const removedPhotoIds = useRef<Set<string>>(new Set())
+  const fileInput = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
   const [translatingArea, setTranslatingArea] = useState(false)
   const [translatingNote, setTranslatingNote] = useState(false)
   const [hint, setHint] = useState<string | null>(null)
+
+  // Editing: hydrate existing photo attachments with their local data URLs.
+  useEffect(() => {
+    const refs = (injury?.attachments ?? []).filter((a) => a.kind === 'photo' && a.photo_id)
+    if (refs.length === 0) return
+    void getInjuryPhotosByIds(refs.map((a) => a.photo_id!)).then((map) => {
+      setPhotos(refs.filter((a) => map[a.photo_id!]).map((a) => ({ photo_id: a.photo_id!, label: a.label, dataUrl: map[a.photo_id!] })))
+    })
+  }, [injury])
+
+  async function onPickPhotos(files: FileList | null) {
+    if (!files || files.length === 0) return
+    setBusy(true)
+    for (const file of Array.from(files)) {
+      try {
+        const dataUrl = await compressImage(file)
+        const photo_id = newId()
+        pendingPhotoIds.current.add(photo_id)
+        setPhotos((prev) => [...prev, { photo_id, label: '', dataUrl }])
+      } catch {
+        setHint(lang === 'zh' ? '图片处理失败,换一张试试。' : 'Could not process that image.')
+      }
+    }
+    if (fileInput.current) fileInput.current.value = ''
+    setBusy(false)
+  }
+  function removePhoto(i: number) {
+    setPhotos((prev) => {
+      const p = prev[i]
+      if (p && !pendingPhotoIds.current.has(p.photo_id)) removedPhotoIds.current.add(p.photo_id)
+      pendingPhotoIds.current.delete(p?.photo_id ?? '')
+      return prev.filter((_, j) => j !== i)
+    })
+  }
+  function setPhotoLabel(i: number, label: string) {
+    setPhotos((prev) => prev.map((p, j) => (j === i ? { ...p, label } : p)))
+  }
 
   const OFFLINE_HINT = lang === 'zh'
     ? '自动翻译暂不可用(离线或未配 key),手动补另一语即可。'
@@ -104,7 +159,10 @@ export function AddInjuryDialog({
       severity: severity === '' ? null : Number(severity),
       note_zh: noteZh.trim(),
       note_en: noteEn.trim(),
-      attachments: attachments.filter((a) => a.label.trim() || a.url?.trim()),
+      attachments: [
+        ...attachments.filter((a) => a.label.trim() || a.url?.trim()).map((a) => ({ ...a, kind: 'link' as const })),
+        ...photos.map((p): InjuryAttachmentRef => ({ label: p.label.trim(), kind: 'photo', photo_id: p.photo_id })),
+      ],
     }
     let saved: Injury
     if (injury) {
@@ -113,6 +171,11 @@ export function AddInjuryDialog({
     } else {
       saved = await createInjury(fields)
     }
+    // Persist photo bytes locally (never synced) + clean up removed ones.
+    for (const p of photos) {
+      if (pendingPhotoIds.current.has(p.photo_id)) await putInjuryPhoto(p.photo_id, saved.id, p.dataUrl)
+    }
+    for (const id of removedPhotoIds.current) await deleteInjuryPhoto(id)
     setBusy(false)
     onSaved(saved)
   }
@@ -236,6 +299,29 @@ export function AddInjuryDialog({
               </div>
             </div>
           ))}
+        </div>
+
+        <div className="inj-field">
+          <div className="inj-note-head">
+            <label className="th-label">{lang === 'zh' ? '照片 (本地存储,不含影像)' : 'Photos (stored locally, no imaging)'}</label>
+            <button className="th-btn-ghost inj-translate" type="button" onClick={() => fileInput.current?.click()} disabled={busy}>
+              {lang === 'zh' ? '+ 照片' : '+ Photo'}
+            </button>
+          </div>
+          <input ref={fileInput} type="file" accept="image/*" multiple hidden
+            onChange={(e) => void onPickPhotos(e.target.files)} />
+          {photos.length > 0 && (
+            <div className="inj-photos">
+              {photos.map((p, i) => (
+                <div key={p.photo_id} className="inj-photo">
+                  <img src={p.dataUrl} alt={p.label || 'injury photo'} />
+                  <button className="inj-photo-del" type="button" onClick={() => removePhoto(i)} aria-label="remove">×</button>
+                  <input className="th-input inj-photo-label" value={p.label} onChange={(e) => setPhotoLabel(i, e.target.value)}
+                    placeholder={lang === 'zh' ? '说明' : 'label'} />
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="inj-dialog-actions">

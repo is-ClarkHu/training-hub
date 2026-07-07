@@ -109,11 +109,32 @@ export interface InjuryCheckpoint {
   note?: string
 }
 
-// A text/link reference to an external artifact (exam report, imaging, photo,
-// prescription). Phase 1 stores references only — no binary upload.
+// A reference to an external artifact (exam report, photo, prescription).
+// kind 'link' = a text/URL reference (synced in the row). kind 'photo' = a
+// compressed photo whose bytes live LOCAL-ONLY in the injury_photos Dexie table
+// (not synced — keeps cloud storage cost/space down); photo_id points to it.
+// Medical imaging is intentionally unsupported (too large).
 export interface InjuryAttachmentRef {
   label: string         // e.g. 'MRI report', '处方'
-  url?: string          // optional external link
+  url?: string          // optional external link (kind 'link')
+  note?: string
+  kind?: 'link' | 'photo'
+  photo_id?: string     // local injury_photos row id (kind 'photo')
+}
+
+// Local-only compressed photo bytes (§6A Phase 4). NOT a synced table — lives in
+// Dexie, cleared on logout. Referenced by InjuryAttachmentRef.photo_id.
+export interface InjuryPhoto {
+  id: string
+  injury_id: string
+  data: string          // compressed JPEG data URL
+  created_at: string
+}
+
+// A symptom check-in during rehab (§6A Phase 3): pain 0–10 + optional note.
+export interface InjuryAssessment {
+  date: string          // ISO date of the check-in
+  pain: number          // 0 (none) – 10 (worst)
   note?: string
 }
 
@@ -219,6 +240,8 @@ export interface Injury extends SyncFields {
   note_en: string
   checkpoints: InjuryCheckpoint[]    // stage-transition history (§6A)
   attachments: InjuryAttachmentRef[] // text/link references only (Phase 1)
+  rehab_plan_exercise_ids: string[]  // rehab-library exercises assigned to this injury (§6A Phase 3)
+  assessments: InjuryAssessment[]    // symptom check-ins (pain 0–10) over time
 }
 
 export interface TrainingCycle extends SyncFields {

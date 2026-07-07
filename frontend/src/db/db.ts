@@ -14,6 +14,7 @@ import type {
   SportSession,
   Profile,
   Injury,
+  InjuryPhoto,
   TrainingCycle,
   OptionalTracker,
   TranslationDictionaryRow,
@@ -34,6 +35,8 @@ export class TrainingHubDB extends Dexie {
   translation_dictionary!: Table<TranslationDictionaryRow, string>
   chat_messages!: Table<ChatMessage, string>
   insights!: Table<Insight, string>
+  // Local-only (never synced): compressed injury photos (§6A Phase 4).
+  injury_photos!: Table<InjuryPhoto, string>
 
   constructor() {
     super('training-hub')
@@ -50,6 +53,10 @@ export class TrainingHubDB extends Dexie {
       translation_dictionary: 'id, domain, zh, [domain+zh], updated_at',
       chat_messages: 'id, created_at, updated_at',
       insights: 'id, kind, created_at, updated_at',
+    })
+    // v2: local-only injury photos table (not part of the sync engine).
+    this.version(2).stores({
+      injury_photos: 'id, injury_id, created_at',
     })
   }
 }
