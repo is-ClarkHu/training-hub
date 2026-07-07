@@ -28,9 +28,13 @@
   --danger: #ff5d6c;
   --gym: #f5b544;
   --bw: #62d19b;
+  --green: #7dd3a0;
   --disc: #6ea8fe;
   --rec: #ff9d6e;
   --comp: #f472b6;
+  /* private-log (intimacy) text — light pink reads on dark panels */
+  --intimacy-ink: #ffe4f1;
+  --intimacy-accent: #f9a8d4;
   --shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 
   --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
@@ -67,6 +71,10 @@
   --violet: #7c5cf0;
   --danger: #e23b4e;
   --disc: #2f74e6;
+  --comp: #d6337f;
+  /* deep rose so private-log text stays legible on white in daylight */
+  --intimacy-ink: #9d174d;
+  --intimacy-accent: #be185d;
   --shadow: 0 8px 24px rgba(20, 30, 50, 0.1);
   color-scheme: light;
 }

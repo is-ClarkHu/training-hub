@@ -22,8 +22,7 @@ create table public.exercises (
   user_id       uuid not null default auth.uid() references auth.users (id) on delete cascade,
   name_zh       text not null,
   name_en       text not null default '',
-  body_part     text not null
-                  check (body_part in ('chest','back','shoulders','legs','arms','core','frisbee')), -- §4.1 (FIXED 7)
+  body_part     text not null,  -- user-editable category key (see frontend/src/categories)
   measure_type  text not null
                   check (measure_type in ('weight_reps','reps_only','duration')),                   -- §6
   assisted      boolean not null default false,  -- lower weight = harder; UI flips narrative
@@ -134,7 +133,7 @@ create table public.injuries (
   id           uuid primary key default gen_random_uuid(),
   user_id      uuid not null default auth.uid() references auth.users (id) on delete cascade,
   body_area    text not null,                      -- free text, e.g. "left hamstring"
-  body_part    text check (body_part in ('chest','back','shoulders','legs','arms','core','frisbee')), -- optional link
+  body_part    text,  -- optional category link (free string)
   started_on   date not null,
   status       text not null check (status in ('acute','rehab','recovered')),
   resolved_on  date,

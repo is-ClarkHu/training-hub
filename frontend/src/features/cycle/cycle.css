@@ -99,3 +99,15 @@
 }
 .cyc-editor-actions { display: flex; gap: 10px; }
 .cyc-editor-actions .th-btn, .cyc-editor-actions .th-btn-ghost { flex: 1; }
+
+/* category manager */
+.cyc-categories { display: flex; flex-direction: column; gap: 8px; }
+.cyc-cat-list { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.cyc-cat-chip {
+  padding: 6px 12px; font: 12px/1 var(--mono); color: var(--text);
+  background: var(--bg-input); border: 1px solid var(--border); border-radius: 999px;
+  cursor: pointer; transition: border-color 0.15s, color 0.15s;
+}
+.cyc-cat-chip:hover { border-color: var(--accent); color: var(--text-bright); }
+.cyc-cat-custom { color: var(--accent); margin-left: 4px; }
+.cyc-cat-add { width: auto; padding: 6px 12px; font-size: 12px; }

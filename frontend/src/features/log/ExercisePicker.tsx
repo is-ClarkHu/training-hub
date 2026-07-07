@@ -2,12 +2,8 @@
 // selector, grouped. Pick a sport → sport-session form; pick an exercise →
 // set inputs. Exercises grouped by the 7 body parts; sports in their own group.
 import { useMemo, useState } from 'react'
-import {
-  BODY_PARTS,
-  BODY_PART_LABELS,
-  type Exercise,
-  type Sport,
-} from '../../supabase/types'
+import { type Exercise, type Sport } from '../../supabase/types'
+import { useCategories, categoryLabel } from '../../categories'
 import type { TranslationTarget } from '../../translation'
 import { exerciseName } from './util'
 
@@ -33,16 +29,17 @@ export function ExercisePicker({
   onAddNew: (query: string) => void
 }) {
   const [query, setQuery] = useState('')
+  const cats = useCategories()
 
   const q = query.trim().toLowerCase()
   const exGroups = useMemo(() => {
     const matches = exercises.filter(
       (e) => !q || e.name_zh.toLowerCase().includes(q) || e.name_en.toLowerCase().includes(q),
     )
-    return BODY_PARTS.map((bp) => ({ bp, items: matches.filter((e) => e.body_part === bp) })).filter(
+    return cats.map((c) => ({ bp: c.key, items: matches.filter((e) => e.body_part === c.key) })).filter(
       (g) => g.items.length > 0,
     )
-  }, [exercises, q])
+  }, [exercises, q, cats])
   const sportMatches = sports.filter(
     (s) => !q || s.name_zh.toLowerCase().includes(q) || s.name_en.toLowerCase().includes(q),
   )
@@ -86,7 +83,7 @@ export function ExercisePicker({
           )}
           {exGroups.map(({ bp, items }) => (
             <div key={bp} className="log-group">
-              <span className="log-group-label">{BODY_PART_LABELS[bp][lang]}</span>
+              <span className="log-group-label">{categoryLabel(bp, lang)}</span>
               <div className="log-chips">
                 {items.map((ex) => (
                   <button

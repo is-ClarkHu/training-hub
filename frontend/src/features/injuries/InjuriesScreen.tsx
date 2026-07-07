@@ -9,8 +9,8 @@ import {
   softDeleteInjury,
 } from '../../db'
 import { useLanguage } from '../../i18n'
+import { categoryLabel } from '../../categories'
 import {
-  BODY_PART_LABELS,
   type Injury,
   type InjuryStatus,
   type SportSession,
@@ -86,7 +86,7 @@ export function InjuriesScreen() {
 
                 <div className="inj-meta">
                   <span>{lang === 'zh' ? '发病' : 'onset'}: {i.started_on} ({daysSince(i.started_on)}{lang === 'zh' ? '天前' : 'd ago'})</span>
-                  {i.body_part && <span>{BODY_PART_LABELS[i.body_part][lang]}</span>}
+                  {i.body_part && <span>{categoryLabel(i.body_part, lang)}</span>}
                   {i.severity != null && <span>{lang === 'zh' ? '严重度' : 'severity'} {i.severity}/5</span>}
                 </div>
 

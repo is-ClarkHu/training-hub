@@ -1,7 +1,6 @@
 // Pure analytics over the local store, shared by the Dashboard (§8) and the
 // Cycle muscle-recovery panel (§6B).
 import {
-  BODY_PARTS,
   type BodyPart,
   type Exercise,
   type ExerciseSet,
@@ -9,6 +8,7 @@ import {
   type SetType,
   type WorkoutEntry,
 } from '../../supabase/types'
+import { categoryKeys } from '../../categories'
 import { intimacyCategory } from '../intimacy'
 
 export function daysSince(date: string): number {
@@ -40,7 +40,7 @@ export function muscleRecovery(entries: WorkoutEntry[], exById: Record<string, E
     const cur = last[ex.body_part]
     if (!cur || e.date > cur) last[ex.body_part] = e.date
   }
-  return BODY_PARTS.map((bp) => {
+  return categoryKeys().map((bp) => {
     const d = last[bp] ?? null
     return { bodyPart: bp, lastDate: d, daysAgo: d ? daysSince(d) : null }
   })
@@ -48,11 +48,12 @@ export function muscleRecovery(entries: WorkoutEntry[], exById: Record<string, E
 
 /** Entry counts across the 7 body parts (BODY_PARTS order). */
 export function bodyPartCounts(entries: WorkoutEntry[], exById: Record<string, Exercise>): number[] {
-  const counts = BODY_PARTS.map(() => 0)
+  const keys = categoryKeys()
+  const counts = keys.map(() => 0)
   for (const e of entries) {
     const ex = exById[e.exercise_id]
     if (!ex) continue
-    const i = BODY_PARTS.indexOf(ex.body_part)
+    const i = keys.indexOf(ex.body_part)
     if (i >= 0) counts[i] += 1
   }
   return counts

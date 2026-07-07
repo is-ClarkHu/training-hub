@@ -17,8 +17,6 @@ import { Doughnut, Bar, Line } from 'react-chartjs-2'
 import { getEntries, getExercises, getSetsByEntryIds, getSportSessions, getInjuries, getSports, getTrackerEntries } from '../../db'
 import { useLanguage } from '../../i18n'
 import {
-  BODY_PARTS,
-  BODY_PART_LABELS,
   type Exercise,
   type ExerciseSet,
   type Injury,
@@ -27,6 +25,7 @@ import {
   type SportSession,
   type WorkoutEntry,
 } from '../../supabase/types'
+import { getCategories, categoryLabel } from '../../categories'
 import { ActiveInjuryBanner } from '../injuries'
 import { SportCharts, sportName } from '../sports'
 import { exerciseName } from '../log/util'
@@ -56,9 +55,9 @@ Chart.defaults.font.family = "'JetBrains Mono', ui-monospace, monospace"
 Chart.defaults.font.size = 11
 Chart.defaults.maintainAspectRatio = false
 const GRID = 'rgba(120, 130, 150, 0.15)'
-const TINTS = ['#8ab4f8', '#4fd1e0', '#f5b544', '#ff8a5c', '#a78bfa', '#62d19b', '#f472b6']
-// warm intensity ramp 0–4 (amber → orange → red) — a natural "heat" scale
-const HEAT = ['var(--panelhi)', 'rgba(245,181,68,.32)', 'rgba(245,181,68,.62)', 'rgba(255,138,92,.85)', '#ff5d6c']
+const TINTS = ['#8ab4f8', '#4fd1e0', '#7dd3a0', '#a78bfa', '#ff8a5c', '#f5b544', '#f472b6']
+// intensity ramp 0–4: green (easy) → amber → red (hard) — less overall amber
+const HEAT = ['var(--panelhi)', 'rgba(125,211,160,.38)', 'rgba(125,211,160,.7)', 'rgba(245,181,68,.85)', '#ff5d6c']
 
 export function DashboardScreen() {
   const { lang } = useLanguage()
@@ -201,7 +200,7 @@ export function DashboardScreen() {
         <div className="dash-rec-grid">
           {recovery.map((r) => (
             <div key={r.bodyPart} className={`dash-rec ${r.daysAgo != null && r.daysAgo >= 7 ? 'overdue' : ''}`}>
-              <span>{BODY_PART_LABELS[r.bodyPart][lang]}</span>
+              <span>{categoryLabel(r.bodyPart, lang)}</span>
               <strong>{r.daysAgo == null ? '—' : `${r.daysAgo}d`}</strong>
             </div>
           ))}
@@ -212,14 +211,14 @@ export function DashboardScreen() {
         <div className="dash-chart">
           <span className="th-label">{lang === 'zh' ? '部位分布' : 'Body-part distribution'}</span>
           <div className="dash-cbox">
-            <Doughnut data={{ labels: BODY_PARTS.map((bp) => BODY_PART_LABELS[bp][lang]), datasets: [{ data: bpCounts, backgroundColor: TINTS, borderColor: 'transparent', borderWidth: 2 }] }}
+            <Doughnut data={{ labels: getCategories().map((c) => categoryLabel(c.key, lang)), datasets: [{ data: bpCounts, backgroundColor: TINTS, borderColor: 'transparent', borderWidth: 2 }] }}
               options={{ plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, padding: 8 } } } }} />
           </div>
         </div>
         <div className="dash-chart">
           <span className="th-label">{lang === 'zh' ? '每周训练量' : 'Weekly volume'}</span>
           <div className="dash-cbox">
-            <Bar data={{ labels: weekly.labels, datasets: [{ data: weekly.data, backgroundColor: '#f5b544', borderRadius: 4 }] }}
+            <Bar data={{ labels: weekly.labels, datasets: [{ data: weekly.data, backgroundColor: '#7dd3a0', borderRadius: 4 }] }}
               options={{ plugins: { legend: { display: false } }, scales: { x: { grid: { color: GRID }, ticks: { maxRotation: 0 } }, y: { grid: { color: GRID }, beginAtZero: true, ticks: { precision: 0 } } } }} />
           </div>
         </div>

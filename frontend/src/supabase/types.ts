@@ -2,9 +2,9 @@
 // Both the Dexie local store (src/db) and supabase-js queries use these row types.
 // When the Supabase project exists, generated types can replace/augment this file.
 
-// ─── Fixed enums (CHECK-constrained in the DB) ───────────────────────────────
-export type BodyPart =
-  | 'chest' | 'back' | 'shoulders' | 'legs' | 'arms' | 'core' | 'frisbee' // §4.1 (FIXED 7)
+// body_part is now a free string — the category set is user-editable (see
+// ../categories). No longer a fixed enum; the DB check constraint was dropped.
+export type BodyPart = string
 export type MeasureType = 'weight_reps' | 'reps_only' | 'duration'        // §6
 export type SetType = 'normal' | 'warmup' | 'superset' | 'dropset'
 export type InjuryStatus = 'acute' | 'rehab' | 'recovered'
@@ -15,22 +15,6 @@ export type TranslationDomain = 'exercise' | 'body_part' | 'note_tag' | 'sport'
 export type TranslationSource = 'seed' | 'ai' | 'user'
 export type ChatRole = 'user' | 'assistant'
 export type TierLevel = 1 | 2 | 3 | 4
-
-/** The fixed 7 body parts, in display order (§4.1). */
-export const BODY_PARTS: readonly BodyPart[] = [
-  'chest', 'back', 'shoulders', 'legs', 'arms', 'core', 'frisbee',
-] as const
-
-/** Bilingual labels for the fixed body-part keys (§4.1). */
-export const BODY_PART_LABELS: Record<BodyPart, { zh: string; en: string }> = {
-  chest: { zh: '胸', en: 'Chest' },
-  back: { zh: '背', en: 'Back' },
-  shoulders: { zh: '肩', en: 'Shoulders' },
-  legs: { zh: '腿', en: 'Legs' },
-  arms: { zh: '手臂', en: 'Arms' },
-  core: { zh: '腹', en: 'Core' },
-  frisbee: { zh: '飞盘', en: 'Frisbee' },
-}
 
 /** Bilingual labels for measure types (§6). */
 export const MEASURE_TYPE_LABELS: Record<MeasureType, { zh: string; en: string }> = {

@@ -8,6 +8,10 @@ alter table public.sets       add column if not exists sub_sets jsonb not null d
 alter table public.exercises  add column if not exists default_per_side boolean not null default false;
 alter table public.exercises  add column if not exists is_warmup        boolean not null default false;
 
+-- body_part is now a user-editable category key — drop the fixed 7-value check.
+alter table public.exercises  drop constraint if exists exercises_body_part_check;
+alter table public.injuries   drop constraint if exists injuries_body_part_check;
+
 -- Sports redesign: per-sport custom fields (replaces fixed 4 tiers) + session attributes
 alter table public.sports          add column if not exists fields      jsonb not null default '[]'::jsonb;
 alter table public.sport_sessions  add column if not exists attributes  jsonb not null default '{}'::jsonb;

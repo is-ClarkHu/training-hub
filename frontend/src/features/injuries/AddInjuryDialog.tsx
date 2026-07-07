@@ -3,12 +3,11 @@
 import { useState } from 'react'
 import { createInjury, updateInjury, today } from '../../db'
 import {
-  BODY_PARTS,
-  BODY_PART_LABELS,
   type BodyPart,
   type Injury,
   type InjuryStatus,
 } from '../../supabase/types'
+import { useCategories, categoryLabel } from '../../categories'
 import type { TranslationTarget } from '../../translation'
 import { INJURY_STATUSES, INJURY_STATUS_LABELS } from './util'
 
@@ -24,6 +23,7 @@ export function AddInjuryDialog({
   onClose: () => void
 }) {
   const editing = !!injury
+  const cats = useCategories()
   const [bodyArea, setBodyArea] = useState(injury?.body_area ?? '')
   const [bodyPart, setBodyPart] = useState<BodyPart | ''>(injury?.body_part ?? '')
   const [startedOn, setStartedOn] = useState(injury?.started_on ?? today())
@@ -65,8 +65,8 @@ export function AddInjuryDialog({
             <label className="th-label" htmlFor="inj-bp">Body part (optional)</label>
             <select id="inj-bp" className="th-input" value={bodyPart} onChange={(e) => setBodyPart(e.target.value as BodyPart | '')}>
               <option value="">—</option>
-              {BODY_PARTS.map((bp) => (
-                <option key={bp} value={bp}>{BODY_PART_LABELS[bp][lang]}</option>
+              {cats.map((c) => (
+                <option key={c.key} value={c.key}>{categoryLabel(c.key, lang)}</option>
               ))}
             </select>
           </div>

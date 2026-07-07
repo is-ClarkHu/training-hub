@@ -13,16 +13,16 @@ import {
 } from '../../db'
 import { useLanguage } from '../../i18n'
 import {
-  BODY_PARTS,
-  BODY_PART_LABELS,
   type BodyPart,
   type CycleDay,
   type Exercise,
   type TrainingCycle,
   type WorkoutEntry,
 } from '../../supabase/types'
+import { useCategories, categoryLabel } from '../../categories'
 import { muscleRecovery } from '../dashboard/stats'
 import { ExerciseManager } from '../log'
+import { CategoryManager } from './CategoryManager'
 import './cycle.css'
 
 export function CycleScreen() {
@@ -82,7 +82,7 @@ export function CycleScreen() {
             <span className="cyc-tn-next">{lang === 'zh' ? '下次' : 'Next'}: {todayNext.nextLabel}</span>
             {todayNext.nextDay && (
               <span className="cyc-tn-detail">
-                {todayNext.nextDay.title} · {todayNext.nextDay.body_parts.map((bp) => BODY_PART_LABELS[bp][lang]).join(' / ')}
+                {todayNext.nextDay.title} · {todayNext.nextDay.body_parts.map((bp) => categoryLabel(bp, lang)).join(' / ')}
               </span>
             )}
           </div>
@@ -94,11 +94,16 @@ export function CycleScreen() {
         <div className="cyc-rec-grid">
           {recovery.map((r) => (
             <div key={r.bodyPart} className={`cyc-rec ${r.daysAgo != null && r.daysAgo >= 7 ? 'overdue' : ''}`}>
-              <span className="cyc-rec-bp">{BODY_PART_LABELS[r.bodyPart][lang]}</span>
+              <span className="cyc-rec-bp">{categoryLabel(r.bodyPart, lang)}</span>
               <span className="cyc-rec-days">{r.daysAgo == null ? '—' : `${r.daysAgo}d`}</span>
             </div>
           ))}
         </div>
+      </section>
+
+      <section className="cyc-categories">
+        <span className="th-label">{lang === 'zh' ? '分类(部位)' : 'Categories'}</span>
+        <CategoryManager lang={lang} />
       </section>
 
       <section className="cyc-library">
@@ -140,7 +145,7 @@ export function CycleScreen() {
                 ) : (
                   c.days.map((d) => (
                     <span key={d.label} className="cyc-day">
-                      <strong>{d.label}</strong> {d.title} · {d.body_parts.map((bp) => BODY_PART_LABELS[bp][lang]).join('/')}
+                      <strong>{d.label}</strong> {d.title} · {d.body_parts.map((bp) => categoryLabel(bp, lang)).join('/')}
                     </span>
                   ))
                 )}
@@ -166,6 +171,7 @@ function CycleDaysEditor({
   onSaved: () => void
   onCancel: () => void
 }) {
+  const cats = useCategories()
   const [name, setName] = useState(cycle.name)
   const [days, setDays] = useState<CycleDay[]>(
     cycle.days.map((d) => ({ ...d, body_parts: [...d.body_parts], exercise_ids: [...(d.exercise_ids ?? [])] })),
@@ -213,9 +219,9 @@ function CycleDaysEditor({
               <button className="cyc-del" type="button" onClick={() => setDays((ds) => ds.filter((_, idx) => idx !== i))}>×</button>
             </div>
             <div className="cyc-bp-row">
-              {BODY_PARTS.map((bp) => (
-                <button key={bp} type="button" className={`cyc-bp ${d.body_parts.includes(bp) ? 'on' : ''}`} onClick={() => toggleBp(i, bp)}>
-                  {BODY_PART_LABELS[bp][lang]}
+              {cats.map((c) => (
+                <button key={c.key} type="button" className={`cyc-bp ${d.body_parts.includes(c.key) ? 'on' : ''}`} onClick={() => toggleBp(i, c.key)}>
+                  {categoryLabel(c.key, lang)}
                 </button>
               ))}
             </div>

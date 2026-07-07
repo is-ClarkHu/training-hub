@@ -32,12 +32,12 @@
   border-radius: 10px;
 }
 .log-intimacy-copy { display: flex; flex-direction: column; gap: 4px; min-width: 150px; }
-.log-intimacy-copy strong { font: 700 15px/1.1 var(--mono); color: #ffe4f1; }
+.log-intimacy-copy strong { font: 700 15px/1.1 var(--mono); color: var(--intimacy-ink); }
 .log-intimacy-kicker {
   font: 700 10px/1 var(--mono);
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: #f9a8d4;
+  color: var(--intimacy-accent);
 }
 .log-intimacy-controls { display: flex; align-items: center; gap: 8px; flex: 1; }
 .log-intimacy-count { max-width: 72px; text-align: center; }

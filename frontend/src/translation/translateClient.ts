@@ -5,13 +5,13 @@ import { newId, nowIso } from '../db'
 import { currentUserId } from '../supabase/client'
 import { chatComplete, getKey, getTaskCfg } from '../ai'
 import {
-  BODY_PARTS,
   type BodyPart,
   type MeasureType,
   type TranslationDomain,
   type TranslationDictionaryRow,
   type TranslationSource,
 } from '../supabase/types'
+import { categoryKeys } from '../categories'
 import type { TranslationTarget } from './dictionary'
 
 export interface TranslateResponse {
@@ -35,7 +35,7 @@ function prompt(domain: TranslationDomain, target: TranslationTarget): string {
   const langName = target === 'en' ? 'English' : 'Chinese'
   const infer =
     domain === 'exercise'
-      ? `Also infer "suggested_body_part" (one of ${BODY_PARTS.join(', ')}) and "suggested_measure_type" (one of ${MEASURE_TYPES.join(', ')}).`
+      ? `Also infer "suggested_body_part" (one of ${categoryKeys().join(', ')}) and "suggested_measure_type" (one of ${MEASURE_TYPES.join(', ')}).`
       : 'Set "suggested_body_part" and "suggested_measure_type" to null.'
   return (
     `You are a bilingual (Chinese⇄English) strength & sports translator. The input is ${DOMAIN_LABEL[domain]}. ` +
@@ -65,7 +65,7 @@ export async function requestTranslation(
   const parsed = parseJson(reply)
 
   const translation = (parsed.translation ? String(parsed.translation) : reply).trim()
-  const bp = BODY_PARTS.includes(parsed.suggested_body_part as BodyPart) ? (parsed.suggested_body_part as BodyPart) : null
+  const bp = categoryKeys().includes(parsed.suggested_body_part as string) ? (parsed.suggested_body_part as BodyPart) : null
   const mt = MEASURE_TYPES.includes(parsed.suggested_measure_type as MeasureType) ? (parsed.suggested_measure_type as MeasureType) : null
 
   const zh = target === 'en' ? text : translation

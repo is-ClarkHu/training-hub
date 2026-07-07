@@ -4,13 +4,12 @@
 import { useEffect, useState } from 'react'
 import { updateExercise, softDeleteExercise, mergeExercises, exerciseUsage } from '../../db'
 import {
-  BODY_PARTS,
-  BODY_PART_LABELS,
   MEASURE_TYPE_LABELS,
   type BodyPart,
   type Exercise,
   type MeasureType,
 } from '../../supabase/types'
+import { useCategories, categoryLabel } from '../../categories'
 import type { TranslationTarget } from '../../translation'
 import './log.css'
 
@@ -29,6 +28,7 @@ export function EditExerciseDialog({
   onSaved: () => void
   onClose: () => void
 }) {
+  const cats = useCategories()
   const [nameZh, setNameZh] = useState(exercise.name_zh)
   const [nameEn, setNameEn] = useState(exercise.name_en)
   const [bodyPart, setBodyPart] = useState<BodyPart>(exercise.body_part)
@@ -96,7 +96,7 @@ export function EditExerciseDialog({
           <div className="log-field">
             <label className="th-label">{lang === 'zh' ? '部位' : 'Body part'}</label>
             <select className="th-input" value={bodyPart} onChange={(e) => setBodyPart(e.target.value as BodyPart)}>
-              {BODY_PARTS.map((bp) => (<option key={bp} value={bp}>{BODY_PART_LABELS[bp][lang]}</option>))}
+              {cats.map((c) => (<option key={c.key} value={c.key}>{categoryLabel(c.key, lang)}</option>))}
             </select>
           </div>
           <div className="log-field">

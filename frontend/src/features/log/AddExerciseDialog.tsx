@@ -6,13 +6,12 @@ import { useState } from 'react'
 import { createExercise } from '../../db'
 import { suggestExercise } from '../../translation'
 import {
-  BODY_PARTS,
-  BODY_PART_LABELS,
   MEASURE_TYPE_LABELS,
   type BodyPart,
   type Exercise,
   type MeasureType,
 } from '../../supabase/types'
+import { useCategories, categoryLabel } from '../../categories'
 import type { TranslationTarget } from '../../translation'
 
 const MEASURE_TYPES: MeasureType[] = ['weight_reps', 'reps_only', 'duration']
@@ -36,6 +35,7 @@ export function AddExerciseDialog({
   const [raw, setRaw] = useState(initialName)
   const [nameZh, setNameZh] = useState(startZh ? initialName : '')
   const [nameEn, setNameEn] = useState(startZh ? '' : initialName)
+  const cats = useCategories()
   const [bodyPart, setBodyPart] = useState<BodyPart>('chest')
   const [measureType, setMeasureType] = useState<MeasureType>('weight_reps')
   const [busy, setBusy] = useState(false)
@@ -111,7 +111,7 @@ export function AddExerciseDialog({
           <div className="log-field">
             <label className="th-label">{lang === 'zh' ? '部位' : 'Body part'}</label>
             <select className="th-input" value={bodyPart} onChange={(e) => setBodyPart(e.target.value as BodyPart)}>
-              {BODY_PARTS.map((bp) => (<option key={bp} value={bp}>{BODY_PART_LABELS[bp][lang]}</option>))}
+              {cats.map((c) => (<option key={c.key} value={c.key}>{categoryLabel(c.key, lang)}</option>))}
             </select>
           </div>
           <div className="log-field">
