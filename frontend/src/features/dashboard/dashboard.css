@@ -59,9 +59,12 @@
 .dash-chart:hover { border-color: var(--faint); }
 .dash-chart-wide { grid-column: 1 / -1; }
 .dash-prog-pick { max-width: 100%; }
+.dash-prog-desc { margin-top: -4px; font: 11px/1.4 var(--mono); color: var(--text-dim); }
 /* fixed-height chart box so canvases fill and don't leave whitespace */
 .dash-cbox { position: relative; height: 260px; }
 .dash-cbox > canvas { max-height: 260px; }
+.dash-cbox-tall { height: 340px; }
+.dash-cbox-tall > canvas { max-height: 340px; }
 
 /* intensity heatmap */
 .dash-heat-sec { display: flex; flex-direction: column; gap: 12px; }

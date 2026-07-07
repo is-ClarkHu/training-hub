@@ -29,7 +29,7 @@ import { getCategories, categoryLabel } from '../../categories'
 import { ActiveInjuryBanner, bodyAreaLabel } from '../injuries'
 import { INJURY_STATUS_LABELS, daysBetween, daysSince } from '../injuries/util'
 import { SportCharts, sportName } from '../sports'
-import { exerciseName } from '../log/util'
+import { exerciseName, sortExercises } from '../log/util'
 import {
   INTIMACY_CATEGORIES,
   INTIMACY_COLORS,
@@ -40,7 +40,6 @@ import {
 import {
   bodyPartCounts,
   bodyweightVolume,
-  e1RM,
   intensityHeatmap,
   muscleRecovery,
   setTypeCounts,
@@ -70,7 +69,7 @@ export function DashboardScreen() {
   const [injuries, setInjuries] = useState<Injury[]>([])
   const [intimacyRows, setIntimacyRows] = useState<OptionalTracker[]>([])
   const [showIntimacy, setShowIntimacy] = useState(false)
-  const [progId, setProgId] = useState('')
+  const [progCategory, setProgCategory] = useState('')
   const [sportId, setSportId] = useState('')
 
   useEffect(() => {
@@ -166,24 +165,97 @@ export function DashboardScreen() {
     return { trainingDays, gymDays, sportHours, active, pushReps, avg, intimacyCount }
   }, [entries, sessions, injuries, allSets, exById, heat, intimacyRows, showIntimacy])
 
-  const progExercises = useMemo(
-    () => Object.values(exById).filter((ex) => ex.measure_type === 'weight_reps' && entries.some((e) => e.exercise_id === ex.id)),
-    [exById, entries],
-  )
+  const categories = useMemo(() => getCategories(), [])
+  const progCategories = useMemo(() => {
+    const used = new Set<string>()
+    for (const e of entries) {
+      const ex = exById[e.exercise_id]
+      if (!ex || ex.is_rehab) continue
+      for (const bp of ex.body_parts) used.add(bp)
+    }
+    return categories.filter((c) => used.has(c.key))
+  }, [categories, entries, exById])
+  const selectedProgCategory = progCategory || progCategories[0]?.key || ''
   const progression = useMemo(() => {
-    if (!progId) return null
-    const pts = entries
-      .filter((e) => e.exercise_id === progId)
-      .sort((a, b) => (a.date < b.date ? -1 : 1))
-      .map((e) => {
-        const work = (setMap[e.id] ?? []).filter((s) => s.set_type !== 'warmup' && s.weight != null)
-        if (work.length === 0) return null
-        const top = work.reduce((m, s) => (s.weight! > m.weight! ? s : m))
-        return { date: e.date, weight: top.weight!, e1rm: e1RM(top.weight!, top.reps ?? 1) }
-      })
-      .filter((p): p is { date: string; weight: number; e1rm: number } => p !== null)
-    return pts.length ? pts : null
-  }, [progId, entries, setMap])
+    if (!selectedProgCategory) return null
+    const categoryExercises = sortExercises(
+      Object.values(exById).filter((ex) => !ex.is_rehab && ex.body_parts.includes(selectedProgCategory)),
+      lang,
+      categories.map((c) => c.key),
+    )
+    const entryByEx = new Map<string, WorkoutEntry[]>()
+    for (const e of entries) {
+      const ex = exById[e.exercise_id]
+      if (!ex || !ex.body_parts.includes(selectedProgCategory)) continue
+      const metric = progressionMetric(ex, setMap[e.id] ?? [])
+      if (!metric) continue
+      entryByEx.set(ex.id, [...(entryByEx.get(ex.id) ?? []), e])
+    }
+    const dates = [...new Set([...entryByEx.values()].flat().map((e) => e.date))].sort()
+    if (dates.length === 0) return null
+    const datasets: Array<{
+      label: string
+      data: Array<number | null>
+      borderColor: string
+      backgroundColor: string
+      yAxisID: 'y' | 'y1'
+      tension: number
+      spanGaps: boolean
+      borderDash?: number[]
+      pointRadius: number
+      _notes: string[]
+    }> = []
+    let colorIdx = 0
+    for (const ex of categoryExercises) {
+      const exEntries = entries.filter((e) => e.exercise_id === ex.id).sort((a, b) => (a.date < b.date ? -1 : 1))
+      const byDate = new Map<string, { primary: number | null; secondary: number | null; note: string }>()
+      for (const e of exEntries) {
+        const metric = progressionMetric(ex, setMap[e.id] ?? [])
+        if (metric) byDate.set(e.date, { ...metric, note: e.note_raw })
+      }
+      if (byDate.size === 0) continue
+      const color = TINTS[colorIdx++ % TINTS.length]
+      const name = exerciseName(ex, lang)
+      if (ex.measure_type === 'weight_reps') {
+        datasets.push({
+          label: name,
+          data: dates.map((d) => byDate.get(d)?.primary ?? null),
+          borderColor: color,
+          backgroundColor: color,
+          yAxisID: 'y',
+          tension: 0.3,
+          spanGaps: true,
+          pointRadius: 4,
+          _notes: dates.map((d) => byDate.get(d)?.note ?? ''),
+        })
+        datasets.push({
+          label: `${name} ${lang === 'zh' ? '次数' : 'reps'}`,
+          data: dates.map((d) => byDate.get(d)?.secondary ?? null),
+          borderColor: color,
+          backgroundColor: color,
+          yAxisID: 'y1',
+          tension: 0.3,
+          spanGaps: true,
+          borderDash: [3, 4],
+          pointRadius: 2,
+          _notes: dates.map((d) => byDate.get(d)?.note ?? ''),
+        })
+      } else {
+        datasets.push({
+          label: name,
+          data: dates.map((d) => byDate.get(d)?.secondary ?? null),
+          borderColor: color,
+          backgroundColor: color,
+          yAxisID: 'y1',
+          tension: 0.3,
+          spanGaps: true,
+          pointRadius: 4,
+          _notes: dates.map((d) => byDate.get(d)?.note ?? ''),
+        })
+      }
+    }
+    return datasets.length ? { labels: dates.map((d) => d.slice(5)), dates, datasets, exerciseCount: datasets.length } : null
+  }, [selectedProgCategory, exById, entries, setMap, lang, categories])
 
   const selectedSport = sports.find((s) => s.id === sportId) ?? null
   const sportSessionsFor = sessions.filter((s) => s.sport_id === sportId)
@@ -306,18 +378,38 @@ export function DashboardScreen() {
           </div>
         </div>
         <div className="dash-chart dash-chart-wide">
-          <span className="th-label">{lang === 'zh' ? '进步曲线(顶组 + e1RM)' : 'Progression (top set + e1RM)'}</span>
-          <select className="th-input dash-prog-pick" value={progId} onChange={(e) => setProgId(e.target.value)}>
-            <option value="">{lang === 'zh' ? '选择动作…' : 'pick an exercise…'}</option>
-            {progExercises.map((ex) => (<option key={ex.id} value={ex.id}>{lang === 'zh' ? ex.name_zh : ex.name_en}</option>))}
+          <span className="th-label">{lang === 'zh' ? '进步曲线(按分类)' : 'Progression by category'}</span>
+          <select className="th-input dash-prog-pick" value={selectedProgCategory} onChange={(e) => setProgCategory(e.target.value)}>
+            <option value="">{lang === 'zh' ? '选择分类…' : 'pick a category…'}</option>
+            {progCategories.map((c) => (<option key={c.key} value={c.key}>{categoryLabel(c.key, lang)}</option>))}
           </select>
-          <div className="dash-cbox">
+          <div className="dash-prog-desc">
+            {lang === 'zh' ? '左轴=重量 · 右轴=次数/时长；同分类动作叠加显示' : 'Left axis = load · right axis = reps/duration; overlays all exercises in the category'}
+          </div>
+          <div className="dash-cbox dash-cbox-tall">
             {progression ? (
-              <Line data={{ labels: progression.map((p) => p.date), datasets: [
-                { label: lang === 'zh' ? '顶组' : 'top set', data: progression.map((p) => p.weight), borderColor: '#8ab4f8', backgroundColor: '#8ab4f8', tension: 0.3 },
-                { label: 'e1RM', data: progression.map((p) => p.e1rm), borderColor: '#f5b544', backgroundColor: '#f5b544', borderDash: [4, 3], tension: 0.3 },
-              ] }} options={{ plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, padding: 8 } } }, scales: { x: { grid: { color: GRID } }, y: { grid: { color: GRID } } } }} />
-            ) : <p className="dash-empty">{progId ? (lang === 'zh' ? '暂无数据' : 'no data') : (lang === 'zh' ? '选择动作查看' : 'pick an exercise')}</p>}
+              <Line data={{ labels: progression.labels, datasets: progression.datasets }}
+                options={{
+                  interaction: { mode: 'nearest', intersect: false },
+                  plugins: {
+                    legend: { position: 'bottom', labels: { boxWidth: 12, padding: 8, usePointStyle: true, pointStyle: 'line' } },
+                    tooltip: {
+                      callbacks: {
+                        title: (items) => progression.dates[items[0].dataIndex],
+                        afterLabel: (ctx) => {
+                          const note = (ctx.dataset as unknown as { _notes?: string[] })._notes?.[ctx.dataIndex]
+                          return note ? `  ${note}` : ''
+                        },
+                      },
+                    },
+                  },
+                  scales: {
+                    x: { grid: { color: GRID }, ticks: { maxRotation: 45, minRotation: 45 } },
+                    y: { type: 'linear', position: 'left', grid: { color: GRID }, beginAtZero: true, title: { display: true, text: lang === 'zh' ? '重量' : 'load' } },
+                    y1: { type: 'linear', position: 'right', grid: { drawOnChartArea: false }, beginAtZero: true, title: { display: true, text: lang === 'zh' ? '次数 / 分钟' : 'reps / min' } },
+                  },
+                }} />
+            ) : <p className="dash-empty">{selectedProgCategory ? (lang === 'zh' ? '暂无数据' : 'no data') : (lang === 'zh' ? '选择分类查看' : 'pick a category')}</p>}
           </div>
         </div>
       </div>
@@ -376,6 +468,31 @@ export function DashboardScreen() {
       )}
     </div>
   )
+}
+
+function allSetValues(sets: ExerciseSet[]): Array<{ weight: number | null; reps: number | null; duration_sec: number | null }> {
+  return sets
+    .filter((s) => s.set_type !== 'warmup')
+    .flatMap((s) => [
+      { weight: s.weight, reps: s.reps, duration_sec: s.duration_sec },
+      ...(s.sub_sets ?? []),
+    ])
+}
+
+function progressionMetric(ex: Exercise, sets: ExerciseSet[]): { primary: number | null; secondary: number | null } | null {
+  const vals = allSetValues(sets)
+  if (ex.measure_type === 'weight_reps') {
+    const weighted = vals.filter((s) => s.weight != null)
+    if (weighted.length === 0) return null
+    const top = weighted.reduce((m, s) => (s.weight! > m.weight! ? s : m))
+    return { primary: top.weight!, secondary: top.reps ?? null }
+  }
+  if (ex.measure_type === 'reps_only') {
+    const reps = vals.reduce((sum, s) => sum + (s.reps ?? 0), 0)
+    return reps > 0 ? { primary: null, secondary: reps } : null
+  }
+  const maxSec = vals.reduce((m, s) => Math.max(m, s.duration_sec ?? 0), 0)
+  return maxSec > 0 ? { primary: null, secondary: Math.round((maxSec / 60) * 10) / 10 } : null
 }
 
 const MONTHS_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']

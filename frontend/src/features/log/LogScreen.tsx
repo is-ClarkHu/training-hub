@@ -101,6 +101,11 @@ export function LogScreen() {
     setSel({ kind: 'sport', sport })
     resetForms()
   }
+  function closeEntryModal() {
+    if (saving) return
+    setSel(null)
+    resetForms()
+  }
   function onExerciseCreated(ex: Exercise) {
     setExercises((prev) => [...prev, ex])
     setDialog({ open: false, name: '' })
@@ -313,14 +318,18 @@ export function LogScreen() {
       />
 
       {sel?.kind === 'exercise' && (
-        <section className="log-entry">
+        <div className="log-entry-backdrop" onClick={closeEntryModal}>
+          <section className="log-entry log-entry-modal" onClick={(e) => e.stopPropagation()}>
           <div className="log-entry-head">
             <h3>{exerciseName(sel.ex, lang)}</h3>
-            <span className="log-superset-hint">
-              {sel.ex.is_rehab
-                ? (lang === 'zh' ? '康复动作' : 'rehab exercise')
-                : (lang === 'zh' ? '每组可标 超级组/递减/热身' : 'mark each set: superset/dropset/warmup')}
-            </span>
+            <div className="log-entry-meta">
+              <span className="log-superset-hint">
+                {sel.ex.is_rehab
+                  ? (lang === 'zh' ? '康复动作' : 'rehab exercise')
+                  : (lang === 'zh' ? '每组可标 超级组/递减/热身' : 'mark each set: superset/dropset/warmup')}
+              </span>
+              <button className="log-entry-close" type="button" onClick={closeEntryModal} aria-label={lang === 'zh' ? '关闭' : 'close'}>×</button>
+            </div>
           </div>
 
           {sel.ex.is_rehab && <RehabKnowledge ex={sel.ex} lang={lang} />}
@@ -369,13 +378,16 @@ export function LogScreen() {
           <button className="th-btn" type="button" onClick={saveExercise} disabled={!canSaveExercise}>
             {saving ? 'Saving…' : lang === 'zh' ? '保存' : 'Save exercise'}
           </button>
-        </section>
+          </section>
+        </div>
       )}
 
       {sel?.kind === 'sport' && (
-        <section className="log-entry">
+        <div className="log-entry-backdrop" onClick={closeEntryModal}>
+          <section className="log-entry log-entry-modal" onClick={(e) => e.stopPropagation()}>
           <div className="log-entry-head">
             <h3>{(lang === 'zh' ? sel.sport.name_zh : sel.sport.name_en) || sel.sport.name_zh}</h3>
+            <button className="log-entry-close" type="button" onClick={closeEntryModal} aria-label={lang === 'zh' ? '关闭' : 'close'}>×</button>
           </div>
           <div className="log-field">
             <label className="th-label">{lang === 'zh' ? '时长 (时:分)' : 'Duration (h:mm)'}</label>
@@ -407,7 +419,8 @@ export function LogScreen() {
           <button className="th-btn" type="button" onClick={saveSport} disabled={!canSaveSport}>
             {saving ? 'Saving…' : lang === 'zh' ? '保存场次' : 'Save session'}
           </button>
-        </section>
+          </section>
+        </div>
       )}
 
       {logged.length > 0 && (

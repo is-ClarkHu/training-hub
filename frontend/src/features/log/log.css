@@ -92,6 +92,16 @@
 .log-rehab-know strong { color: var(--text-bright); }
 
 /* entry */
+.log-entry-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  display: grid;
+  place-items: start center;
+  padding: 72px 18px 24px;
+  background: rgba(4, 10, 14, 0.72);
+  overflow-y: auto;
+}
 .log-entry {
   display: flex;
   flex-direction: column;
@@ -101,9 +111,27 @@
   border: 1px solid var(--border);
   border-radius: 10px;
 }
+.log-entry-modal {
+  width: min(760px, 100%);
+  max-height: calc(100vh - 96px);
+  overflow-y: auto;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+}
 .log-entry-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .log-entry-head h3 { margin: 0; font: 600 16px/1 var(--mono); }
 .log-entry-meta { display: flex; align-items: center; gap: 10px; }
+.log-entry-close {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  font: 18px/1 var(--mono);
+  color: var(--text-dim);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.log-entry-close:hover { color: var(--text-bright); border-color: var(--accent); }
 .log-cycleday { width: auto; padding: 6px 8px; font-size: 12px; }
 .log-superset, .log-perside {
   display: inline-flex;
@@ -200,6 +228,8 @@
 @media (max-width: 520px) {
   .log-grid2 { grid-template-columns: 1fr; }
   .log-num { width: 72px; }
+  .log-entry-backdrop { padding: 56px 10px 16px; }
+  .log-entry-modal { max-height: calc(100vh - 72px); }
   .log-intimacy { align-items: stretch; flex-direction: column; }
   .log-intimacy-controls { flex-wrap: wrap; }
   .log-intimacy-controls .th-input:first-child { flex-basis: 100%; }

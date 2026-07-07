@@ -7,6 +7,21 @@ import { VitePWA } from 'vite-plugin-pwa'
 export default defineConfig({
   server: { port: 5174, strictPort: true },
   preview: { port: 5174 },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined
+          if (id.includes('chart.js') || id.includes('react-chartjs-2')) return 'vendor-charts'
+          if (id.includes('@supabase')) return 'vendor-supabase'
+          if (id.includes('dexie')) return 'vendor-db'
+          if (id.includes('i18next') || id.includes('react-i18next')) return 'vendor-i18n'
+          if (id.includes('react')) return 'vendor-react'
+          return 'vendor'
+        },
+      },
+    },
+  },
   plugins: [
     react(),
     VitePWA({

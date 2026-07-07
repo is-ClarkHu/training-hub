@@ -5,7 +5,7 @@ import { useMemo, useState } from 'react'
 import { type Exercise, type Sport } from '../../supabase/types'
 import { useCategories, categoryLabel } from '../../categories'
 import type { TranslationTarget } from '../../translation'
-import { exerciseName } from './util'
+import { exerciseName, sortExercises } from './util'
 
 function sportLabel(s: Sport, lang: TranslationTarget): string {
   return (lang === 'zh' ? s.name_zh : s.name_en) || s.name_zh || s.name_en
@@ -30,6 +30,7 @@ export function ExercisePicker({
 }) {
   const [query, setQuery] = useState('')
   const cats = useCategories()
+  const catOrder = cats.map((c) => c.key)
 
   const q = query.trim().toLowerCase()
   const exGroups = useMemo(() => {
@@ -37,15 +38,15 @@ export function ExercisePicker({
       (e) => !q || e.name_zh.toLowerCase().includes(q) || e.name_en.toLowerCase().includes(q),
     )
     // Rehab moves get their own group (below) — keep them out of the body-part groups.
-    return cats.map((c) => ({ bp: c.key, items: matches.filter((e) => e.body_parts.includes(c.key) && !e.is_rehab) })).filter(
+    return cats.map((c) => ({ bp: c.key, items: sortExercises(matches.filter((e) => e.body_parts.includes(c.key) && !e.is_rehab), lang, catOrder) })).filter(
       (g) => g.items.length > 0,
     )
-  }, [exercises, q, cats])
+  }, [exercises, q, cats, catOrder, lang])
   const rehabMatches = useMemo(
-    () => exercises.filter(
+    () => sortExercises(exercises.filter(
       (e) => e.is_rehab && (!q || e.name_zh.toLowerCase().includes(q) || e.name_en.toLowerCase().includes(q)),
-    ),
-    [exercises, q],
+    ), lang, catOrder),
+    [exercises, q, lang, catOrder],
   )
   const sportMatches = sports.filter(
     (s) => !q || s.name_zh.toLowerCase().includes(q) || s.name_en.toLowerCase().includes(q),

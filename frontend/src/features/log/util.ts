@@ -1,6 +1,6 @@
 import type { NewSetInput } from '../../db'
 import type { ParsedNote, TranslationTarget } from '../../translation'
-import type { Exercise, ExerciseSet, MeasureType, SetType, SubSet } from '../../supabase/types'
+import type { BodyPart, Exercise, ExerciseSet, MeasureType, SetType, SubSet } from '../../supabase/types'
 
 /** One sub-set's editable strings (weight×reps or duration). */
 export interface SubDraft {
@@ -24,6 +24,35 @@ export const emptySet = (): SetDraft => ({ subs: [emptySub()], per_side: false, 
 export function exerciseName(ex: Exercise, lang: TranslationTarget): string {
   const primary = lang === 'zh' ? ex.name_zh : ex.name_en
   return primary || ex.name_zh || ex.name_en // fall back only if a name is genuinely missing
+}
+
+const MEASURE_ORDER: Record<MeasureType, number> = { weight_reps: 0, reps_only: 1, duration: 2 }
+
+function nameKey(ex: Exercise, lang: TranslationTarget): string {
+  return exerciseName(ex, lang)
+    .toLowerCase()
+    .replace(/[()（）\[\]【】,，·/\\-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/** Stable exercise ordering for pickers/managers: category → measure type → name. */
+export function sortExercises(
+  items: Exercise[],
+  lang: TranslationTarget,
+  categoryOrder: BodyPart[] = [],
+): Exercise[] {
+  const catRank = new Map(categoryOrder.map((k, i) => [k, i]))
+  const collator = new Intl.Collator(lang === 'zh' ? 'zh-Hans-CN' : 'en', { numeric: true, sensitivity: 'base' })
+  return [...items].sort((a, b) => {
+    const ac = Math.min(...a.body_parts.map((bp) => catRank.get(bp) ?? 999))
+    const bc = Math.min(...b.body_parts.map((bp) => catRank.get(bp) ?? 999))
+    if (ac !== bc) return ac - bc
+    const am = MEASURE_ORDER[a.measure_type]
+    const bm = MEASURE_ORDER[b.measure_type]
+    if (am !== bm) return am - bm
+    return collator.compare(nameKey(a, lang), nameKey(b, lang))
+  })
 }
 
 /** Parse 'mm:ss' (or bare seconds) → total seconds; '' → null. */

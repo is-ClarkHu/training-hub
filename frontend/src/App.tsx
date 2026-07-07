@@ -1,17 +1,18 @@
-import { useEffect, useState } from 'react'
+import { Suspense, lazy, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AuthProvider, AuthGate, useAuth } from './features/auth'
 import { LanguageProvider, ThemeProvider, useLanguage } from './i18n'
 import { UndoProvider } from './undo'
 import { startSync } from './sync'
-import { LogScreen } from './features/log'
-import { HistoryScreen } from './features/history'
-import { InjuriesScreen } from './features/injuries'
-import { CycleScreen } from './features/cycle'
-import { DashboardScreen } from './features/dashboard'
-import { SettingsScreen } from './features/settings'
-import { AssistantScreen } from './features/assistant'
 import './App.css'
+
+const LogScreen = lazy(() => import('./features/log').then((m) => ({ default: m.LogScreen })))
+const HistoryScreen = lazy(() => import('./features/history').then((m) => ({ default: m.HistoryScreen })))
+const DashboardScreen = lazy(() => import('./features/dashboard').then((m) => ({ default: m.DashboardScreen })))
+const InjuriesScreen = lazy(() => import('./features/injuries').then((m) => ({ default: m.InjuriesScreen })))
+const CycleScreen = lazy(() => import('./features/cycle').then((m) => ({ default: m.CycleScreen })))
+const AssistantScreen = lazy(() => import('./features/assistant').then((m) => ({ default: m.AssistantScreen })))
+const SettingsScreen = lazy(() => import('./features/settings').then((m) => ({ default: m.SettingsScreen })))
 
 // Tabs. Log + History are implemented; the rest are built module by module
 // (SPEC §7, §12) and shown disabled for now.
@@ -80,13 +81,15 @@ function AppShell() {
         </aside>
 
         <main className="app-main">
-          {tab === 'Log' && <LogScreen />}
-          {tab === 'History' && <HistoryScreen />}
-          {tab === 'Dashboard' && <DashboardScreen />}
-          {tab === 'Injuries' && <InjuriesScreen />}
-          {tab === 'Cycle' && <CycleScreen />}
-          {tab === 'Assistant' && <AssistantScreen />}
-          {tab === 'Settings' && <SettingsScreen />}
+          <Suspense fallback={<div className="app-loading">{lang === 'zh' ? '加载中…' : 'Loading…'}</div>}>
+            {tab === 'Log' && <LogScreen />}
+            {tab === 'History' && <HistoryScreen />}
+            {tab === 'Dashboard' && <DashboardScreen />}
+            {tab === 'Injuries' && <InjuriesScreen />}
+            {tab === 'Cycle' && <CycleScreen />}
+            {tab === 'Assistant' && <AssistantScreen />}
+            {tab === 'Settings' && <SettingsScreen />}
+          </Suspense>
         </main>
       </div>
     </div>

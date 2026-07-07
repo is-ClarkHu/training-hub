@@ -12,6 +12,7 @@ import {
 } from '../../supabase/types'
 import { useCategories, categoryLabel } from '../../categories'
 import type { TranslationTarget } from '../../translation'
+import { sortExercises } from './util'
 import './log.css'
 
 const MEASURE_TYPES: MeasureType[] = ['weight_reps', 'reps_only', 'duration']
@@ -46,7 +47,12 @@ export function EditExerciseDialog({
     void exerciseUsage(exercise.id).then(setUsage)
   }, [exercise.id])
 
-  const others = allExercises.filter((e) => e.id !== exercise.id)
+  const catOrder = cats.map((c) => c.key)
+  const others = sortExercises(allExercises.filter((e) => e.id !== exercise.id && !e.deleted), lang, catOrder)
+  const mergeGroups = cats
+    .map((c) => ({ cat: c, items: others.filter((e) => e.body_parts[0] === c.key) }))
+    .filter((g) => g.items.length > 0)
+  const ungrouped = others.filter((e) => !cats.some((c) => e.body_parts[0] === c.key))
   const exName = (e: Exercise) => (lang === 'zh' ? e.name_zh : e.name_en) || e.name_zh || e.name_en
 
   async function onSave() {
@@ -126,7 +132,16 @@ export function EditExerciseDialog({
           <div className="log-row">
             <select className="th-input" value={mergeTarget} onChange={(e) => setMergeTarget(e.target.value)}>
               <option value="">{lang === 'zh' ? '选择目标动作…' : 'pick target…'}</option>
-              {others.map((e) => (<option key={e.id} value={e.id}>{exName(e)}</option>))}
+              {mergeGroups.map((g) => (
+                <optgroup key={g.cat.key} label={categoryLabel(g.cat.key, lang)}>
+                  {g.items.map((e) => (<option key={e.id} value={e.id}>{exName(e)} · {MEASURE_TYPE_LABELS[e.measure_type][lang]}</option>))}
+                </optgroup>
+              ))}
+              {ungrouped.length > 0 && (
+                <optgroup label={lang === 'zh' ? '其他' : 'Other'}>
+                  {ungrouped.map((e) => (<option key={e.id} value={e.id}>{exName(e)} · {MEASURE_TYPE_LABELS[e.measure_type][lang]}</option>))}
+                </optgroup>
+              )}
             </select>
             <button className="th-btn-ghost log-suggest" type="button" onClick={onMerge} disabled={busy || !mergeTarget}>
               {lang === 'zh' ? '合并' : 'Merge'}

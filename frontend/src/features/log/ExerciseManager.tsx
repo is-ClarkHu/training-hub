@@ -10,12 +10,13 @@ import { useCategories, categoryLabel } from '../../categories'
 import type { TranslationTarget } from '../../translation'
 import { useUndo } from '../../undo'
 import { EditExerciseDialog } from './EditExerciseDialog'
-import { exerciseName } from './util'
+import { exerciseName, sortExercises } from './util'
 
 interface DragInfo { id: string; from: BodyPart }
 
 export function ExerciseManager({ lang, onChanged }: { lang: TranslationTarget; onChanged?: () => void }) {
   const cats = useCategories()
+  const catOrder = cats.map((c) => c.key)
   const { push } = useUndo()
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [editing, setEditing] = useState<Exercise | null>(null)
@@ -61,7 +62,7 @@ export function ExerciseManager({ lang, onChanged }: { lang: TranslationTarget; 
     <div className="set-ai">
       <p className="set-desc">{lang === 'zh' ? '编辑动作名/部位/类型,或把两个相同的动作合并。拖到别的分类=移动,按住 Shift 拖=额外加入(可属于多个分类)。改动会自动同步到历史与图表。' : 'Edit name/parts/type or merge duplicates. Drag onto another category to move it; hold Shift to add it (an exercise can belong to several). Changes propagate to History and charts.'}</p>
       {cats.map((c) => {
-        const items = exercises.filter((e) => e.body_parts.includes(c.key) && !e.is_rehab)
+        const items = sortExercises(exercises.filter((e) => e.body_parts.includes(c.key) && !e.is_rehab), lang, catOrder)
         // While dragging, keep every category visible so empty ones are droppable too.
         if (items.length === 0 && !dragging) return null
         return (
