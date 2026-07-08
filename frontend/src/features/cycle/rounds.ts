@@ -1,7 +1,7 @@
 // Pure helpers for round display (§6B). A round is one pass through the cycle's
 // ordered day labels; these derive the current round number and what's left from
 // the stored CycleRound rows.
-import type { CycleRound, TrainingCycle } from '../../supabase/types'
+import type { CycleRound, TrainingCycle, WorkoutEntry } from '../../supabase/types'
 
 export interface RoundView {
   index: number             // current round number (the open one, or the next to open)
@@ -10,6 +10,45 @@ export interface RoundView {
   remaining: string[]       // labels not yet done this round
   open: boolean             // a round is in progress
   nextLabel: string | null  // the next day to train
+}
+
+/** The open (in-progress) round for a cycle, or null. */
+export function openRound(rounds: CycleRound[]): CycleRound | null {
+  return rounds.filter((r) => r.ended_on == null).sort((a, b) => b.index - a.index)[0] ?? null
+}
+
+export interface RoundRegionActivity {
+  sets: number
+  items: Array<{ exId: string; sets: number; day: string; date: string | null }>
+}
+
+/**
+ * Sets logged during a cycle's open round, routed through each day's region
+ * bindings (day.regions). `setCount(entryId)` returns that entry's working-set
+ * count. Shared by the Cycle body view and the Dashboard round rings.
+ */
+export function roundRegionActivity(
+  cycle: TrainingCycle,
+  round: CycleRound | null,
+  entries: WorkoutEntry[],
+  setCount: (entryId: string) => number,
+): Record<string, RoundRegionActivity> {
+  const out: Record<string, RoundRegionActivity> = {}
+  if (!round) return out
+  const dayRegions = new Map(cycle.days.map((d) => [d.label, d.regions ?? []]))
+  for (const e of entries) {
+    if (e.date < round.started_on || !e.cycle_day_label) continue
+    const regions = dayRegions.get(e.cycle_day_label)
+    if (!regions || regions.length === 0) continue
+    const n = setCount(e.id)
+    if (n <= 0) continue
+    for (const region of regions) {
+      const a = (out[region] ??= { sets: 0, items: [] })
+      a.sets += n
+      a.items.push({ exId: e.exercise_id, sets: n, day: e.cycle_day_label, date: e.date })
+    }
+  }
+  return out
 }
 
 export function currentRound(cycle: TrainingCycle, rounds: CycleRound[]): RoundView {

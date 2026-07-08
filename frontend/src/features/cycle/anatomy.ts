@@ -43,6 +43,16 @@ export function regionLabel(id: RegionId, lang: TranslationTarget): string {
   return r ? (lang === 'zh' ? r.zh : r.en) : id
 }
 
+// Push / pull / legs chains — the three Apple-watch-style rings on the dashboard
+// summarise a round's volume across these. (abs + genitals sit outside the trio.)
+export type ChainId = 'push' | 'pull' | 'legs'
+export interface MuscleChain { id: ChainId; zh: string; en: string; color: string; regions: RegionId[] }
+export const MUSCLE_CHAINS: MuscleChain[] = [
+  { id: 'push', zh: '推', en: 'Push', color: '#ff8a5c', regions: ['chest', 'shoulders', 'triceps'] },
+  { id: 'pull', zh: '拉', en: 'Pull', color: '#7dd3a0', regions: ['back', 'biceps', 'forearms'] },
+  { id: 'legs', zh: '腿', en: 'Legs', color: '#8ab4f8', regions: ['quads', 'hamstrings', 'glutes', 'calves', 'adductors'] },
+]
+
 // Default category → regions. Casual splits lump (legs → whole lower body);
 // detailed users can drag to remap (stored in localStorage, see below).
 export const DEFAULT_CATEGORY_REGIONS: Record<string, RegionId[]> = {

@@ -9,6 +9,7 @@ import {
   getCycles,
   getEntries,
   getExercises,
+  getSetsByEntryIds,
   getTrackerEntries,
   setActiveCycle,
   skipCycleRound,
@@ -49,6 +50,7 @@ export function CycleScreen() {
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [exById, setExById] = useState<Record<string, Exercise>>({})
   const [roundsByCycle, setRoundsByCycle] = useState<Record<string, CycleRound[]>>({})
+  const [setCounts, setSetCounts] = useState<Record<string, number>>({})
   const [intimacyRows, setIntimacyRows] = useState<OptionalTracker[]>([])
   const [showIntimacy, setShowIntimacy] = useState(false)
   const [dialog, setDialog] = useState<{ mode: 'create' | 'edit'; cycle?: TrainingCycle } | null>(null)
@@ -73,6 +75,10 @@ export function CycleScreen() {
     setIntimacyRows(intimacy)
     const pairs = await Promise.all(cs.map(async (c) => [c.id, await getCycleRounds(c.id)] as const))
     setRoundsByCycle(Object.fromEntries(pairs))
+    const sm = await getSetsByEntryIds(es.map((e) => e.id))
+    const counts: Record<string, number> = {}
+    for (const [eid, list] of Object.entries(sm)) counts[eid] = list.filter((s) => s.set_type !== 'warmup').length
+    setSetCounts(counts)
   }, [])
 
   const rounds = active ? roundsByCycle[active.id] ?? [] : []
@@ -99,15 +105,34 @@ export function CycleScreen() {
   function bodyActivityFor(c: TrainingCycle, rv: ReturnType<typeof currentRound>): Record<string, RegionView> {
     const out: Record<string, RegionView> = {}
     if (!rv.open) return out
-    const completed = new Set(rv.completed)
-    for (const d of c.days) {
-      if (!completed.has(d.label)) continue
-      const summary = daySummary(d)
-      for (const region of (d.regions ?? []) as RegionId[]) {
-        const cur = (out[region] ??= { sets: 0, items: [] })
-        cur.sets += 6
-        cur.items.push({ name: `${d.label} · ${summary.title}`, sets: 1, day: d.label, date: summary.lastDate })
+    const open = (roundsByCycle[c.id] ?? []).find((r) => r.ended_on == null && r.index === rv.index)
+    if (!open) return out
+    // Real loop brightness: sets actually logged this round, routed through each
+    // day's region bindings. Per region we keep a per-exercise breakdown so the
+    // hover box shows what drove the glow (brighter = more sets).
+    const dayRegions = new Map(c.days.map((d) => [d.label, (d.regions ?? []) as RegionId[]]))
+    const perRegion = new Map<RegionId, Map<string, { name: string; sets: number; day: string; date: string | null }>>()
+    for (const e of entries) {
+      if (e.date < open.started_on || !e.cycle_day_label) continue
+      const regions = dayRegions.get(e.cycle_day_label)
+      if (!regions || regions.length === 0) continue
+      const n = setCounts[e.id] ?? 0
+      if (n <= 0) continue
+      const ex = exById[e.exercise_id]
+      const name = ex ? exerciseName(ex, lang) : '?'
+      for (const region of regions) {
+        const byEx = perRegion.get(region) ?? new Map()
+        const k = `${e.cycle_day_label}:${e.exercise_id}`
+        const cur = byEx.get(k) ?? { name, sets: 0, day: e.cycle_day_label, date: null as string | null }
+        cur.sets += n
+        if (!cur.date || e.date > cur.date) cur.date = e.date
+        byEx.set(k, cur)
+        perRegion.set(region, byEx)
       }
+    }
+    for (const [region, byEx] of perRegion) {
+      const items = [...byEx.values()].sort((a, b) => b.sets - a.sets)
+      out[region] = { sets: items.reduce((s, it) => s + it.sets, 0), items }
     }
     if (showIntimacy) {
       const open = (roundsByCycle[c.id] ?? []).find((r) => r.ended_on == null && r.index === rv.index)

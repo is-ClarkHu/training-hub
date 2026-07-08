@@ -14,7 +14,7 @@ import {
   Legend,
 } from 'chart.js'
 import { Doughnut, Bar, Line } from 'react-chartjs-2'
-import { getEntries, getExercises, getSetsByEntryIds, getSportSessions, getInjuries, getSports, getTrackerEntries } from '../../db'
+import { getActiveCycle, getCycleRounds, getEntries, getExercises, getSetsByEntryIds, getSportSessions, getInjuries, getSports, getTrackerEntries } from '../../db'
 import { useLanguage } from '../../i18n'
 import {
   type Exercise,
@@ -26,6 +26,11 @@ import {
   type WorkoutEntry,
 } from '../../supabase/types'
 import { getCategories, categoryLabel } from '../../categories'
+import { currentRound, openRound, roundRegionActivity } from '../cycle/rounds'
+import { MUSCLE_CHAINS } from '../cycle/anatomy'
+import { BodyModel, type RegionView } from '../cycle/BodyModel'
+import { RoundRings, type RingChain } from './RoundRings'
+import type { CycleRound, TrainingCycle } from '../../supabase/types'
 import { ActiveInjuryBanner, bodyAreaLabel } from '../injuries'
 import { INJURY_STATUS_LABELS, daysBetween, daysSince } from '../injuries/util'
 import { SportCharts, sportName } from '../sports'
@@ -55,6 +60,7 @@ Chart.defaults.font.family = "'JetBrains Mono', ui-monospace, monospace"
 Chart.defaults.font.size = 11
 Chart.defaults.maintainAspectRatio = false
 const GRID = 'rgba(120, 130, 150, 0.15)'
+const RING_TARGET = 12 // sets per chain to "close" a ring this round
 const TINTS = ['#8ab4f8', '#4fd1e0', '#7dd3a0', '#a78bfa', '#ff8a5c', '#f5b544', '#f472b6']
 // intensity ramp 0–4: green (easy) → amber → red (hard) — less overall amber
 const HEAT = ['var(--panelhi)', 'rgba(125,211,160,.38)', 'rgba(125,211,160,.7)', 'rgba(245,181,68,.85)', '#ff5d6c']
@@ -71,6 +77,9 @@ export function DashboardScreen() {
   const [showIntimacy, setShowIntimacy] = useState(false)
   const [progCategory, setProgCategory] = useState('')
   const [sportId, setSportId] = useState('')
+  const [activeCycle, setActiveCycle] = useState<TrainingCycle | null>(null)
+  const [cycleRounds, setCycleRounds] = useState<CycleRound[]>([])
+  const [showRoundBody, setShowRoundBody] = useState(false)
 
   useEffect(() => {
     void (async () => {
@@ -89,10 +98,44 @@ export function DashboardScreen() {
       setIntimacyRows(ir)
       setShowIntimacy(visible)
       setSportId((prev) => prev || sp.find((s) => s.is_default)?.id || sp[0]?.id || '')
+      const cyc = await getActiveCycle()
+      setActiveCycle(cyc)
+      setCycleRounds(cyc ? await getCycleRounds(cyc.id) : [])
     })()
   }, [])
 
   const allSets = useMemo(() => Object.values(setMap).flat(), [setMap])
+
+  // Round rings + body-model activity for the active cycle's open round.
+  const roundView = useMemo(() => {
+    if (!activeCycle) return null
+    const round = openRound(cycleRounds)
+    const rv = currentRound(activeCycle, cycleRounds)
+    const setCount = (id: string) => (setMap[id] ?? []).filter((s) => s.set_type !== 'warmup').length
+    const activity = roundRegionActivity(activeCycle, round, entries, setCount)
+    const regionSets: Record<string, number> = {}
+    for (const [region, a] of Object.entries(activity)) regionSets[region] = a.sets
+    const chains: RingChain[] = MUSCLE_CHAINS.map((ch) => ({
+      id: ch.id,
+      label: lang === 'zh' ? ch.zh : ch.en,
+      color: ch.color,
+      sets: ch.regions.reduce((s, r) => s + (regionSets[r] ?? 0), 0),
+      target: RING_TARGET,
+    }))
+    const body: Record<string, RegionView> = {}
+    for (const [region, a] of Object.entries(activity)) {
+      const byEx = new Map<string, { name: string; sets: number; day: string; date: string | null }>()
+      for (const it of a.items) {
+        const ex = exById[it.exId]
+        const cur = byEx.get(it.exId) ?? { name: ex ? exerciseName(ex, lang) : '?', sets: 0, day: it.day, date: null as string | null }
+        cur.sets += it.sets
+        if (it.date && (!cur.date || it.date > cur.date)) cur.date = it.date
+        byEx.set(it.exId, cur)
+      }
+      body[region] = { sets: a.sets, items: [...byEx.values()].sort((x, y) => y.sets - x.sets) }
+    }
+    return { rv, chains, body, open: !!round }
+  }, [activeCycle, cycleRounds, entries, setMap, exById, lang])
   const recovery = useMemo(() => muscleRecovery(entries, exById), [entries, exById])
   const bpCounts = useMemo(() => bodyPartCounts(entries, exById), [entries, exById])
   const stCounts = useMemo(() => setTypeCounts(allSets), [allSets])
@@ -294,6 +337,38 @@ export function DashboardScreen() {
           </div>
         ))}
       </div>
+
+      {roundView && (
+        <section className="dash-round">
+          <div className="th-sectitle">
+            {lang === 'zh' ? '本轮进度' : 'Round progress'}
+            <small className="dash-sub">
+              {activeCycle?.name} · R{roundView.rv.index}{roundView.open ? '' : (lang === 'zh' ? ' · 待开始' : ' · pending')}
+            </small>
+          </div>
+          <div className="dash-round-body">
+            <RoundRings
+              chains={roundView.chains}
+              roundIndex={roundView.rv.index}
+              active={showRoundBody}
+              subtitle={showRoundBody
+                ? (lang === 'zh' ? '点击收起人体图' : 'tap to hide body map')
+                : (lang === 'zh' ? '点击查看人体图' : 'tap for body map')}
+              onClick={() => setShowRoundBody((v) => !v)}
+            />
+            {showRoundBody && (
+              <div className="dash-round-expand">
+                <BodyModel activity={roundView.body} lang={lang} adult={showIntimacy} />
+              </div>
+            )}
+          </div>
+          {!roundView.open && (
+            <span className="dash-round-hint">
+              {lang === 'zh' ? '在 Log 里记录带循环日的训练即可开启本轮' : 'Log a cycle-day workout to start this round'}
+            </span>
+          )}
+        </section>
+      )}
 
       <section className="dash-heat-sec">
         <div className="th-sectitle">{lang === 'zh' ? '每日强度' : 'Daily intensity'} <small className="dash-sub">0 {lang === 'zh' ? '无' : 'rest'} · 4 {lang === 'zh' ? '比赛/双练' : 'comp/double'}{showIntimacy ? (lang === 'zh' ? ' · 含私密' : ' · includes private') : ''}</small></div>
