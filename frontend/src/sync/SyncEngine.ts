@@ -47,12 +47,36 @@ interface Row {
   [k: string]: unknown
 }
 
+// Defaults for NOT-NULL columns. Supabase bulk-upsert builds one INSERT whose
+// columns are the UNION of keys across the batch, so a row that omits (or nulls)
+// a key gets NULL for it — tripping NOT-NULL constraints on older/partial rows.
+// We homogenize every row to that union, filling absent/null values: a known
+// NOT-NULL column gets its default, anything else stays null (safe for nullable
+// columns; required columns like measure_type/date are always present anyway).
+const COLUMN_DEFAULTS: Record<string, unknown> = {
+  deleted: false, assisted: false, is_custom: false, name_locked: false,
+  needs_translation: false, default_per_side: false, is_warmup: false, is_rehab: false,
+  is_superset: false, needs_review: false, active: false, injury: false, skipped: false,
+  is_default: false, verified: false, per_side: false,
+  name_en: '', rehab_purpose_zh: '', rehab_purpose_en: '', rehab_cues_zh: '',
+  rehab_cues_en: '', rehab_dosage: '', display_mode: 'circle',
+  body_parts: [], sub_sets: [], fields: [], attributes: {}, completed_labels: [],
+  days: [], note_tags: [],
+}
+
 async function pushTable(uid: string, table: TableName): Promise<number> {
   const since = getWm(uid, table, 'push')
   const all = (await db.table(table).toArray()) as Row[]
   const rows = all.filter((r) => r.updated_at > since)
   if (rows.length === 0) return 0
-  const payload = rows.map((r) => ({ ...r, user_id: uid })) // stamp owner for RLS
+  const payload: Row[] = rows.map((r) => ({ ...r, user_id: uid })) // stamp owner for RLS
+  const union = new Set<string>()
+  for (const r of payload) for (const k of Object.keys(r)) union.add(k)
+  for (const r of payload) {
+    for (const k of union) {
+      if (r[k] == null) r[k] = k in COLUMN_DEFAULTS ? COLUMN_DEFAULTS[k] : null
+    }
+  }
   for (let i = 0; i < payload.length; i += 500) {
     const { error } = await supabase.from(table).upsert(payload.slice(i, i + 500), { onConflict: 'id' })
     if (error) throw error
