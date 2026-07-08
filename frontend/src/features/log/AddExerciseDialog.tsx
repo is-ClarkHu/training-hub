@@ -132,7 +132,7 @@ export function AddExerciseDialog({
         </div>
 
         <div className="log-dialog-actions">
-          <button className="th-btn-ghost" type="button" onClick={onClose}>Cancel</button>
+          <button className="th-btn-ghost" type="button" onClick={onClose}>{lang === 'zh' ? '取消' : 'Cancel'}</button>
           <button className="th-btn" type="button" onClick={onCreate} disabled={busy || bodyParts.length === 0 || (!nameZh.trim() && !nameEn.trim())}>
             {lang === 'zh' ? '创建' : 'Create'}
           </button>

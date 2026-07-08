@@ -3,7 +3,8 @@
 // Reclassify by drag: drop an exercise on another category to MOVE it there
 // (drops the source category); hold Shift to ADD the target while keeping the rest
 // (an exercise can belong to multiple categories). Click still opens the dialog.
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type { DragEvent, KeyboardEvent } from 'react'
 import { getExercises, updateExercise, withUndo } from '../../db'
 import { type BodyPart, type Exercise } from '../../supabase/types'
 import { useCategories, categoryLabel } from '../../categories'
@@ -14,7 +15,7 @@ import { exerciseName, sortExercises } from './util'
 
 interface DragInfo { id: string; from: BodyPart }
 
-export function ExerciseManager({ lang, onChanged }: { lang: TranslationTarget; onChanged?: () => void }) {
+export function ExerciseManager({ lang, onChanged }: { lang: TranslationTarget; onChanged?: () => Promise<void> | void }) {
   const cats = useCategories()
   const catOrder = cats.map((c) => c.key)
   const { push } = useUndo()
@@ -22,17 +23,28 @@ export function ExerciseManager({ lang, onChanged }: { lang: TranslationTarget; 
   const [editing, setEditing] = useState<Exercise | null>(null)
   const [dragging, setDragging] = useState<DragInfo | null>(null)
   const [dragOver, setDragOver] = useState<BodyPart | null>(null)
+  const draggedRef = useRef(false)
 
   const reload = useCallback(async () => {
     setExercises(await getExercises())
-    onChanged?.()
+    await onChanged?.()
   }, [onChanged])
   useEffect(() => {
     void reload()
   }, [reload])
 
-  async function onDropCategory(target: BodyPart, add: boolean) {
-    const info = dragging
+  function readDragInfo(e: DragEvent): DragInfo | null {
+    if (dragging) return dragging
+    try {
+      const raw = e.dataTransfer.getData('application/x-traininghub-exercise')
+      return raw ? JSON.parse(raw) as DragInfo : null
+    } catch {
+      return null
+    }
+  }
+
+  async function onDropCategory(target: BodyPart, add: boolean, event: DragEvent) {
+    const info = readDragInfo(event)
     setDragging(null)
     setDragOver(null)
     if (!info) return
@@ -54,13 +66,19 @@ export function ExerciseManager({ lang, onChanged }: { lang: TranslationTarget; 
     )
   }
 
+  function openFromKeyboard(event: KeyboardEvent, ex: Exercise) {
+    if (event.key !== 'Enter' && event.key !== ' ') return
+    event.preventDefault()
+    setEditing(ex)
+  }
+
   if (exercises.length === 0) {
-    return <p className="exmgr-desc">{lang === 'zh' ? '还没有动作(去 Log 添加)。' : 'No exercises yet — add them in Log.'}</p>
+    return <p className="exmgr-desc">{lang === 'zh' ? '还没有动作，去 Log 添加。' : 'No exercises yet. Add them from Log.'}</p>
   }
 
   return (
     <div className={`exmgr ${dragging ? 'is-dragging' : ''}`}>
-      <p className="exmgr-desc">{lang === 'zh' ? '点动作可编辑 / 合并;拖到别的分类改归属(按住 Shift 拖 = 加入多个分类)。' : 'Tap to edit / merge; drag onto another category to reclassify (hold Shift to add to several).'}</p>
+      <p className="exmgr-desc">{lang === 'zh' ? '点击动作可编辑或合并；拖到其他分类可修改归属，按住 Shift 可加入多个分类。' : 'Click to edit or merge. Drag to another category to reclassify; hold Shift to assign multiple categories.'}</p>
       <div className="exmgr-groups">
         {cats.map((c) => {
           const items = sortExercises(exercises.filter((e) => e.body_parts.includes(c.key) && !e.is_rehab), lang, catOrder)
@@ -72,7 +90,7 @@ export function ExerciseManager({ lang, onChanged }: { lang: TranslationTarget; 
               className={`exmgr-group ${dragOver === c.key ? 'drag-over' : ''}`}
               onDragOver={(e) => { if (dragging) { e.preventDefault(); setDragOver(c.key) } }}
               onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver((d) => (d === c.key ? null : d)) }}
-              onDrop={(e) => { e.preventDefault(); void onDropCategory(c.key, e.shiftKey) }}
+              onDrop={(e) => { e.preventDefault(); void onDropCategory(c.key, e.shiftKey, e) }}
             >
               <span className="exmgr-label">
                 {categoryLabel(c.key, lang)}
@@ -83,17 +101,33 @@ export function ExerciseManager({ lang, onChanged }: { lang: TranslationTarget; 
               </span>
               <div className="exmgr-chips">
                 {items.map((e) => (
-                  <button
+                  <div
                     key={e.id}
-                    type="button"
+                    role="button"
+                    tabIndex={0}
                     className="exmgr-chip"
                     draggable
-                    onDragStart={() => setDragging({ id: e.id, from: c.key })}
-                    onDragEnd={() => { setDragging(null); setDragOver(null) }}
-                    onClick={() => setEditing(e)}
+                    onDragStart={(event) => {
+                      const info = { id: e.id, from: c.key }
+                      draggedRef.current = true
+                      event.dataTransfer.effectAllowed = 'move'
+                      event.dataTransfer.setData('application/x-traininghub-exercise', JSON.stringify(info))
+                      event.dataTransfer.setData('text/plain', exerciseName(e, lang))
+                      setDragging(info)
+                    }}
+                    onDragEnd={() => {
+                      window.setTimeout(() => { draggedRef.current = false }, 0)
+                      setDragging(null)
+                      setDragOver(null)
+                    }}
+                    onClick={() => {
+                      if (draggedRef.current) return
+                      setEditing(e)
+                    }}
+                    onKeyDown={(event) => openFromKeyboard(event, e)}
                   >
                     {exerciseName(e, lang)}
-                  </button>
+                  </div>
                 ))}
                 {items.length === 0 && dragging && (
                   <span className="exmgr-empty">{lang === 'zh' ? '(空)' : '(empty)'}</span>
@@ -109,7 +143,7 @@ export function ExerciseManager({ lang, onChanged }: { lang: TranslationTarget; 
           lang={lang}
           exercise={editing}
           allExercises={exercises}
-          onSaved={() => { setEditing(null); void reload() }}
+          onSaved={async () => { setEditing(null); await reload() }}
           onClose={() => setEditing(null)}
         />
       )}

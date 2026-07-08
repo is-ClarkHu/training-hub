@@ -7,6 +7,13 @@ alter table public.sets       add column if not exists note text;
 alter table public.sets       add column if not exists sub_sets jsonb not null default '[]'::jsonb;
 alter table public.exercises  add column if not exists default_per_side boolean not null default false;
 alter table public.exercises  add column if not exists is_warmup        boolean not null default false;
+alter table public.exercises
+  add column if not exists is_rehab         boolean not null default false,
+  add column if not exists rehab_purpose_zh text not null default '',
+  add column if not exists rehab_purpose_en text not null default '',
+  add column if not exists rehab_cues_zh    text not null default '',
+  add column if not exists rehab_cues_en    text not null default '',
+  add column if not exists rehab_dosage     text not null default '';
 
 -- body_part is now a user-editable category key — drop the fixed 7-value check.
 alter table public.exercises  drop constraint if exists exercises_body_part_check;
@@ -14,8 +21,16 @@ alter table public.injuries   drop constraint if exists injuries_body_part_check
 
 -- An exercise can belong to multiple categories — body_part → body_parts text[].
 alter table public.exercises  add column if not exists body_parts text[] not null default '{}';
-update public.exercises set body_parts = array[body_part]
-  where body_part is not null and body_parts = '{}';
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'exercises' and column_name = 'body_part'
+  ) then
+    update public.exercises set body_parts = array[body_part]
+      where body_part is not null and body_parts = '{}';
+  end if;
+end $$;
 alter table public.exercises  drop column if exists body_part;
 
 -- Sports redesign: per-sport custom fields (replaces fixed 4 tiers) + session attributes

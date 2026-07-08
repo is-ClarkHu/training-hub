@@ -13,16 +13,16 @@ export interface Category {
 }
 
 export const DEFAULT_CATEGORIES: Category[] = [
-  { key: 'chest', zh: '胸', en: 'Chest' },
-  { key: 'back', zh: '背', en: 'Back' },
-  { key: 'shoulders', zh: '肩', en: 'Shoulders' },
-  { key: 'legs', zh: '腿', en: 'Legs' },
+  { key: 'chest', zh: '胸部', en: 'Chest' },
+  { key: 'back', zh: '背部', en: 'Back' },
+  { key: 'shoulders', zh: '肩部', en: 'Shoulders' },
+  { key: 'legs', zh: '腿部', en: 'Legs' },
   { key: 'arms', zh: '手臂', en: 'Arms' },
-  { key: 'biceps', zh: '二头', en: 'Biceps' },
-  { key: 'triceps', zh: '三头', en: 'Triceps' },
-  { key: 'core', zh: '腹', en: 'Core' },
+  { key: 'biceps', zh: '肱二头肌', en: 'Biceps' },
+  { key: 'triceps', zh: '肱三头肌', en: 'Triceps' },
+  { key: 'core', zh: '核心', en: 'Core' },
   { key: 'cardio', zh: '有氧', en: 'Cardio' },
-  { key: 'warmup', zh: '热身', en: 'Warmup' },
+  { key: 'warmup', zh: '热身', en: 'Warm-up' },
   { key: 'sports', zh: '运动', en: 'Sports' },
 ]
 

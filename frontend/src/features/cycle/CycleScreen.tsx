@@ -35,6 +35,7 @@ import { CategoryManager } from './CategoryManager'
 import { currentRound } from './rounds'
 import { BodyModel, type RegionView } from './BodyModel'
 import { REGIONS, regionLabel, type RegionId } from './anatomy'
+import { cycleDayTitle } from './day'
 import { exerciseName } from '../log/util'
 import { intimacyCategory, intimacyLabel, intimacyVisible } from '../intimacy'
 import './cycle.css'
@@ -287,24 +288,24 @@ export function CycleScreen() {
           <div key={c.id} className="cyc-card">
             <div className="cyc-card-head">
               <span className="cyc-name">{c.name}</span>
-              <span className="cyc-mode-badge">{c.display_mode === 'body' ? 'body' : 'circle'}</span>
+              <span className="cyc-mode-badge">{c.display_mode === 'body' ? (lang === 'zh' ? '身体图' : 'Body') : (lang === 'zh' ? '圆环' : 'Circle')}</span>
               {c.active ? (
-                <span className="cyc-active-badge">active</span>
+                <span className="cyc-active-badge">{lang === 'zh' ? '主分化' : 'active'}</span>
               ) : (
-                <button className="hist-link" type="button" onClick={() => void activateCycle(c)}>set active</button>
+                <button className="hist-link" type="button" onClick={() => void activateCycle(c)}>{lang === 'zh' ? '设为主分化' : 'set active'}</button>
               )}
               <div className="cyc-card-actions">
-                <button className="hist-link" type="button" onClick={() => setDialog({ mode: 'edit', cycle: c })}>edit</button>
-                <button className="hist-link danger" type="button" onClick={() => void deleteCycle(c)}>delete</button>
+                <button className="hist-link" type="button" onClick={() => setDialog({ mode: 'edit', cycle: c })}>{lang === 'zh' ? '编辑' : 'edit'}</button>
+                <button className="hist-link danger" type="button" onClick={() => void deleteCycle(c)}>{lang === 'zh' ? '删除' : 'delete'}</button>
               </div>
             </div>
             <div className="cyc-days">
               {c.days.length === 0 ? (
-                <span className="cyc-empty">No days — click edit.</span>
+                <span className="cyc-empty">{lang === 'zh' ? '还没有训练日 - 点编辑添加。' : 'No days - edit to add them.'}</span>
               ) : (
                 c.days.map((d) => (
                   <span key={d.label} className="cyc-day">
-                    <strong>{d.label}</strong> {d.title || d.body_parts.map((bp) => categoryLabel(bp, lang)).join('/')}
+                    <strong>{d.label}</strong> {cycleDayTitle(d, lang)}
                     {c.display_mode === 'body' && d.regions?.length ? <em>{d.regions.map((r) => regionLabel(r as RegionId, lang)).join('/')}</em> : null}
                   </span>
                 ))
@@ -345,7 +346,7 @@ function shortDate(date: string | null): string {
 }
 
 function dayTitle(day: CycleDay, lang: 'en' | 'zh'): string {
-  return day.title || day.body_parts.map((bp) => categoryLabel(bp, lang)).join(' / ') || day.label
+  return cycleDayTitle(day, lang)
 }
 
 function CyclePlanMatrix({
@@ -555,7 +556,7 @@ function CircleLoop({
               className={`cyc-pie-slice ${done ? 'done' : ''} ${next ? 'next' : ''} ${hovered?.label === d.label ? 'is-hover' : ''}`}
               d={slicePath(i, n)}
             >
-              <title>{`${d.label} · ${d.title || d.body_parts.join('/')}`}</title>
+              <title>{`${d.label} · ${cycleDayTitle(d, lang)}`}</title>
             </path>
             <text
               className={`cyc-pie-label ${done ? 'done' : ''}`}
@@ -571,7 +572,7 @@ function CircleLoop({
       })}
         <circle className="cyc-pie-hole" cx="50" cy="50" r="18" />
         <text className="cyc-pie-center" x="50" y="45" textAnchor="middle" dominantBaseline="central">{centerDay?.label ?? `R${round.index}`}</text>
-        {!compact && <text className="cyc-pie-caption" x="50" y="58" textAnchor="middle" dominantBaseline="central">{centerDay ? dayTitle(centerDay, lang) : (lang === 'zh' ? 'loop' : 'loop')}</text>}
+        {!compact && <text className="cyc-pie-caption" x="50" y="58" textAnchor="middle" dominantBaseline="central">{centerDay ? dayTitle(centerDay, lang) : (lang === 'zh' ? '循环' : 'loop')}</text>}
       </svg>
       {hovered && (
         <div className="cyc-pie-tip">
@@ -624,7 +625,14 @@ function CycleDialog({
   const [name, setName] = useState(cycle?.name ?? `${initialCount}-Split`)
   const [displayMode, setDisplayMode] = useState<TrainingCycle['display_mode']>(cycle?.display_mode ?? 'body')
   const [days, setDays] = useState<CycleDay[]>(
-    cycle?.days.map((d) => ({ ...d, body_parts: [...d.body_parts], regions: [...(d.regions ?? [])], exercise_ids: [...(d.exercise_ids ?? [])] })) ?? templateDays(initialCount),
+    cycle?.days.map((d) => ({
+      ...d,
+      title_zh: d.title_zh ?? '',
+      title_en: d.title_en ?? '',
+      body_parts: [...d.body_parts],
+      regions: [...(d.regions ?? [])],
+      exercise_ids: [...(d.exercise_ids ?? [])],
+    })) ?? templateDays(initialCount),
   )
 
   function applySplitCount(n: number) {
@@ -676,7 +684,11 @@ function CycleDialog({
 
   function save() {
     if (!name.trim() || days.length === 0) return
-    onSave({ name: name.trim(), display_mode: displayMode ?? 'circle', days })
+    onSave({
+      name: name.trim(),
+      display_mode: displayMode ?? 'circle',
+      days: days.map((d) => ({ ...d, title: d.title_zh || d.title_en || d.title || '' })),
+    })
   }
 
   return (
@@ -686,7 +698,7 @@ function CycleDialog({
           <h3>{mode === 'create' ? (lang === 'zh' ? '新建分化框架' : 'New split framework') : (lang === 'zh' ? '编辑分化框架' : 'Edit split framework')}</h3>
           <button className="cyc-dialog-x" type="button" onClick={onClose} aria-label="close">×</button>
         </div>
-        <input className="th-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="cycle name" />
+        <input className="th-input" value={name} onChange={(e) => setName(e.target.value)} placeholder={lang === 'zh' ? '框架名称' : 'Framework name'} />
         <div className="cyc-dialog-controls">
           <div className="cyc-seg">
             {SPLIT_COUNTS.map((n) => (
@@ -696,8 +708,8 @@ function CycleDialog({
             ))}
           </div>
           <div className="cyc-seg">
-            <button type="button" className={displayMode === 'body' ? 'on' : ''} onClick={() => setDisplayMode('body')}>Body</button>
-            <button type="button" className={displayMode === 'circle' ? 'on' : ''} onClick={() => setDisplayMode('circle')}>Circle</button>
+            <button type="button" className={displayMode === 'body' ? 'on' : ''} onClick={() => setDisplayMode('body')}>{lang === 'zh' ? '身体图' : 'Body'}</button>
+            <button type="button" className={displayMode === 'circle' ? 'on' : ''} onClick={() => setDisplayMode('circle')}>{lang === 'zh' ? '圆环' : 'Circle'}</button>
           </div>
         </div>
         <div className="cyc-editor">
@@ -708,7 +720,8 @@ function CycleDialog({
               <div key={i} className="cyc-edit-day">
                 <div className="cyc-edit-row">
                   <input className="th-input cyc-label" value={d.label} onChange={(e) => setDay(i, { label: e.target.value })} placeholder="A" />
-                  <input className="th-input" value={d.title} onChange={(e) => setDay(i, { title: e.target.value })} placeholder={lang === 'zh' ? '标题,如 胸+腹' : 'title, e.g. Chest+Abs'} />
+                  <input className="th-input" value={d.title_zh ?? ''} onChange={(e) => setDay(i, { title_zh: e.target.value })} placeholder="中文标题, 如 胸 + 核心" />
+                  <input className="th-input" value={d.title_en ?? ''} onChange={(e) => setDay(i, { title_en: e.target.value })} placeholder="English title, e.g. Chest + Core" />
                   <button className="cyc-del" type="button" onClick={() => { setDays((ds) => ds.filter((_, idx) => idx !== i)); setSplitCount((n) => Math.max(0, n - 1)) }}>×</button>
                 </div>
                 <div className="cyc-bp-row">
@@ -730,7 +743,7 @@ function CycleDialog({
                 )}
                 {warmups.length > 0 && (
                   <div className="cyc-ex-pick">
-                    <span className="cyc-ex-hint">{lang === 'zh' ? '热身:' : 'Warmup:'}</span>
+                    <span className="cyc-ex-hint">{lang === 'zh' ? '热身:' : 'Warm-up:'}</span>
                     {warmups.map((e) => (
                       <button key={e.id} type="button" className={`cyc-ex ${(d.exercise_ids ?? []).includes(e.id) ? 'on' : ''}`} onClick={() => toggleEx(i, e.id)}>
                         {exName(e)}
@@ -740,7 +753,7 @@ function CycleDialog({
                 )}
                 {d.body_parts.length > 0 && (
                   <div className="cyc-ex-pick">
-                    <span className="cyc-ex-hint">{lang === 'zh' ? '挂动作:' : 'Attach exercises:'}</span>
+                    <span className="cyc-ex-hint">{lang === 'zh' ? '绑定动作:' : 'Linked exercises:'}</span>
                     {dayExercises.length === 0 ? (
                       <span className="cyc-empty">{lang === 'zh' ? '该部位还没动作(去 Log 加)' : 'no exercises for these parts yet'}</span>
                     ) : (
@@ -755,10 +768,10 @@ function CycleDialog({
               </div>
             )
           })}
-          <button className="th-btn-ghost cyc-add-day" type="button" onClick={addDay}>+ day</button>
+          <button className="th-btn-ghost cyc-add-day" type="button" onClick={addDay}>{lang === 'zh' ? '+ 训练日' : '+ Day'}</button>
           <div className="cyc-editor-actions">
-            <button className="th-btn-ghost" type="button" onClick={onClose}>Cancel</button>
-            <button className="th-btn" type="button" onClick={save} disabled={!name.trim() || days.length === 0}>Save</button>
+            <button className="th-btn-ghost" type="button" onClick={onClose}>{lang === 'zh' ? '取消' : 'Cancel'}</button>
+            <button className="th-btn" type="button" onClick={save} disabled={!name.trim() || days.length === 0}>{lang === 'zh' ? '保存' : 'Save'}</button>
           </div>
         </div>
       </div>

@@ -27,7 +27,7 @@ export function EditExerciseDialog({
   lang: TranslationTarget
   exercise: Exercise
   allExercises: Exercise[]
-  onSaved: () => void
+  onSaved: () => Promise<void> | void
   onClose: () => void
 }) {
   const cats = useCategories()
@@ -66,8 +66,8 @@ export function EditExerciseDialog({
       name_locked: true,
     }))
     setBusy(false)
-    onSaved()
-    push(lang === 'zh' ? `已保存「${exName(exercise)}」` : `Saved “${exName(exercise)}”`, async () => { await undo(); onSaved() })
+    await onSaved()
+    push(lang === 'zh' ? `已保存「${exName(exercise)}」` : `Saved “${exName(exercise)}”`, async () => { await undo(); await onSaved() })
   }
   async function onMerge() {
     if (!mergeTarget) return
@@ -75,19 +75,19 @@ export function EditExerciseDialog({
     setBusy(true)
     const { undo } = await withUndo(['exercises', 'workout_entries'], () => mergeExercises(exercise.id, mergeTarget))
     setBusy(false)
-    onSaved()
-    push(lang === 'zh' ? `已合并「${exName(exercise)}」` : `Merged “${exName(exercise)}”`, async () => { await undo(); onSaved() })
+    await onSaved()
+    push(lang === 'zh' ? `已合并「${exName(exercise)}」` : `Merged “${exName(exercise)}”`, async () => { await undo(); await onSaved() })
   }
   async function onDelete() {
     const msg = usage
-      ? lang === 'zh' ? `该动作有 ${usage} 条记录,删除后它们会显示为"已删除动作"。仍删除?` : `${usage} records reference this; they'll show as “deleted”. Delete anyway?`
+      ? lang === 'zh' ? `该动作有 ${usage} 条记录。删除后，这些记录会显示为“已删除动作”。仍然删除？` : `${usage} records reference this exercise. They will show as “deleted exercise”. Delete anyway?`
       : lang === 'zh' ? '删除该动作?' : 'Delete this exercise?'
     if (!confirm(msg)) return
     setBusy(true)
     const { undo } = await withUndo(['exercises'], () => softDeleteExercise(exercise.id))
     setBusy(false)
-    onSaved()
-    push(lang === 'zh' ? `已删除「${exName(exercise)}」` : `Deleted “${exName(exercise)}”`, async () => { await undo(); onSaved() })
+    await onSaved()
+    push(lang === 'zh' ? `已删除「${exName(exercise)}」` : `Deleted “${exName(exercise)}”`, async () => { await undo(); await onSaved() })
   }
 
   return (
@@ -124,14 +124,14 @@ export function EditExerciseDialog({
 
         <label className="log-perside">
           <input type="checkbox" checked={perSide} onChange={(e) => setPerSide(e.target.checked)} />
-          {lang === 'zh' ? '默认每侧(录入时自动勾选)' : 'per-side by default (prefills the toggle)'}
+          {lang === 'zh' ? '默认每侧记录（录入时自动勾选）' : 'Per-side by default'}
         </label>
 
         <div className="log-field">
           <label className="th-label">{lang === 'zh' ? '合并到(它们其实是同一个动作)' : 'Merge into (same exercise)'}</label>
           <div className="log-row">
             <select className="th-input" value={mergeTarget} onChange={(e) => setMergeTarget(e.target.value)}>
-              <option value="">{lang === 'zh' ? '选择目标动作…' : 'pick target…'}</option>
+              <option value="">{lang === 'zh' ? '选择目标动作…' : 'Select target exercise…'}</option>
               {mergeGroups.map((g) => (
                 <optgroup key={g.cat.key} label={categoryLabel(g.cat.key, lang)}>
                   {g.items.map((e) => (<option key={e.id} value={e.id}>{exName(e)} · {MEASURE_TYPE_LABELS[e.measure_type][lang]}</option>))}

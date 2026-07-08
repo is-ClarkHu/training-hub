@@ -24,8 +24,8 @@ import { parseNote, noteTagLabel } from '../../translation'
 import { useLanguage } from '../../i18n'
 import { useUndo } from '../../undo'
 import { fieldLabel } from '../sports'
-import { categoryLabel } from '../../categories'
 import { currentRound } from '../cycle/rounds'
+import { cycleDayOptionLabel } from '../cycle/day'
 import { INTIMACY_CATEGORIES, intimacyLabel, intimacyVisible } from '../intimacy'
 import type {
   CycleRound,
@@ -291,7 +291,7 @@ export function LogScreen() {
               <option value="">—</option>
               {activeCycle.days.map((d) => (
                 <option key={d.label} value={d.label}>
-                  {d.label}{d.title ? ` · ${d.title}` : d.body_parts.length ? ` · ${d.body_parts.map((bp) => categoryLabel(bp, lang)).join('/')}` : ''}
+                  {cycleDayOptionLabel(d, lang)}
                 </option>
               ))}
             </select>

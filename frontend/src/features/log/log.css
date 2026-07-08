@@ -111,6 +111,8 @@
 }
 .exmgr-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .exmgr-chip {
+  display: inline-flex;
+  align-items: center;
   padding: 8px 13px;
   font: 13px/1 var(--mono);
   color: var(--text);
@@ -118,8 +120,11 @@
   border: 1px solid var(--border);
   border-radius: 8px;
   cursor: grab;
+  user-select: none;
+  -webkit-user-drag: element;
   transition: border-color 0.15s, color 0.15s, background 0.15s, transform 0.08s;
 }
+.exmgr-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .exmgr-chip:hover { border-color: var(--accent); color: var(--text-bright); }
 .exmgr-chip:active { cursor: grabbing; transform: scale(0.97); }
 /* Fade non-target categories a touch while a drag is in progress. */

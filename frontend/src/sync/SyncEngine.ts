@@ -32,6 +32,15 @@ const wmKey = (uid: string, table: string, kind: 'push' | 'pull') => `th.sync.${
 const getWm = (uid: string, t: string, k: 'push' | 'pull') => localStorage.getItem(wmKey(uid, t, k)) ?? EPOCH
 const setWm = (uid: string, t: string, k: 'push' | 'pull', v: string) => localStorage.setItem(wmKey(uid, t, k), v)
 
+function errorMessage(e: unknown): string {
+  if (e instanceof Error) return e.message
+  if (e && typeof e === 'object') {
+    const r = e as Record<string, unknown>
+    return [r.message, r.code, r.details, r.hint].filter(Boolean).join(' | ') || JSON.stringify(r)
+  }
+  return String(e)
+}
+
 interface Row {
   id: string
   updated_at: string
@@ -96,14 +105,14 @@ export async function syncNow(): Promise<SyncResult | null> {
       try {
         pushed += await pushTable(uid, t)
       } catch (e) {
-        errors.push(`push ${t}: ${e instanceof Error ? e.message : String(e)}`)
+        errors.push(`push ${t}: ${errorMessage(e)}`)
       }
     }
     for (const t of TABLES) {
       try {
         pulled += await pullTable(uid, t)
       } catch (e) {
-        errors.push(`pull ${t}: ${e instanceof Error ? e.message : String(e)}`)
+        errors.push(`pull ${t}: ${errorMessage(e)}`)
       }
     }
     return { pushed, pulled, errors }

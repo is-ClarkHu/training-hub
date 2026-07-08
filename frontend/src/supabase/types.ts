@@ -90,7 +90,9 @@ export interface SportTier {
 
 export interface CycleDay {
   label: string         // 'A' | 'B' | ...
-  title: string         // e.g. 'Chest+Abs'
+  title: string         // legacy/fallback display title
+  title_zh?: string     // localized title, e.g. 胸 + 核心
+  title_en?: string     // localized title, e.g. Chest + Core
   body_parts: BodyPart[]
   exercise_ids?: string[] // specific exercises planned for this day (§6B)
   regions?: string[]      // body-model regions this cycle day lights during the current loop
