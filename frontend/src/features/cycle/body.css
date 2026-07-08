@@ -1,0 +1,47 @@
+.bodymodel {
+  --body-dim: #2c313b;
+  --body-pink: #f472b6;
+  --body-line: rgba(8, 10, 14, 0.42);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+[data-theme='light'] .bodymodel { --body-dim: #d3d9e2; --body-line: rgba(90, 100, 115, 0.4); }
+
+.bm-figs { display: flex; justify-content: center; gap: 18px; flex-wrap: wrap; }
+.bm-fig { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.bm-fig svg { width: 150px; height: auto; aspect-ratio: 200 / 452; max-width: 42vw; overflow: visible; }
+
+/* Muscle-definition grooves (linea alba, ab rows, pec/lat curves). */
+.bm-lines { fill: none; stroke: var(--body-line); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+.bm-fig figcaption {
+  font: 600 10px/1 var(--mono); letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+/* Head — the only always-dim part; every other region can light up. */
+.bm-head { fill: var(--body-dim); }
+
+/* Trained-muscle regions. Fill comes from the component (intensity ramp). */
+.bm-region { transition: fill 0.2s; cursor: default; }
+.bm-region.is-hover { stroke: var(--accent); stroke-width: 1.5; }
+
+/* Floating hover box near the cursor. */
+.bm-tip {
+  position: fixed;
+  z-index: 1200;
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 6px 10px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  font: 12px/1.3 var(--mono);
+}
+.bm-tip b { color: var(--text-bright); }
+.bm-tip-none { color: var(--text-dim); }
+.bm-tip-list { list-style: none; margin: 2px 0 0; padding: 0; display: flex; flex-direction: column; gap: 3px; max-width: 220px; }
+.bm-tip-list li { display: flex; justify-content: space-between; gap: 12px; }
+.bm-tip-list li span { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bm-tip-list li em { color: var(--accent); font-style: normal; flex: none; }

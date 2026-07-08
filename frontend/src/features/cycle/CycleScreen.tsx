@@ -9,6 +9,8 @@ import {
   getCycles,
   getEntries,
   getExercises,
+  getSetsByEntryIds,
+  getTrackerEntries,
   setActiveCycle,
   skipCycleRound,
   softDeleteCycle,
@@ -17,6 +19,7 @@ import {
 } from '../../db'
 import { useLanguage } from '../../i18n'
 import { useUndo } from '../../undo'
+import { intimacyVisible } from '../intimacy'
 import {
   type BodyPart,
   type CycleDay,
@@ -31,6 +34,9 @@ import { ExerciseManager } from '../log'
 import { RehabLoop } from '../injuries'
 import { CategoryManager } from './CategoryManager'
 import { currentRound } from './rounds'
+import { BodyModel, type RegionView } from './BodyModel'
+import { regionActivity } from './anatomy'
+import { exerciseName } from '../log/util'
 import './cycle.css'
 
 export function CycleScreen() {
@@ -42,9 +48,12 @@ export function CycleScreen() {
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [exById, setExById] = useState<Record<string, Exercise>>({})
   const [rounds, setRounds] = useState<CycleRound[]>([])
+  const [setCounts, setSetCounts] = useState<Record<string, number>>({})
+  const [intimacySets, setIntimacySets] = useState(0)
   const [newName, setNewName] = useState('')
   const [editId, setEditId] = useState<string | null>(null)
   const [showLibrary, setShowLibrary] = useState(false)
+  const adult = intimacyVisible()
 
   const reload = useCallback(async () => {
     const [cs, act, es, exs] = await Promise.all([getCycles(), getActiveCycle(), getEntries(), getExercises()])
@@ -54,9 +63,48 @@ export function CycleScreen() {
     setExercises(exs)
     setExById(Object.fromEntries(exs.map((e) => [e.id, e])))
     setRounds(act ? await getCycleRounds(act.id) : [])
+    const sm = await getSetsByEntryIds(es.map((e) => e.id))
+    const counts: Record<string, number> = {}
+    for (const [eid, list] of Object.entries(sm)) counts[eid] = list.filter((s) => s.set_type !== 'warmup').length
+    setSetCounts(counts)
+    if (intimacyVisible()) {
+      const ir = await getTrackerEntries('intimacy')
+      setIntimacySets(ir.reduce((n, r) => n + r.count, 0))
+    }
   }, [])
 
   const round = useMemo(() => (active ? currentRound(active, rounds) : null), [active, rounds])
+
+  // Body-model activity: sets per region over the current round (open round's
+  // start date), else recent history. Genitals (adult) counts intimacy sessions.
+  const bodyActivity = useMemo<Record<string, RegionView>>(() => {
+    const openRound = rounds.filter((r) => r.ended_on == null).sort((a, b) => b.index - a.index)[0]
+    const since = openRound?.started_on ?? new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10)
+    const inWindow = entries.filter((e) => e.date >= since)
+    const act = regionActivity(inWindow, (id) => setCounts[id] ?? 0, exById)
+    const out: Record<string, RegionView> = {}
+    for (const [region, a] of Object.entries(act)) {
+      // Aggregate the region's contributing entries per exercise (sum sets, collect days).
+      const byEx = new Map<string, { name: string; sets: number; days: Set<string> }>()
+      for (const it of a.items) {
+        const ex = exById[it.exId]
+        const cur = byEx.get(it.exId) ?? { name: ex ? exerciseName(ex, lang) : '?', sets: 0, days: new Set<string>() }
+        cur.sets += it.sets
+        if (it.day) cur.days.add(it.day)
+        byEx.set(it.exId, cur)
+      }
+      out[region] = {
+        sets: a.sets,
+        items: [...byEx.values()]
+          .sort((x, y) => y.sets - x.sets)
+          .map((v) => ({ name: v.name, sets: v.sets, day: v.days.size ? [...v.days].join('/') : null })),
+      }
+    }
+    if (adult && intimacySets > 0) {
+      out.genitals = { sets: intimacySets, items: [{ name: lang === 'zh' ? '亲密记录' : 'Intimacy', sets: intimacySets, day: null }] }
+    }
+    return out
+  }, [entries, setCounts, exById, rounds, adult, intimacySets, lang])
 
   useEffect(() => {
     void reload()
@@ -120,6 +168,13 @@ export function CycleScreen() {
   return (
     <div className="cyc-screen">
       <RehabLoop lang={lang} />
+
+      <section className="cyc-body">
+        <span className="th-label">{lang === 'zh' ? '身体视图' : 'Body view'}
+          <small className="cyc-body-sub">{round?.open ? (lang === 'zh' ? ' · 本轮' : ' · this round') : (lang === 'zh' ? ' · 近 30 天' : ' · last 30d')}</small>
+        </span>
+        <BodyModel activity={bodyActivity} lang={lang} adult={adult} />
+      </section>
 
       {todayNext && (
         <section className="cyc-todaynext">
