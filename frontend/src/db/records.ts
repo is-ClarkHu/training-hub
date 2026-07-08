@@ -491,6 +491,7 @@ export interface NewCycleInput {
   name: string
   active?: boolean
   days?: CycleDay[]
+  display_mode?: TrainingCycle['display_mode']
 }
 
 async function deactivateAllCycles(): Promise<void> {
@@ -501,7 +502,7 @@ async function deactivateAllCycles(): Promise<void> {
 }
 
 export async function createCycle(input: NewCycleInput): Promise<TrainingCycle> {
-  const row: TrainingCycle = { ...syncFields(), active: false, days: [], ...input }
+  const row: TrainingCycle = { ...syncFields(), active: false, display_mode: 'circle', days: [], ...input }
   await db.transaction('rw', db.training_cycle, async () => {
     if (row.active) await deactivateAllCycles()
     await db.training_cycle.add(row)
@@ -521,7 +522,7 @@ export async function getActiveCycle(): Promise<TrainingCycle | null> {
 
 export async function updateCycle(
   id: string,
-  patch: Partial<Pick<TrainingCycle, 'name' | 'days'>>,
+  patch: Partial<Pick<TrainingCycle, 'name' | 'days' | 'display_mode'>>,
 ): Promise<void> {
   const c = await db.training_cycle.get(id)
   if (c) await db.training_cycle.put({ ...c, ...patch, updated_at: nowIso() })
@@ -545,12 +546,12 @@ export async function softDeleteCycle(id: string): Promise<void> {
 // were added for this split). Titles stay empty — the UI renders the parts.
 export async function createDefaultSplitCycle(): Promise<TrainingCycle> {
   const days: CycleDay[] = [
-    { label: 'A', title: '', body_parts: ['chest', 'core'], exercise_ids: [] },
-    { label: 'B', title: '', body_parts: ['back', 'biceps'], exercise_ids: [] },
-    { label: 'C', title: '', body_parts: ['legs', 'core'], exercise_ids: [] },
-    { label: 'D', title: '', body_parts: ['shoulders', 'triceps'], exercise_ids: [] },
+    { label: 'A', title: '', body_parts: ['chest', 'core'], regions: ['chest', 'abs'], exercise_ids: [] },
+    { label: 'B', title: '', body_parts: ['back', 'biceps'], regions: ['back', 'biceps', 'forearms'], exercise_ids: [] },
+    { label: 'C', title: '', body_parts: ['legs', 'core'], regions: ['glutes', 'quads', 'hamstrings', 'calves', 'adductors', 'abs'], exercise_ids: [] },
+    { label: 'D', title: '', body_parts: ['shoulders', 'triceps'], regions: ['shoulders', 'triceps'], exercise_ids: [] },
   ]
-  return createCycle({ name: '4-Split · 四分化', days, active: true })
+  return createCycle({ name: '4-Split · 四分化', days, active: true, display_mode: 'body' })
 }
 
 // ── cycle rounds (§6B) ───────────────────────────────

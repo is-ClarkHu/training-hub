@@ -56,3 +56,9 @@ alter table public.cycle_rounds enable row level security;
 drop policy if exists cycle_rounds_owner on public.cycle_rounds;
 create policy cycle_rounds_owner on public.cycle_rounds
   for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+-- Cycle framework display mode: circle chips or body model. Day-to-region
+-- bindings are stored in training_cycle.days jsonb.
+alter table public.training_cycle
+  add column if not exists display_mode text not null default 'circle'
+  check (display_mode in ('body','circle'));

@@ -11,6 +11,9 @@
 .bm-figs { display: flex; justify-content: center; gap: 18px; flex-wrap: wrap; }
 .bm-fig { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .bm-fig svg { width: 150px; height: auto; aspect-ratio: 200 / 452; max-width: 42vw; overflow: visible; }
+.bodymodel.compact .bm-figs { gap: 8px; }
+.bodymodel.compact .bm-fig svg { width: 76px; max-width: 34vw; }
+.bodymodel.compact .bm-fig figcaption { display: none; }
 
 /* Muscle-definition grooves (linea alba, ab rows, pec/lat curves). */
 .bm-lines { fill: none; stroke: var(--body-line); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
@@ -23,8 +26,18 @@
 .bm-head { fill: var(--body-dim); }
 
 /* Trained-muscle regions. Fill comes from the component (intensity ramp). */
-.bm-region { transition: fill 0.2s; cursor: default; }
-.bm-region.is-hover { stroke: var(--accent); stroke-width: 1.5; }
+.bm-region {
+  cursor: default;
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: fill 0.2s, stroke 0.16s, transform 0.16s, filter 0.16s;
+}
+.bm-region.is-hover {
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  transform: scale(1.045);
+  filter: drop-shadow(0 0 7px color-mix(in srgb, var(--accent) 35%, transparent));
+}
 
 /* Floating hover box near the cursor. */
 .bm-tip {

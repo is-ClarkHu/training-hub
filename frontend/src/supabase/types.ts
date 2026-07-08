@@ -93,6 +93,7 @@ export interface CycleDay {
   title: string         // e.g. 'Chest+Abs'
   body_parts: BodyPart[]
   exercise_ids?: string[] // specific exercises planned for this day (§6B)
+  regions?: string[]      // body-model regions this cycle day lights during the current loop
 }
 
 export interface ProfileInjury {
@@ -248,6 +249,7 @@ export interface Injury extends SyncFields {
 export interface TrainingCycle extends SyncFields {
   name: string
   active: boolean                    // only one active per user
+  display_mode?: 'body' | 'circle'   // how the loop progress is visualized
   days: CycleDay[]
 }
 

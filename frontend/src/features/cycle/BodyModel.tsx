@@ -13,7 +13,7 @@ const W = 200 // viewBox width; mirror axis = W/2 = 100
 
 export interface RegionView {
   sets: number
-  items: Array<{ name: string; sets: number; day: string | null }>
+  items: Array<{ name: string; sets: number; day: string | null; date?: string | null }>
 }
 
 function fillFor(id: RegionId, sets: number): string {
@@ -52,7 +52,7 @@ const DELT = 'M60 72 C46 72 39 84 39 100 C39 110 49 113 57 108 C66 103 73 89 75 
 const UPPER_ARM = 'M58 92 C48 102 42 124 39 150 L38 162 L60 164 L62 126 C64 108 66 98 71 94 Z'
 const FOREARM = 'M38 162 L60 164 L58 208 C57 219 49 227 41 226 C33 225 29 217 30 209 L35 180 C36 170 36 166 38 162 Z'
 const HAND = <ellipse cx="44" cy="228" rx="9" ry="11" />
-const CALF = 'M64 312 L95 312 L93 404 C93 428 85 440 74 440 L66 440 C59 431 60 398 62 356 Z'
+const CALF = 'M68 316 L91 316 L89 404 C89 426 82 438 74 438 L68 438 C63 428 64 398 66 356 Z'
 const FOOT = <ellipse cx="74" cy="444" rx="13" ry="7" />
 // Muscle-definition grooves (drawn over the fills).
 const FRONT_LINES = 'M100 66 L100 126 M78 116 Q100 126 122 116 M100 130 L100 204 M86 150 H114 M85 170 H115 M86 190 H114'
@@ -64,11 +64,11 @@ function Front({ activity, hoverId, onHover }: RP) {
     <g>
       <Head />
       <Reg {...P} id="shoulders"><path d={NECK} /><Sym><path d={DELT} /></Sym></Reg>
-      <Reg {...P} id="chest"><Sym><path d="M100 64 L76 67 C64 74 62 94 66 114 C68 122 73 126 78 126 L100 126 Z" /></Sym></Reg>
+      <Reg {...P} id="chest"><Sym><path d="M100 64 L66 70 C58 80 62 110 76 126 L100 126 Z" /></Sym></Reg>
       <Reg {...P} id="abs"><Sym><path d="M100 126 L78 126 C78 148 82 176 90 194 C93 201 97 206 100 206 Z" /></Sym></Reg>
       <Reg {...P} id="biceps"><Sym><path d={UPPER_ARM} /></Sym></Reg>
       <Reg {...P} id="forearms"><Sym><path d={FOREARM} />{HAND}</Sym></Reg>
-      <Reg {...P} id="quads"><Sym><path d="M86 208 C72 220 64 250 63 284 L62 312 L95 312 L96 250 C96 228 92 214 86 208 Z" /></Sym></Reg>
+      <Reg {...P} id="quads"><Sym><path d="M84 208 C68 220 57 252 57 292 L58 316 L96 316 L98 252 C98 228 92 214 84 208 Z" /></Sym></Reg>
       <Reg {...P} id="adductors"><Sym><path d="M95 214 C93 240 93 272 95 290 L99 290 L99 220 C98 216 97 214 95 214 Z" /></Sym></Reg>
       <Reg {...P} id="calves"><Sym><path d={CALF} />{FOOT}</Sym></Reg>
       <path className="bm-lines" d={FRONT_LINES} />
@@ -82,11 +82,11 @@ function Back({ activity, hoverId, onHover }: RP) {
     <g>
       <Head />
       <Reg {...P} id="shoulders"><path d={NECK} /><Sym><path d={DELT} /></Sym></Reg>
-      <Reg {...P} id="back"><Sym><path d="M100 64 L76 67 C62 74 60 112 74 154 C81 184 94 202 100 206 Z" /></Sym></Reg>
+      <Reg {...P} id="back"><Sym><path d="M100 64 L66 70 C58 86 62 140 82 188 C88 200 96 206 100 206 Z" /></Sym></Reg>
       <Reg {...P} id="triceps"><Sym><path d={UPPER_ARM} /></Sym></Reg>
       <Reg {...P} id="forearms"><Sym><path d={FOREARM} />{HAND}</Sym></Reg>
       <Reg {...P} id="glutes"><Sym><path d="M100 188 L76 186 C69 195 68 210 75 220 C84 227 95 224 100 216 Z" /></Sym></Reg>
-      <Reg {...P} id="hamstrings"><Sym><path d="M86 220 C72 232 64 262 63 296 L62 312 L95 312 L96 258 C96 236 92 226 86 220 Z" /></Sym></Reg>
+      <Reg {...P} id="hamstrings"><Sym><path d="M84 220 C68 232 57 264 57 300 L58 316 L96 316 L98 260 C98 236 92 226 84 220 Z" /></Sym></Reg>
       <Reg {...P} id="calves"><Sym><path d={CALF} />{FOOT}</Sym></Reg>
       <path className="bm-lines" d={BACK_LINES} />
     </g>
@@ -98,17 +98,19 @@ export function BodyModel({
   lang,
   adult = false,
   showBack = true,
+  compact = false,
 }: {
   activity: Record<string, RegionView>
   lang: TranslationTarget
   adult?: boolean
   showBack?: boolean
+  compact?: boolean
 }) {
   const [hover, setHover] = useState<HoverState | null>(null)
   const P = { activity, hoverId: hover?.id ?? null, onHover: setHover }
 
   return (
-    <div className="bodymodel">
+    <div className={`bodymodel ${compact ? 'compact' : ''}`}>
       <div className="bm-figs">
         <figure className="bm-fig">
           <svg viewBox="0 0 200 452" role="img" aria-label="front body">
@@ -139,7 +141,7 @@ export function BodyModel({
               {activity[hover.id].items.map((it, i) => (
                 <li key={i}>
                   <span>{it.name}</span>
-                  <em>{it.sets}{lang === 'zh' ? '组' : ''}{it.day ? ` · ${it.day}` : ''}</em>
+                  <em>{it.date ? `${it.date.slice(5)} · ` : ''}{it.sets}{lang === 'zh' ? '组' : ''}{it.day ? ` · ${it.day}` : ''}</em>
                 </li>
               ))}
             </ul>
