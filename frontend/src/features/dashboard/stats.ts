@@ -8,7 +8,7 @@ import {
   type SetType,
   type WorkoutEntry,
 } from '../../supabase/types'
-import { categoryKeys } from '../../categories'
+import { categoryKeys, isMuscleCategory } from '../../categories'
 import { intimacyCategory } from '../intimacy'
 
 export function daysSince(date: string): number {
@@ -42,7 +42,7 @@ export function muscleRecovery(entries: WorkoutEntry[], exById: Record<string, E
       if (!cur || e.date > cur) last[bp] = e.date
     }
   }
-  return categoryKeys().map((bp) => {
+  return categoryKeys().filter(isMuscleCategory).map((bp) => {
     const d = last[bp] ?? null
     return { bodyPart: bp, lastDate: d, daysAgo: d ? daysSince(d) : null }
   })

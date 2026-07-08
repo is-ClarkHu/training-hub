@@ -37,7 +37,7 @@ export function roundRegionActivity(
   if (!round) return out
   const dayRegions = new Map(cycle.days.map((d) => [d.label, d.regions ?? []]))
   for (const e of entries) {
-    if (e.date < round.started_on || !e.cycle_day_label) continue
+    if (e.date < round.started_on || (round.ended_on && e.date > round.ended_on) || !e.cycle_day_label) continue
     const regions = dayRegions.get(e.cycle_day_label)
     if (!regions || regions.length === 0) continue
     const n = setCount(e.id)
@@ -49,6 +49,32 @@ export function roundRegionActivity(
     }
   }
   return out
+}
+
+export interface RoundMetrics {
+  completedDays: number
+  totalDays: number
+  sets: number
+  sessions: number   // distinct training dates in the round
+}
+
+/** Split-agnostic round metrics — meaningful for any split (or rehab). */
+export function roundMetrics(
+  cycle: TrainingCycle,
+  round: CycleRound,
+  entries: WorkoutEntry[],
+  setCount: (entryId: string) => number,
+): RoundMetrics {
+  const labels = new Set(cycle.days.map((d) => d.label))
+  const inRound = entries.filter(
+    (e) => e.date >= round.started_on && (!round.ended_on || e.date <= round.ended_on) && e.cycle_day_label && labels.has(e.cycle_day_label),
+  )
+  return {
+    completedDays: round.completed_labels.filter((l) => labels.has(l)).length,
+    totalDays: cycle.days.length,
+    sets: inRound.reduce((s, e) => s + setCount(e.id), 0),
+    sessions: new Set(inRound.map((e) => e.date)).size,
+  }
 }
 
 export function currentRound(cycle: TrainingCycle, rounds: CycleRound[]): RoundView {

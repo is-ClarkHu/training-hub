@@ -47,6 +47,24 @@ const notify = () => listeners.forEach((l) => l())
   } catch { /* ignore */ }
 })()
 
+// One-time heal: drop stale built-in overrides that renamed a built-in into
+// ANOTHER built-in's label (e.g. an old bad rename made `cardio` show as 运动/
+// Sports → a phantom second "Sports"). Keeps legit unique renames.
+;(() => {
+  try {
+    const raw = localStorage.getItem('th.categories.overrides')
+    if (!raw) return
+    const ov = JSON.parse(raw) as Record<string, { zh?: string; en?: string }>
+    let changed = false
+    for (const key of Object.keys(ov)) {
+      const isBuiltin = DEFAULT_CATEGORIES.some((d) => d.key === key)
+      const collides = DEFAULT_CATEGORIES.some((d) => d.key !== key && (d.zh === ov[key]?.zh || d.en === ov[key]?.en))
+      if (!isBuiltin || collides) { delete ov[key]; changed = true }
+    }
+    if (changed) localStorage.setItem('th.categories.overrides', JSON.stringify(ov))
+  } catch { /* ignore */ }
+})()
+
 type Override = { zh: string; en: string }
 function loadOverrides(): Record<string, Override> {
   try { return JSON.parse(localStorage.getItem(LS_OVERRIDES) ?? '{}') as Record<string, Override> } catch { return {} }
@@ -78,6 +96,13 @@ function loadCustom(): Category[] {
 function saveCustom(list: Category[]) {
   localStorage.setItem(LS, JSON.stringify(list.map(({ key, zh, en }) => ({ key, zh, en }))))
   notify()
+}
+
+// Built-in categories that aren't muscle groups — excluded from "muscle recovery"
+// / days-since-trained views. Custom categories are assumed to be muscle groups.
+export const NON_MUSCLE_CATEGORIES = new Set(['cardio', 'warmup', 'sports'])
+export function isMuscleCategory(key: string): boolean {
+  return !NON_MUSCLE_CATEGORIES.has(key)
 }
 
 export function getCategories(): Category[] {
@@ -121,9 +146,13 @@ export function addCategory(input: { zh: string; en: string }): Category {
 }
 export function updateCategory(key: string, patch: { zh?: string; en?: string }): void {
   if (DEFAULT_KEYS.has(key)) {
-    // Renaming a built-in: persist the new labels as an override.
+    // Renaming a built-in: persist the new labels as an override — but never let
+    // it duplicate ANOTHER built-in's label (that's what made 有氧 show as 运动).
+    const zh = (patch.zh ?? '').trim()
+    const en = (patch.en ?? '').trim()
+    if (DEFAULT_CATEGORIES.some((d) => d.key !== key && (d.zh === zh || d.en === en))) return
     const ov = loadOverrides()
-    ov[key] = { zh: (patch.zh ?? ov[key]?.zh ?? '').trim(), en: (patch.en ?? ov[key]?.en ?? '').trim() }
+    ov[key] = { zh, en }
     saveOverrides(ov)
     return
   }

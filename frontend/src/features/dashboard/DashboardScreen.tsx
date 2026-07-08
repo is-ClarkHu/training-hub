@@ -26,8 +26,7 @@ import {
   type WorkoutEntry,
 } from '../../supabase/types'
 import { getCategories, categoryLabel } from '../../categories'
-import { currentRound, openRound, roundRegionActivity } from '../cycle/rounds'
-import { MUSCLE_CHAINS } from '../cycle/anatomy'
+import { roundMetrics, roundRegionActivity } from '../cycle/rounds'
 import { BodyModel, type RegionView } from '../cycle/BodyModel'
 import { RoundRings, type RingChain } from './RoundRings'
 import type { CycleRound, TrainingCycle } from '../../supabase/types'
@@ -60,7 +59,6 @@ Chart.defaults.font.family = "'JetBrains Mono', ui-monospace, monospace"
 Chart.defaults.font.size = 11
 Chart.defaults.maintainAspectRatio = false
 const GRID = 'rgba(120, 130, 150, 0.15)'
-const RING_TARGET = 12 // sets per chain to "close" a ring this round
 const TINTS = ['#8ab4f8', '#4fd1e0', '#7dd3a0', '#a78bfa', '#ff8a5c', '#f5b544', '#f472b6']
 // intensity ramp 0–4: green (easy) → amber → red (hard) — less overall amber
 const HEAT = ['var(--panelhi)', 'rgba(125,211,160,.38)', 'rgba(125,211,160,.7)', 'rgba(245,181,68,.85)', '#ff5d6c']
@@ -79,7 +77,7 @@ export function DashboardScreen() {
   const [sportId, setSportId] = useState('')
   const [activeCycle, setActiveCycle] = useState<TrainingCycle | null>(null)
   const [cycleRounds, setCycleRounds] = useState<CycleRound[]>([])
-  const [showRoundBody, setShowRoundBody] = useState(false)
+  const [modalRoundId, setModalRoundId] = useState<string | null>(null)
 
   useEffect(() => {
     void (async () => {
@@ -106,22 +104,31 @@ export function DashboardScreen() {
 
   const allSets = useMemo(() => Object.values(setMap).flat(), [setMap])
 
-  // Round rings + body-model activity for the active cycle's open round.
-  const roundView = useMemo(() => {
-    if (!activeCycle) return null
-    const round = openRound(cycleRounds)
-    const rv = currentRound(activeCycle, cycleRounds)
-    const setCount = (id: string) => (setMap[id] ?? []).filter((s) => s.set_type !== 'warmup').length
-    const activity = roundRegionActivity(activeCycle, round, entries, setCount)
-    const regionSets: Record<string, number> = {}
-    for (const [region, a] of Object.entries(activity)) regionSets[region] = a.sets
-    const chains: RingChain[] = MUSCLE_CHAINS.map((ch) => ({
-      id: ch.id,
-      label: lang === 'zh' ? ch.zh : ch.en,
-      color: ch.color,
-      sets: ch.regions.reduce((s, r) => s + (regionSets[r] ?? 0), 0),
-      target: RING_TARGET,
-    }))
+  const setCount = useMemo(() => (id: string) => (setMap[id] ?? []).filter((s) => s.set_type !== 'warmup').length, [setMap])
+
+  // Split-agnostic ring data per round (newest first). Works for any split / rehab.
+  const roundData = useMemo(() => {
+    if (!activeCycle || cycleRounds.length === 0) return null
+    const volumeGoal = Math.max(20, activeCycle.days.length * 12)
+    const list = [...cycleRounds]
+      .sort((a, b) => b.index - a.index)
+      .map((round) => {
+        const m = roundMetrics(activeCycle, round, entries, setCount)
+        const chains: RingChain[] = [
+          { id: 'complete', label: lang === 'zh' ? '完成' : 'Done', color: '#8ab4f8', value: m.completedDays, goal: m.totalDays || 1 },
+          { id: 'volume', label: lang === 'zh' ? '容量' : 'Volume', color: '#ff8a5c', value: m.sets, goal: volumeGoal },
+          { id: 'sessions', label: lang === 'zh' ? '天数' : 'Days', color: '#7dd3a0', value: m.sessions, goal: m.totalDays || 1 },
+        ]
+        return { round, chains }
+      })
+    return { list, current: list.find((r) => r.round.ended_on == null) ?? list[0] }
+  }, [activeCycle, cycleRounds, entries, setCount, lang])
+
+  // Body-model activity for whichever round the modal is showing.
+  const modalRound = roundData?.list.find((r) => r.round.id === modalRoundId) ?? null
+  const modalBody = useMemo<Record<string, RegionView>>(() => {
+    if (!activeCycle || !modalRound) return {}
+    const activity = roundRegionActivity(activeCycle, modalRound.round, entries, setCount)
     const body: Record<string, RegionView> = {}
     for (const [region, a] of Object.entries(activity)) {
       const byEx = new Map<string, { name: string; sets: number; day: string; date: string | null }>()
@@ -134,8 +141,8 @@ export function DashboardScreen() {
       }
       body[region] = { sets: a.sets, items: [...byEx.values()].sort((x, y) => y.sets - x.sets) }
     }
-    return { rv, chains, body, open: !!round }
-  }, [activeCycle, cycleRounds, entries, setMap, exById, lang])
+    return body
+  }, [activeCycle, modalRound, entries, setCount, exById, lang])
   const recovery = useMemo(() => muscleRecovery(entries, exById), [entries, exById])
   const bpCounts = useMemo(() => bodyPartCounts(entries, exById), [entries, exById])
   const stCounts = useMemo(() => setTypeCounts(allSets), [allSets])
@@ -338,36 +345,57 @@ export function DashboardScreen() {
         ))}
       </div>
 
-      {roundView && (
+      {roundData && (
         <section className="dash-round">
           <div className="th-sectitle">
             {lang === 'zh' ? '本轮进度' : 'Round progress'}
-            <small className="dash-sub">
-              {activeCycle?.name} · R{roundView.rv.index}{roundView.open ? '' : (lang === 'zh' ? ' · 待开始' : ' · pending')}
-            </small>
+            <small className="dash-sub">{activeCycle?.name} · {lang === 'zh' ? '完成 / 容量 / 天数' : 'Done / Volume / Days'}</small>
           </div>
-          <div className="dash-round-body">
-            <RoundRings
-              chains={roundView.chains}
-              roundIndex={roundView.rv.index}
-              active={showRoundBody}
-              subtitle={showRoundBody
-                ? (lang === 'zh' ? '点击收起人体图' : 'tap to hide body map')
-                : (lang === 'zh' ? '点击查看人体图' : 'tap for body map')}
-              onClick={() => setShowRoundBody((v) => !v)}
-            />
-            {showRoundBody && (
-              <div className="dash-round-expand">
-                <BodyModel activity={roundView.body} lang={lang} adult={showIntimacy} />
+          <div className="dash-round-grid">
+            <div className="dash-round-main">
+              <RoundRings
+                chains={roundData.current.chains}
+                centerLabel={`R${roundData.current.round.index}`}
+                onClick={() => setModalRoundId(roundData.current.round.id)}
+              />
+              <span className="rr-sub">{lang === 'zh' ? '点击查看人体图' : 'tap for body map'}</span>
+            </div>
+            {roundData.list.length > 1 && (
+              <div className="dash-round-history">
+                <span className="dash-round-hist-label">{lang === 'zh' ? '历史轮次' : 'Past rounds'}</span>
+                <div className="dash-round-hist-scroll">
+                  {roundData.list.map(({ round, chains }) => (
+                    <RoundRings
+                      key={round.id}
+                      mini
+                      chains={chains}
+                      centerLabel={`R${round.index}`}
+                      active={round.id === modalRoundId}
+                      onClick={() => setModalRoundId(round.id)}
+                    />
+                  ))}
+                </div>
               </div>
             )}
           </div>
-          {!roundView.open && (
-            <span className="dash-round-hint">
-              {lang === 'zh' ? '在 Log 里记录带循环日的训练即可开启本轮' : 'Log a cycle-day workout to start this round'}
-            </span>
-          )}
         </section>
+      )}
+
+      {modalRound && (
+        <div className="dash-round-modal-backdrop" onClick={() => setModalRoundId(null)}>
+          <div className="dash-round-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="dash-round-modal-head">
+              <h3>Round {modalRound.round.index}
+                <small> · {modalRound.round.started_on} → {modalRound.round.ended_on ?? (lang === 'zh' ? '进行中' : 'open')}</small>
+              </h3>
+              <button className="cyc-dialog-x" type="button" onClick={() => setModalRoundId(null)} aria-label="close">×</button>
+            </div>
+            <div className="dash-round-modal-body">
+              <RoundRings chains={modalRound.chains} centerLabel={`R${modalRound.round.index}`} />
+              <BodyModel activity={modalBody} lang={lang} adult={showIntimacy} />
+            </div>
+          </div>
+        </div>
       )}
 
       <section className="dash-heat-sec">
