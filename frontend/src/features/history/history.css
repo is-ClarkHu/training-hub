@@ -4,6 +4,17 @@
 .hist-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .hist-check { width: 17px; height: 17px; accent-color: var(--lime); flex: none; }
 
+/* layout-mode toggle — pinned to the right edge of the toolbar */
+.hist-mode-btn {
+  margin-left: auto; flex: none;
+  width: 34px; height: 30px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 16px; line-height: 1; color: var(--text-dim); cursor: pointer;
+  background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px;
+}
+.hist-mode-btn:hover { color: var(--accent); border-color: var(--accent); }
+.th-pill.accent { color: #04181a; background: var(--teal); border-color: var(--teal); }
+
 /* Cycle rounds band (§6B) */
 .hist-rounds { display: flex; flex-direction: column; gap: 8px; }
 .hist-rounds-head { display: flex; align-items: baseline; gap: 10px; }
@@ -24,15 +35,93 @@
 
 /* date group */
 .hist-session { display: flex; flex-direction: column; gap: 8px; }
+.hist-date-row {
+  display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+  padding-bottom: 8px; border-bottom: 1px solid var(--border);
+}
 .hist-date {
   margin: 0;
   font: 20px/1 var(--display);
   letter-spacing: 1px;
   color: var(--text-dim);
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--border);
+}
+/* loop badge: which split day(s) + round for this date */
+.hist-loop { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.hist-loop-day { font: 12px/1 var(--mono); color: var(--text-dim); }
+.hist-loop-day b { color: var(--teal); font-weight: 700; margin-right: 3px; }
+.hist-loop-round {
+  padding: 2px 7px; font: 700 11px/1.3 var(--mono); color: #04181a;
+  background: var(--teal); border-radius: 999px;
 }
 .hist-entries { display: flex; flex-direction: column; gap: 8px; }
+
+/* mode-2: category modules, each a row of movement cards flowing left→right */
+.hist-modules { display: flex; flex-direction: column; gap: 14px; }
+.hist-module { display: flex; flex-direction: column; gap: 8px; }
+.hist-module-head {
+  font: 700 12px/1 var(--mono); letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--text-dim);
+}
+.hist-cards { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; }
+.hist-card {
+  position: relative;
+  min-width: 160px; max-width: 260px; flex: 1 1 190px;
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 12px 14px;
+  background: var(--bg-panel); border: 1px solid var(--border); border-radius: 12px;
+  transition: border-color 0.2s, background 0.15s;
+}
+.hist-card.clickable { cursor: pointer; }
+.hist-card.clickable:hover { border-color: var(--accent); background: var(--accent-soft); }
+.hist-card.clickable:hover .hist-name { color: var(--accent); }
+.hist-card.sel { border-color: var(--accent); background: var(--accent-soft); }
+.hist-card.needs { border-color: color-mix(in srgb, var(--amber) 45%, var(--border)); }
+.hist-card-top {
+  display: flex; align-items: center; gap: 7px;
+  padding-bottom: 7px; border-bottom: 1px solid var(--border);
+}
+.hist-card-top .hist-check { margin-left: auto; }
+.hist-card-badges:empty { display: none; }
+.hist-card-badges { display: flex; flex-wrap: wrap; gap: 5px; }
+.hist-card-sets { display: flex; flex-direction: column; gap: 3px; }
+.hist-card-sets .hist-set { font: 13px/1.5 var(--mono); }
+.hist-module-chip {
+  position: absolute; top: 8px; right: 8px;
+  width: 22px; height: 22px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 12px; line-height: 1; color: var(--text-dim); cursor: pointer;
+  background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 6px;
+}
+.hist-module-chip:hover { color: var(--accent); border-color: var(--accent); }
+
+/* module chooser */
+.mod-choices { display: flex; flex-direction: column; gap: 8px; }
+.mod-choice {
+  text-align: left; padding: 11px 13px;
+  font: 600 13px/1.2 var(--sans); color: var(--text-bright); cursor: pointer;
+  background: var(--bg-panel); border: 1px solid var(--border); border-radius: 10px;
+}
+.mod-choice:hover { border-color: var(--accent); }
+.mod-choice.on { border-color: var(--teal); background: var(--accent-soft); color: var(--teal); }
+.mod-default { color: var(--faint); font-style: normal; font-weight: 400; }
+
+/* review stepper */
+.rev-card {
+  width: min(440px, 92vw);
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 20px; background: var(--bg-panel);
+  border: 1px solid var(--border); border-radius: 16px;
+}
+.rev-head { display: flex; align-items: baseline; justify-content: space-between; }
+.rev-title { font: 700 15px/1 var(--sans); color: var(--text-bright); }
+.rev-count { font: 12px/1 var(--mono); color: var(--text-dim); }
+.rev-date { font: 12px/1 var(--mono); color: var(--faint); }
+.rev-row-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rev-name { font: 700 15px/1.2 var(--sans); color: var(--text-bright); }
+.rev-sets { display: flex; flex-direction: column; gap: 3px; }
+.rev-sets .hist-set { font: 13px/1.5 var(--mono); }
+.rev-note { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.rev-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
 
 /* rows — neutral chrome; a small colored dot marks the type, not the whole border */
 .hist-row {

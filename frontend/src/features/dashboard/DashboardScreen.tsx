@@ -62,6 +62,9 @@ const GRID = 'rgba(120, 130, 150, 0.15)'
 const TINTS = ['#8ab4f8', '#4fd1e0', '#7dd3a0', '#a78bfa', '#ff8a5c', '#f5b544', '#f472b6']
 // intensity ramp 0–4: green (easy) → amber → red (hard) — less overall amber
 const HEAT = ['var(--panelhi)', 'rgba(125,211,160,.38)', 'rgba(125,211,160,.7)', 'rgba(245,181,68,.85)', '#ff5d6c']
+// Intimacy heart shade deepens with the day's total count (1 → light, 4+ → deep).
+const HEART_SHADES = ['#f9a8d4', '#f472b6', '#ec4899', '#db2777']
+const heartColor = (count: number): string => HEART_SHADES[Math.min(count, HEART_SHADES.length) - 1]
 
 export function DashboardScreen() {
   const { lang } = useLanguage()
@@ -166,8 +169,18 @@ export function DashboardScreen() {
     for (const s of sessions) { const sp = sports.find((x) => x.id === s.sport_id); (m[s.date] ??= []).push('🏃 ' + (sp ? sportName(sp, lang) : 'sport')) }
     const out: Record<string, string> = {}
     for (const [d, list] of Object.entries(m)) out[d] = [...new Set(list)].slice(0, 8).join(', ')
+    // Intimacy is listed separately (not training — see the heart marker), with the
+    // per-category counts for that day: e.g. "💗 性交×2 · 自慰×1".
+    if (showIntimacy) {
+      const byDate: Record<string, Partial<Record<string, number>>> = {}
+      for (const r of intimacyRows) { const c = intimacyCategory(r); (byDate[r.date] ??= {}); byDate[r.date][c] = (byDate[r.date][c] ?? 0) + r.count }
+      for (const [d, cats] of Object.entries(byDate)) {
+        const txt = '💗 ' + INTIMACY_CATEGORIES.filter((c) => cats[c]).map((c) => `${intimacyLabel(c, lang, true)}×${cats[c]}`).join(' · ')
+        out[d] = out[d] ? `${out[d]}  ${txt}` : txt
+      }
+    }
     return out
-  }, [entries, sessions, exById, sports, lang])
+  }, [entries, sessions, exById, sports, lang, showIntimacy, intimacyRows])
   // dates that carry an injury signal (onset, injured session, or de-loaded lift)
   const injuryDates = useMemo(() => {
     const s = new Set<string>()
@@ -212,10 +225,11 @@ export function DashboardScreen() {
 
   const kpis = useMemo(() => {
     const gymDays = new Set(entries.map((e) => e.date)).size
+    // Training days = real training only (lifts + sport sessions). Intimacy is not
+    // training and no longer inflates this count — it has its own KPI + heatmap dot.
     const trainingDays = new Set([
       ...entries.map((e) => e.date),
       ...sessions.map((s) => s.date),
-      ...(showIntimacy ? intimacyRows.map((r) => r.date) : []),
     ]).size
     const sportHours = sessions.reduce((sum, s) => sum + s.hours, 0)
     const active = injuries.filter((i) => i.status !== 'recovered').length
@@ -411,7 +425,7 @@ export function DashboardScreen() {
       )}
 
       <section className="dash-heat-sec">
-        <div className="th-sectitle">{lang === 'zh' ? '每日强度' : 'Daily intensity'} <small className="dash-sub">0 {lang === 'zh' ? '无' : 'rest'} · 4 {lang === 'zh' ? '比赛/双练' : 'comp/double'}{showIntimacy ? (lang === 'zh' ? ' · 含私密' : ' · includes private') : ''}</small></div>
+        <div className="th-sectitle">{lang === 'zh' ? '每日强度' : 'Daily intensity'} <small className="dash-sub">0 {lang === 'zh' ? '无' : 'rest'} · 4 {lang === 'zh' ? '比赛/双练' : 'comp/double'}{showIntimacy ? (lang === 'zh' ? ' · 粉点=私密' : ' · pink = wellness') : ''}</small></div>
         <Heatmap cols={heat} lang={lang} detail={heatDetail} injuryDates={injuryDates} />
       </section>
 
@@ -656,7 +670,9 @@ function Heatmap({ cols, lang, detail, injuryDates }: { cols: HeatCell[][]; lang
                   style={{ background: HEAT[cell.level] }}
                   onMouseEnter={(e) => setTip({ x: e.clientX, y: e.clientY, cell })}
                   onMouseMove={(e) => setTip((t) => (t ? { ...t, x: e.clientX, y: e.clientY } : t))}
-                />
+                >
+                  {cell.intimacy ? <span className="dash-heat-heart" style={{ color: heartColor(cell.intimacy) }}>♥</span> : null}
+                </span>
               ))}
             </div>
           ))}

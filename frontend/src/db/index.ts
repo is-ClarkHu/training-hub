@@ -13,6 +13,7 @@ export {
   getSetsByEntryIds,
   softDeleteEntry,
   updateEntry,
+  patchEntry,
   createSport,
   getSports,
   updateSport,
@@ -59,4 +60,5 @@ export type {
   NewSportSessionInput,
   NewInjuryInput,
   NewCycleInput,
+  EntryPatch,
 } from './records'

@@ -686,10 +686,23 @@ export async function softDeleteEntry(entryId: string): Promise<void> {
   })
 }
 
+/** Field-only patch of an entry (does NOT touch its sets). Used by the History
+ *  review flow ("确认无误" clears the flags) and the mode-2 module chooser. */
+export type EntryPatch = Partial<
+  Pick<WorkoutEntry, 'exercise_id' | 'note_raw' | 'note_tags' | 'is_superset' | 'needs_review' | 'needs_translation' | 'injury_modified' | 'injury_id' | 'module_part'>
+>
+
+export async function patchEntry(entryId: string, patch: EntryPatch): Promise<void> {
+  const ts = nowIso()
+  const e = await db.workout_entries.get(entryId)
+  if (!e) return
+  await db.workout_entries.put({ ...e, ...patch, updated_at: ts })
+}
+
 /** Edit an entry: patch fields, soft-delete old sets, add the new ones. */
 export async function updateEntry(
   entryId: string,
-  patch: Partial<Pick<WorkoutEntry, 'exercise_id' | 'note_raw' | 'note_tags' | 'is_superset' | 'needs_review' | 'needs_translation' | 'injury_modified' | 'injury_id'>>,
+  patch: EntryPatch,
   newSets: NewSetInput[],
 ): Promise<void> {
   const ts = nowIso()

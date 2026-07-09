@@ -207,14 +207,46 @@ export function setToDraft(s: ExerciseSet, hm = false): SetDraft {
   return { subs: [primary, ...rest], per_side: s.per_side, set_type: s.set_type, note: s.note ?? '' }
 }
 
-function fmtSub(v: { weight: number | null; reps: number | null; duration_sec: number | null }, mt: MeasureType, hm = false): string {
-  if (mt === 'duration') return v.duration_sec != null ? formatDuration(v.duration_sec, hm) : '–'
-  if (mt === 'reps_only') return `${v.reps ?? '–'}`
-  return `${v.weight ?? '–'}×${v.reps ?? '–'}`
+/** The primary (grouping) category of an exercise — its first body_part. Single
+ *  source for "主分类" so History mode-2 and any future grouping agree. */
+export function primaryCategory(ex: Exercise): BodyPart | null {
+  return ex.body_parts[0] ?? null
 }
 
-/** One-line summary of a set — sub-sets joined by '+' (e.g. "25×13 + 20×13"). */
-export function formatSet(s: ExerciseSet, mt: MeasureType, hm = false): string {
-  const parts = [fmtSub(s, mt, hm), ...(s.sub_sets ?? []).map((v) => fmtSub(v, mt, hm))]
-  return parts.join(' + ') + (s.per_side ? '/side' : '')
+/** Legacy notes migrated from the old sheet sometimes carry a leading weight-unit
+ *  token (e.g. "lb；4组递减超级组", or a bare "lb" with no note). The unit already
+ *  shows inline with each set, so strip that redundant prefix for display:
+ *  "lb；4组递减超级组" → "4组递减超级组"; "lb 3组" → "3组"; "lb" → "".
+ *  Only strips when the unit stands alone (end of string) or is followed by a
+ *  separator / space — so a glued word like "lb不够" is left untouched. */
+export function displayNote(noteRaw: string): string {
+  return noteRaw.replace(/^\s*(lbs?|kgs?|磅|公斤)(\s*[；;：:·]\s*|\s+|\s*$)/i, '').trim()
+}
+
+// Weight is always in lb (the app is lb-only — see the SetEditor placeholder). If a
+// unit field is ever added, thread it through here instead of the constant.
+const WEIGHT_UNIT = 'lb'
+
+/** One sub-set, unit-aware and localized:
+ *  weight_reps → "25lb 13个" / "25lb ×13"   (zh / en)
+ *  reps_only   → "13个" / "×13"
+ *  duration    → "1:30" (unchanged). */
+export function formatSubSet(
+  v: { weight: number | null; reps: number | null; duration_sec: number | null },
+  mt: MeasureType,
+  lang: TranslationTarget,
+  hm = false,
+): string {
+  if (mt === 'duration') return v.duration_sec != null ? formatDuration(v.duration_sec, hm) : '–'
+  const reps = v.reps != null ? (lang === 'zh' ? `${v.reps}个` : `×${v.reps}`) : lang === 'zh' ? '?个' : '×?'
+  if (mt === 'reps_only') return reps
+  const w = v.weight != null ? `${v.weight}${WEIGHT_UNIT}` : ''
+  return w ? `${w} ${reps}` : reps
+}
+
+/** One-line summary of a set — sub-sets joined by ' / ' (e.g. "25lb 13个 / 20lb 13个"),
+ *  with a localized per-side suffix. */
+export function formatSetLine(s: ExerciseSet, mt: MeasureType, lang: TranslationTarget, hm = false): string {
+  const parts = [formatSubSet(s, mt, lang, hm), ...(s.sub_sets ?? []).map((v) => formatSubSet(v, mt, lang, hm))]
+  return parts.join(' / ') + (s.per_side ? (lang === 'zh' ? '/侧' : '/side') : '')
 }

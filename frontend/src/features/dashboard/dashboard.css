@@ -86,6 +86,7 @@
 .dash-heat-grid { display: flex; gap: 5px; }
 .dash-heat-col { display: flex; flex-direction: column; gap: 5px; }
 .dash-heat-cell {
+  position: relative;
   width: 16px; height: 16px; border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.03);
   transition: transform 0.12s;
@@ -94,6 +95,13 @@
 /* injury day — red ring */
 .dash-heat-cell.inj { box-shadow: inset 0 0 0 2px var(--danger); }
 .dash-heat-cell.inj:hover { box-shadow: inset 0 0 0 2px var(--danger), 0 0 0 1.5px var(--text); }
+/* intimacy day — pink heart in the corner (NOT counted as training intensity;
+   the shade deepens with the day's count — colour set inline). */
+.dash-heat-heart {
+  position: absolute; top: -3px; right: -1px;
+  font-size: 9px; line-height: 1; pointer-events: none;
+  text-shadow: 0 0 1.5px rgba(0, 0, 0, 0.6);
+}
 
 /* sports section */
 .dash-sports { display: flex; flex-direction: column; gap: 12px; }

@@ -86,3 +86,6 @@ alter table public.optional_trackers add column if not exists note text;
 
 -- Strength kind: 徒手/bodyweight vs 健身房/gym (raw_data 类型). Drives History dot colour.
 alter table public.exercises        add column if not exists bodyweight boolean not null default false;
+
+-- History mode-2: per-occurrence category-module override (null = exercise primary).
+alter table public.workout_entries  add column if not exists module_part text;

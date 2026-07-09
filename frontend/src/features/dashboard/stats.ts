@@ -9,7 +9,6 @@ import {
   type WorkoutEntry,
 } from '../../supabase/types'
 import { categoryKeys, isMuscleCategory } from '../../categories'
-import { intimacyCategory } from '../intimacy'
 
 export function daysSince(date: string): number {
   const start = new Date(`${date}T00:00:00`)
@@ -94,25 +93,21 @@ export function e1RM(weight: number, reps: number): number {
 // ── intensity heatmap (§8 signature) ─────────────────────────
 const RECOVERY_TAGS = new Set(['rehab', 'activation', 'skipped_stretch', 'warmup'])
 
-/** Daily intensity 0–4: 0 rest · 1 recovery · 2 normal · 3 high · 4 competition/double.
- *  Sport intensity now comes from duration (hours), not a tier. */
+/** Daily TRAINING intensity 0–4: 0 rest · 1 recovery · 2 normal · 3 high · 4
+ *  competition/double. Intimacy is NOT training and does not count here — the
+ *  heatmap marks it separately (see HeatCell.intimacy). Sport intensity comes
+ *  from duration (hours), not a tier. */
 export function dayIntensity(
   entries: WorkoutEntry[],
   sessions: { hours: number }[],
-  intimacy: OptionalTracker[] = [],
 ): number {
-  if (entries.length === 0 && sessions.length === 0 && intimacy.length === 0) return 0
+  if (entries.length === 0 && sessions.length === 0) return 0
   let lvl = 0
-  if (intimacy.length > 0) {
-    const active = intimacy.some((r) => intimacyCategory(r) === 'partner_active')
-    lvl = Math.max(lvl, active ? 2 : 1)
-  }
   if (entries.length > 0) lvl = 2
   if (sessions.length > 0) {
     const maxH = Math.max(...sessions.map((s) => s.hours ?? 0))
     lvl = Math.max(lvl, maxH >= 3 ? 4 : maxH >= 2 ? 3 : 2)
   }
-  if ((entries.length > 0 || sessions.length > 0) && intimacy.length > 0) lvl = Math.max(lvl, 3)
   if (entries.length > 0 && sessions.length > 0) lvl = 4 // double session
   if (entries.length >= 6) lvl = Math.max(lvl, 3)
   if (entries.length > 0 && sessions.length === 0) {
@@ -122,7 +117,7 @@ export function dayIntensity(
   return lvl
 }
 
-export interface HeatCell { date: string; level: number }
+export interface HeatCell { date: string; level: number; intimacy?: number } // total intimacy count that day (undefined = none)
 
 /** Weekday(row) × week(col) grid of daily intensity, most recent `weeks` weeks. */
 export function intensityHeatmap(
@@ -148,7 +143,8 @@ export function intensityHeatmap(
       const day = new Date(monday)
       day.setDate(monday.getDate() + d)
       const iso = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`
-      col.push({ date: iso, level: dayIntensity(eByDate[iso] ?? [], sByDate[iso] ?? [], iByDate[iso] ?? []) })
+      const intimCount = (iByDate[iso] ?? []).reduce((s, r) => s + (r.count ?? 0), 0)
+      col.push({ date: iso, level: dayIntensity(eByDate[iso] ?? [], sByDate[iso] ?? []), intimacy: intimCount || undefined })
     }
     cols.push(col)
   }
