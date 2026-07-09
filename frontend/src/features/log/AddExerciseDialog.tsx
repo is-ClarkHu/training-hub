@@ -44,6 +44,7 @@ export function AddExerciseDialog({
   const toggleBodyPart = (k: BodyPart) =>
     setBodyParts((ps) => (ps.includes(k) ? ps.filter((p) => p !== k) : [...ps, k]))
   const [measureType, setMeasureType] = useState<MeasureType>('weight_reps')
+  const [durationHm, setDurationHm] = useState(false)
   const [busy, setBusy] = useState(false)
   const [hint, setHint] = useState<string | null>(null)
 
@@ -79,6 +80,7 @@ export function AddExerciseDialog({
       name_en: en,
       body_parts: bodyParts,
       measure_type: measureType,
+      duration_hm: durationHm,
       is_custom: true,
       needs_translation: !zh || !en,
     }))
@@ -130,6 +132,15 @@ export function AddExerciseDialog({
             {MEASURE_TYPES.map((mt) => (<option key={mt} value={mt}>{MEASURE_TYPE_LABELS[mt][lang]}</option>))}
           </select>
         </div>
+        {measureType === 'duration' && (
+          <div className="log-field">
+            <label className="th-label">{lang === 'zh' ? '时长格式' : 'Duration format'}</label>
+            <select className="th-input" value={durationHm ? 'hm' : 'ms'} onChange={(e) => setDurationHm(e.target.value === 'hm')}>
+              <option value="ms">{lang === 'zh' ? '分:秒 (mm:ss)' : 'mm:ss'}</option>
+              <option value="hm">{lang === 'zh' ? '时:分 (hh:mm)' : 'hh:mm'}</option>
+            </select>
+          </div>
+        )}
 
         <div className="log-dialog-actions">
           <button className="th-btn-ghost" type="button" onClick={onClose}>{lang === 'zh' ? '取消' : 'Cancel'}</button>

@@ -10,6 +10,8 @@ import {
   getEntries,
   getExercises,
   getSetsByEntryIds,
+  getSports,
+  getSportSessions,
   getTrackerEntries,
   setActiveCycle,
   skipCycleRound,
@@ -25,11 +27,15 @@ import {
   type CycleRound,
   type Exercise,
   type OptionalTracker,
+  type Sport,
+  type SportSession,
   type TrainingCycle,
   type WorkoutEntry,
 } from '../../supabase/types'
 import { useCategories, categoryLabel } from '../../categories'
 import { muscleRecovery } from '../dashboard/stats'
+import { daysSince } from '../injuries/util'
+import { sportName } from '../sports'
 import { ExerciseManager } from '../log'
 import { RehabLoop } from '../injuries'
 import { CategoryManager } from './CategoryManager'
@@ -49,6 +55,8 @@ export function CycleScreen() {
   const [entries, setEntries] = useState<WorkoutEntry[]>([])
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [exById, setExById] = useState<Record<string, Exercise>>({})
+  const [sports, setSports] = useState<Sport[]>([])
+  const [sportSessions, setSportSessions] = useState<SportSession[]>([])
   const [roundsByCycle, setRoundsByCycle] = useState<Record<string, CycleRound[]>>({})
   const [setCounts, setSetCounts] = useState<Record<string, number>>({})
   const [intimacyRows, setIntimacyRows] = useState<OptionalTracker[]>([])
@@ -59,11 +67,13 @@ export function CycleScreen() {
 
   const reload = useCallback(async () => {
     const visible = intimacyVisible()
-    const [cs, act, es, exs, intimacy] = await Promise.all([
+    const [cs, act, es, exs, sp, ss, intimacy] = await Promise.all([
       getCycles(),
       getActiveCycle(),
       getEntries(),
       getExercises(),
+      getSports(),
+      getSportSessions(),
       visible ? getTrackerEntries('intimacy') : Promise.resolve([]),
     ])
     setCycles(cs)
@@ -71,6 +81,8 @@ export function CycleScreen() {
     setEntries(es)
     setExercises(exs)
     setExById(Object.fromEntries(exs.map((e) => [e.id, e])))
+    setSports(sp)
+    setSportSessions(ss)
     setShowIntimacy(visible)
     setIntimacyRows(intimacy)
     const pairs = await Promise.all(cs.map(async (c) => [c.id, await getCycleRounds(c.id)] as const))
@@ -164,6 +176,15 @@ export function CycleScreen() {
   }, [reload])
 
   const recovery = useMemo(() => muscleRecovery(entries, exById), [entries, exById])
+  // Days since last session per sport the user does (§6B) — shown next to muscles.
+  const sportRecovery = useMemo(() => {
+    return sports.map((s) => {
+      const last = sportSessions
+        .filter((ss) => ss.sport_id === s.id)
+        .reduce<string | null>((m, ss) => (!m || ss.date > m ? ss.date : m), null)
+      return { id: s.id, name: sportName(s, lang), daysAgo: last ? daysSince(last) : null }
+    })
+  }, [sports, sportSessions, lang])
 
   async function addCycle(input: NewCycleForm) {
     const { undo } = await withUndo(['training_cycle'], () => createCycle({ ...input, active: cycles.length === 0 }))
@@ -284,6 +305,12 @@ export function CycleScreen() {
             <div key={r.bodyPart} className={`cyc-rec ${r.daysAgo != null && r.daysAgo >= 7 ? 'overdue' : ''}`}>
               <span className="cyc-rec-bp">{categoryLabel(r.bodyPart, lang)}</span>
               <span className="cyc-rec-days">{r.daysAgo == null ? '—' : `${r.daysAgo}d`}</span>
+            </div>
+          ))}
+          {sportRecovery.map((s) => (
+            <div key={s.id} className={`cyc-rec sport ${s.daysAgo != null && s.daysAgo >= 7 ? 'overdue' : ''}`}>
+              <span className="cyc-rec-bp">🏃 {s.name}</span>
+              <span className="cyc-rec-days">{s.daysAgo == null ? '—' : `${s.daysAgo}d`}</span>
             </div>
           ))}
         </div>

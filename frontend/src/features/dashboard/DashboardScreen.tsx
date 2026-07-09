@@ -212,7 +212,7 @@ export function DashboardScreen() {
     const lvls = heat.flat().map((c) => c.level).filter((l) => l > 0)
     const avg = lvls.length ? (lvls.reduce((a, b) => a + b, 0) / lvls.length) : 0
     const intimacyCount = showIntimacy ? intimacyRows.reduce((sum, r) => sum + r.count, 0) : 0
-    return { trainingDays, gymDays, sportHours, active, pushReps, avg, intimacyCount }
+    return { trainingDays, gymDays, sportHours, sportSessions: sessions.length, active, pushReps, avg, intimacyCount }
   }, [entries, sessions, injuries, allSets, exById, heat, intimacyRows, showIntimacy])
 
   const categories = useMemo(() => getCategories(), [])
@@ -326,6 +326,7 @@ export function DashboardScreen() {
     { label: lang === 'zh' ? '训练天数' : 'Training days', value: kpis.trainingDays, c: '' },
     { label: lang === 'zh' ? '健身房次数' : 'Gym days', value: kpis.gymDays, c: 'c' },
     { label: lang === 'zh' ? '自重累计' : 'Bodyweight reps', value: kpis.pushReps, c: 'o' },
+    { label: lang === 'zh' ? '运动次数' : 'Sport sessions', value: kpis.sportSessions, c: 'v' },
     { label: lang === 'zh' ? '运动小时' : 'Sport hrs', value: Math.round(kpis.sportHours * 10) / 10, c: 'v' },
     ...(showIntimacy ? [{ label: lang === 'zh' ? '亲密记录' : 'Wellness logs', value: kpis.intimacyCount, c: 'p' }] : []),
     { label: lang === 'zh' ? '平均强度' : 'Avg intensity', value: kpis.avg ? kpis.avg.toFixed(1) : '–', c: '' },

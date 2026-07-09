@@ -48,6 +48,7 @@ export interface NewExerciseInput {
   name_locked?: boolean
   needs_translation?: boolean
   default_per_side?: boolean
+  duration_hm?: boolean
   is_rehab?: boolean
   rehab_purpose_zh?: string
   rehab_purpose_en?: string
@@ -77,7 +78,7 @@ export async function getExercises(): Promise<Exercise[]> {
 
 export async function updateExercise(
   id: string,
-  patch: Partial<Pick<Exercise, 'name_zh' | 'name_en' | 'body_parts' | 'measure_type' | 'assisted' | 'name_locked' | 'needs_translation' | 'default_per_side' | 'is_rehab' | 'rehab_purpose_zh' | 'rehab_purpose_en' | 'rehab_cues_zh' | 'rehab_cues_en' | 'rehab_dosage'>>,
+  patch: Partial<Pick<Exercise, 'name_zh' | 'name_en' | 'body_parts' | 'measure_type' | 'assisted' | 'name_locked' | 'needs_translation' | 'default_per_side' | 'duration_hm' | 'is_rehab' | 'rehab_purpose_zh' | 'rehab_purpose_en' | 'rehab_cues_zh' | 'rehab_cues_en' | 'rehab_dosage'>>,
 ): Promise<void> {
   const e = await db.exercises.get(id)
   if (e) await db.exercises.put({ ...e, ...patch, updated_at: nowIso() })
@@ -124,6 +125,7 @@ export interface NewEntryInput {
   note_raw?: string
   note_tags?: string[]
   cycle_day_label?: string | null
+  cycle_id?: string | null
   injury_modified?: InjuryModified | null
   injury_id?: string | null
 }
@@ -139,6 +141,7 @@ export async function createEntryWithSets(
     note_raw: '',
     note_tags: [],
     cycle_day_label: null,
+    cycle_id: null,
     injury_modified: null,
     injury_id: null,
     needs_review: false,
@@ -609,8 +612,9 @@ export async function logTracker(
   date: string,
   count = 1,
   category: IntimacyCategory | null = null,
+  note = '',
 ): Promise<OptionalTracker> {
-  const row: OptionalTracker = { ...syncFields(), tracker, date, count, category }
+  const row: OptionalTracker = { ...syncFields(), tracker, date, count, category, note: note.trim() || null }
   await db.optional_trackers.add(row)
   return row
 }
@@ -675,7 +679,7 @@ export async function softDeleteEntry(entryId: string): Promise<void> {
 /** Edit an entry: patch fields, soft-delete old sets, add the new ones. */
 export async function updateEntry(
   entryId: string,
-  patch: Partial<Pick<WorkoutEntry, 'note_raw' | 'note_tags' | 'is_superset' | 'needs_review' | 'needs_translation' | 'injury_modified' | 'injury_id'>>,
+  patch: Partial<Pick<WorkoutEntry, 'exercise_id' | 'note_raw' | 'note_tags' | 'is_superset' | 'needs_review' | 'needs_translation' | 'injury_modified' | 'injury_id'>>,
   newSets: NewSetInput[],
 ): Promise<void> {
   const ts = nowIso()

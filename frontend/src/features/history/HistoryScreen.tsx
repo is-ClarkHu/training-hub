@@ -198,6 +198,7 @@ export function HistoryScreen() {
                 key={entry.id}
                 entry={entry}
                 exercise={exById[entry.exercise_id]}
+                allExercises={Object.values(exById)}
                 sets={setMap[entry.id] ?? []}
                 lang={lang}
                 onChanged={reload}
@@ -252,6 +253,7 @@ export function HistoryScreen() {
                 <div className="hist-sets">
                   <span className="hist-intimacy-pill">{intimacyLabel(intimacyCategory(r), lang)}</span>
                   <span className="hist-set">×{r.count}</span>
+                  {r.note && <em className="hist-setnote"> · {r.note}</em>}
                 </div>
               </div>
             ))}
@@ -275,6 +277,7 @@ export function HistoryScreen() {
 function EntryCard({
   entry,
   exercise,
+  allExercises,
   sets,
   lang,
   onChanged,
@@ -285,6 +288,7 @@ function EntryCard({
 }: {
   entry: WorkoutEntry
   exercise: Exercise | undefined
+  allExercises: Exercise[]
   sets: ExerciseSet[]
   lang: 'en' | 'zh'
   onChanged: () => Promise<void> | void
@@ -296,6 +300,7 @@ function EntryCard({
   const [editing, setEditing] = useState(false)
   const [drafts, setDrafts] = useState<SetDraft[]>([])
   const [note, setNote] = useState(entry.note_raw)
+  const [swapId, setSwapId] = useState(entry.exercise_id)
   const [busy, setBusy] = useState(false)
 
   const needsAttention =
@@ -304,19 +309,22 @@ function EntryCard({
     (exercise ? exercise.needs_translation || !exercise.name_en || !exercise.name_zh : false)
 
   function startEdit() {
-    setDrafts(sets.length ? sets.map(setToDraft) : [])
+    setDrafts(sets.length ? sets.map((s) => setToDraft(s, exercise?.duration_hm)) : [])
     setNote(entry.note_raw)
+    setSwapId(entry.exercise_id)
     setEditing(true)
   }
 
   async function save() {
     if (!exercise) return
     setBusy(true)
+    // Allow swapping the entry onto a different exercise of the same measure type.
+    const target = allExercises.find((e) => e.id === swapId) ?? exercise
     const parsed = parseNote(note)
-    const inputs = draftsToSetInputs(drafts, exercise.measure_type, parsed)
+    const inputs = draftsToSetInputs(drafts, target.measure_type, parsed, target.duration_hm)
     await updateEntry(
       entry.id,
-      { note_raw: note, note_tags: parsed.tagKeys, is_superset: inputs.some((s) => s.set_type === 'superset') },
+      { exercise_id: target.id, note_raw: note, note_tags: parsed.tagKeys, is_superset: inputs.some((s) => s.set_type === 'superset') },
       inputs,
     )
     setBusy(false)
@@ -359,7 +367,7 @@ function EntryCard({
             ) : (
               sets.map((s) => (
                 <span key={s.id} className="hist-set">
-                  {exercise ? formatSet(s, exercise.measure_type) : '–'}
+                  {exercise ? formatSet(s, exercise.measure_type, exercise.duration_hm) : '–'}
                   {s.set_type !== 'normal' && <em className="hist-settype"> {s.set_type}</em>}
                   {s.note && <em className="hist-setnote"> · {s.note}</em>}
                 </span>
@@ -379,7 +387,15 @@ function EntryCard({
         <div className="log-dialog-backdrop" onClick={() => !busy && setEditing(false)}>
           <div className="log-dialog" onClick={(e) => e.stopPropagation()}>
             <h3>{name}</h3>
-            <SetEditor lang={lang} measureType={exercise.measure_type} sets={drafts} onChange={setDrafts} />
+            <div className="log-field">
+              <label className="th-label">{lang === 'zh' ? '动作(可改成其他)' : 'Exercise (swap)'}</label>
+              <select className="th-input" value={swapId} onChange={(e) => setSwapId(e.target.value)}>
+                {allExercises
+                  .filter((e) => e.measure_type === exercise.measure_type && !e.deleted)
+                  .map((e) => (<option key={e.id} value={e.id}>{exerciseName(e, lang)}</option>))}
+              </select>
+            </div>
+            <SetEditor lang={lang} measureType={exercise.measure_type} durationHm={exercise.duration_hm} sets={drafts} onChange={setDrafts} />
             <input className="th-input" value={note} onChange={(e) => setNote(e.target.value)} placeholder={lang === 'zh' ? '笔记' : 'note'} />
             <div className="log-dialog-actions">
               <button className="th-btn-ghost" type="button" onClick={remove} disabled={busy}>{lang === 'zh' ? '删除' : 'Delete'}</button>

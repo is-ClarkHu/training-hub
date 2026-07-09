@@ -39,6 +39,7 @@ export function EditExerciseDialog({
     setBodyParts((ps) => (ps.includes(k) ? ps.filter((p) => p !== k) : [...ps, k]))
   const [measureType, setMeasureType] = useState<MeasureType>(exercise.measure_type)
   const [perSide, setPerSide] = useState(exercise.default_per_side ?? false)
+  const [durationHm, setDurationHm] = useState(exercise.duration_hm ?? false)
   const [mergeTarget, setMergeTarget] = useState('')
   const [usage, setUsage] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
@@ -63,6 +64,7 @@ export function EditExerciseDialog({
       body_parts: bodyParts,
       measure_type: measureType,
       default_per_side: perSide,
+      duration_hm: durationHm,
       name_locked: true,
     }))
     setBusy(false)
@@ -121,6 +123,15 @@ export function EditExerciseDialog({
             {MEASURE_TYPES.map((mt) => (<option key={mt} value={mt}>{MEASURE_TYPE_LABELS[mt][lang]}</option>))}
           </select>
         </div>
+        {measureType === 'duration' && (
+          <div className="log-field">
+            <label className="th-label">{lang === 'zh' ? '时长格式' : 'Duration format'}</label>
+            <select className="th-input" value={durationHm ? 'hm' : 'ms'} onChange={(e) => setDurationHm(e.target.value === 'hm')}>
+              <option value="ms">{lang === 'zh' ? '分:秒 (mm:ss)' : 'mm:ss'}</option>
+              <option value="hm">{lang === 'zh' ? '时:分 (hh:mm)' : 'hh:mm'}</option>
+            </select>
+          </div>
+        )}
 
         <label className="log-perside">
           <input type="checkbox" checked={perSide} onChange={(e) => setPerSide(e.target.checked)} />

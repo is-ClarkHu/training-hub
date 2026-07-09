@@ -153,6 +153,7 @@ export interface Exercise extends SyncFields {
   name_locked: boolean   // user-edited translation; AI must never overwrite
   needs_translation: boolean
   default_per_side?: boolean // this movement is inherently per-side (prefills the toggle)
+  duration_hm?: boolean      // duration entered/shown as hh:mm instead of mm:ss (long cardio)
   is_warmup?: boolean        // classified as a warmup movement (own group in the picker)
   // ── rehab library (§6A Phase 2). is_rehab is orthogonal to body_part — a rehab
   //    move still belongs to an anatomical part (e.g. knee) but carries knowledge. ──
@@ -171,7 +172,8 @@ export interface WorkoutEntry extends SyncFields {
   superset_group: string | null
   note_raw: string                   // preserved verbatim (§5.3, §14)
   note_tags: string[]                // canonical tag keys parsed from the note (§5.3)
-  cycle_day_label: string | null     // A/B/C/D in the active cycle (§6B)
+  cycle_day_label: string | null     // A/B/C/D within cycle_id's split (§6B)
+  cycle_id?: string | null           // which cycle the day label belongs to (multiple cycles/day)
   injury_modified: InjuryModified | null
   injury_id: string | null
   needs_review: boolean
@@ -272,6 +274,7 @@ export interface OptionalTracker extends SyncFields {
   date: string
   count: number
   category?: IntimacyCategory | null
+  note?: string | null
 }
 
 export interface TranslationDictionaryRow extends SyncFields {

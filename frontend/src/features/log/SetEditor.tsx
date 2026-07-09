@@ -3,7 +3,7 @@
 // dropset): e.g. one set = 25×13 + 20×13. "+ 子组" adds a sub-set inside a set.
 import type { MeasureType, SetType } from '../../supabase/types'
 import type { TranslationTarget } from '../../translation'
-import { emptySet, emptySub, type SetDraft, type SubDraft } from './util'
+import { emptySet, emptySub, maskTime, type SetDraft, type SubDraft } from './util'
 
 const SET_TYPES: SetType[] = ['normal', 'warmup', 'superset', 'dropset']
 const TYPE_LABEL: Record<SetType, { zh: string; en: string }> = {
@@ -16,11 +16,13 @@ const TYPE_LABEL: Record<SetType, { zh: string; en: string }> = {
 export function SetEditor({
   lang,
   measureType,
+  durationHm = false,
   sets,
   onChange,
 }: {
   lang: TranslationTarget
   measureType: MeasureType
+  durationHm?: boolean
   sets: SetDraft[]
   onChange: (sets: SetDraft[]) => void
 }) {
@@ -79,8 +81,8 @@ export function SetEditor({
                     onChange={(e) => updateSub(i, subi, { reps: e.target.value })} placeholder={lang === 'zh' ? '次' : 'reps'} aria-label="reps" />
                 )}
                 {measureType === 'duration' && (
-                  <input className="th-input log-num" value={sub.duration}
-                    onChange={(e) => updateSub(i, subi, { duration: e.target.value })} placeholder="mm:ss" aria-label="duration" />
+                  <input className="th-input log-num" inputMode="numeric" value={sub.duration}
+                    onChange={(e) => updateSub(i, subi, { duration: maskTime(e.target.value) })} placeholder={durationHm ? 'hh:mm' : 'mm:ss'} aria-label="duration" />
                 )}
                 {isMulti && s.subs.length > 1 && (
                   <button type="button" className="log-sub-del" onClick={() => removeSub(i, subi)} aria-label="remove sub-set">×</button>

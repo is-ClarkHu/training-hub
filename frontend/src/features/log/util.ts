@@ -55,21 +55,36 @@ export function sortExercises(
   })
 }
 
-/** Parse 'mm:ss' (or bare seconds) → total seconds; '' → null. */
-export function parseDuration(text: string): number | null {
+/** Insert the ':' automatically while typing: digits only, last two = the small
+ *  unit. "130" → "1:30", "1305" → "13:05". Unit-agnostic (works for mm:ss & hh:mm). */
+export function maskTime(raw: string): string {
+  const d = raw.replace(/\D/g, '').slice(0, 6)
+  if (d.length <= 2) return d
+  return `${d.slice(0, -2)}:${d.slice(-2)}`
+}
+
+/** Parse 'a:b' (or bare) → total seconds. hm=false → mm:ss; hm=true → hh:mm.
+ *  A bare number is seconds (mm:ss) or minutes (hh:mm). '' → null. */
+export function parseDuration(text: string, hm = false): number | null {
   const t = text.trim()
   if (!t) return null
   if (t.includes(':')) {
-    const [m, s] = t.split(':')
-    const mins = parseInt(m, 10) || 0
-    const secs = parseInt(s, 10) || 0
-    return mins * 60 + secs
+    const [a, b] = t.split(':')
+    const big = parseInt(a, 10) || 0
+    const small = parseInt(b, 10) || 0
+    return hm ? big * 3600 + small * 60 : big * 60 + small
   }
   const n = parseInt(t, 10)
-  return Number.isNaN(n) ? null : n
+  if (Number.isNaN(n)) return null
+  return hm ? n * 60 : n
 }
 
-export function formatDuration(sec: number): string {
+export function formatDuration(sec: number, hm = false): string {
+  if (hm) {
+    const h = Math.floor(sec / 3600)
+    const m = Math.round((sec % 3600) / 60)
+    return `${h}:${String(m).padStart(2, '0')}`
+  }
   const m = Math.floor(sec / 60)
   const s = sec % 60
   return `${m}:${String(s).padStart(2, '0')}`
@@ -112,7 +127,7 @@ export function toInt(text: string): number | null {
 
 /** Parse one sub-draft → {weight,reps,duration_sec} for the given measure type,
  *  or null if it's empty. */
-function subToValues(d: SubDraft, mt: MeasureType): SubSet | null {
+function subToValues(d: SubDraft, mt: MeasureType, hm = false): SubSet | null {
   if (mt === 'weight_reps') {
     const w = toNumber(d.weight)
     const r = toInt(d.reps)
@@ -124,7 +139,7 @@ function subToValues(d: SubDraft, mt: MeasureType): SubSet | null {
     if (r === null) return null
     return { weight: null, reps: r, duration_sec: null }
   }
-  const s = parseDuration(d.duration)
+  const s = parseDuration(d.duration, hm)
   if (s === null) return null
   return { weight: null, reps: null, duration_sec: s }
 }
@@ -135,11 +150,12 @@ export function draftsToSetInputs(
   sets: SetDraft[],
   mt: MeasureType,
   parsed: ParsedNote,
+  hm = false,
 ): NewSetInput[] {
   const globalType: SetType = parsed.warmup ? 'warmup' : 'normal'
   const out: NewSetInput[] = []
   for (const d of sets) {
-    const vals = d.subs.map((s) => subToValues(s, mt)).filter((v): v is SubSet => v !== null)
+    const vals = d.subs.map((s) => subToValues(s, mt, hm)).filter((v): v is SubSet => v !== null)
     if (vals.length === 0) continue
     const [primary, ...rest] = vals
     const perSide = d.per_side || (parsed.perSide && mt !== 'duration')
@@ -157,28 +173,28 @@ export function draftsToSetInputs(
 }
 
 /** Existing set row → editable draft (for History edit mode). */
-export function setToDraft(s: ExerciseSet): SetDraft {
+export function setToDraft(s: ExerciseSet, hm = false): SetDraft {
   const primary: SubDraft = {
     weight: s.weight != null ? String(s.weight) : '',
     reps: s.reps != null ? String(s.reps) : '',
-    duration: s.duration_sec != null ? formatDuration(s.duration_sec) : '',
+    duration: s.duration_sec != null ? formatDuration(s.duration_sec, hm) : '',
   }
   const rest: SubDraft[] = (s.sub_sets ?? []).map((ss) => ({
     weight: ss.weight != null ? String(ss.weight) : '',
     reps: ss.reps != null ? String(ss.reps) : '',
-    duration: ss.duration_sec != null ? formatDuration(ss.duration_sec) : '',
+    duration: ss.duration_sec != null ? formatDuration(ss.duration_sec, hm) : '',
   }))
   return { subs: [primary, ...rest], per_side: s.per_side, set_type: s.set_type, note: s.note ?? '' }
 }
 
-function fmtSub(v: { weight: number | null; reps: number | null; duration_sec: number | null }, mt: MeasureType): string {
-  if (mt === 'duration') return v.duration_sec != null ? formatDuration(v.duration_sec) : '–'
+function fmtSub(v: { weight: number | null; reps: number | null; duration_sec: number | null }, mt: MeasureType, hm = false): string {
+  if (mt === 'duration') return v.duration_sec != null ? formatDuration(v.duration_sec, hm) : '–'
   if (mt === 'reps_only') return `${v.reps ?? '–'}`
   return `${v.weight ?? '–'}×${v.reps ?? '–'}`
 }
 
 /** One-line summary of a set — sub-sets joined by '+' (e.g. "25×13 + 20×13"). */
-export function formatSet(s: ExerciseSet, mt: MeasureType): string {
-  const parts = [fmtSub(s, mt), ...(s.sub_sets ?? []).map((v) => fmtSub(v, mt))]
+export function formatSet(s: ExerciseSet, mt: MeasureType, hm = false): string {
+  const parts = [fmtSub(s, mt, hm), ...(s.sub_sets ?? []).map((v) => fmtSub(v, mt, hm))]
   return parts.join(' + ') + (s.per_side ? '/side' : '')
 }

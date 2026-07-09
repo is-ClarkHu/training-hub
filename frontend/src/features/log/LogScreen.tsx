@@ -7,6 +7,7 @@ import {
   createEntryWithSets,
   createSportSession,
   getActiveCycle,
+  getCycles,
   getCycleRounds,
   getExercises,
   getInjuries,
@@ -57,9 +58,9 @@ export function LogScreen() {
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [sports, setSports] = useState<Sport[]>([])
   const [activeInjuries, setActiveInjuries] = useState<Injury[]>([])
-  const [activeCycle, setActiveCycle] = useState<TrainingCycle | null>(null)
-  const [cycleRounds, setCycleRounds] = useState<CycleRound[]>([])
-  const [cycleDay, setCycleDay] = useState('')
+  const [cycles, setCycles] = useState<TrainingCycle[]>([])
+  const [roundsByCycle, setRoundsByCycle] = useState<Record<string, CycleRound[]>>({})
+  const [cycleSel, setCycleSel] = useState('') // "cycleId::label" — a day from any cycle
 
   const [sel, setSel] = useState<Selection>(null)
   const [dialog, setDialog] = useState<{ open: boolean; name: string }>({ open: false, name: '' })
@@ -77,6 +78,7 @@ export function LogScreen() {
   const [showIntimacy, setShowIntimacy] = useState(false)
   const [intimacyCat, setIntimacyCat] = useState<IntimacyCategory>('partner_active')
   const [intimacyCount, setIntimacyCount] = useState('1')
+  const [intimacyNote, setIntimacyNote] = useState('')
   // shared
   const [note, setNote] = useState('')
 
@@ -84,17 +86,28 @@ export function LogScreen() {
     void getExercises().then(setExercises)
     void getSports().then(setSports)
     void getInjuries().then((l) => setActiveInjuries(l.filter((i) => i.status !== 'recovered')))
-    void getActiveCycle().then((c) => {
-      setActiveCycle(c)
-      if (c) void getCycleRounds(c.id).then(setCycleRounds)
-    })
+    void (async () => {
+      const [cs, active] = await Promise.all([getCycles(), getActiveCycle()])
+      setCycles(cs)
+      const pairs = await Promise.all(cs.map(async (c) => [c.id, await getCycleRounds(c.id)] as const))
+      const byCycle = Object.fromEntries(pairs)
+      setRoundsByCycle(byCycle)
+      // Default the picker to the active cycle's next day (old behaviour).
+      if (active && active.days.length > 0) {
+        const rv = currentRound(active, byCycle[active.id] ?? [])
+        if (rv.nextLabel) setCycleSel(`${active.id}::${rv.nextLabel}`)
+      }
+    })()
     setShowIntimacy(intimacyVisible())
   }, [])
 
   const reloadRounds = async () => {
-    if (activeCycle) setCycleRounds(await getCycleRounds(activeCycle.id))
+    const pairs = await Promise.all(cycles.map(async (c) => [c.id, await getCycleRounds(c.id)] as const))
+    setRoundsByCycle(Object.fromEntries(pairs))
   }
-  const roundView = activeCycle && activeCycle.days.length > 0 ? currentRound(activeCycle, cycleRounds) : null
+  const selCycle = cycleSel ? cycles.find((c) => c.id === cycleSel.split('::')[0]) ?? null : null
+  const selLabel = cycleSel ? cycleSel.split('::')[1] : ''
+  const roundView = selCycle && selCycle.days.length > 0 ? currentRound(selCycle, roundsByCycle[selCycle.id] ?? []) : null
 
   const parsed = parseNote(note)
 
@@ -138,14 +151,14 @@ export function LogScreen() {
 
   // day's planned exercises (§6B) as a quick-pick
   const planExercises: Exercise[] = (() => {
-    const day = activeCycle?.days.find((d) => d.label === cycleDay)
+    const day = selCycle?.days.find((d) => d.label === selLabel)
     if (!day?.exercise_ids?.length) return []
     return day.exercise_ids.map((id) => exercises.find((e) => e.id === id)).filter((e): e is Exercise => !!e)
   })()
 
   function buildSets(): NewSetInput[] {
     if (sel?.kind !== 'exercise') return []
-    return draftsToSetInputs(sets, sel.ex.measure_type, parsed)
+    return draftsToSetInputs(sets, sel.ex.measure_type, parsed, sel.ex.duration_hm)
   }
 
   const canSaveExercise = sel?.kind === 'exercise' && buildSets().length > 0 && !saving
@@ -158,9 +171,10 @@ export function LogScreen() {
     setSaving(true)
     const exName = exerciseName(sel.ex, lang)
     const measureType = sel.ex.measure_type
-    // Tagging a cycle day advances the active cycle's current round (§6B). Kept
-    // inside withUndo so undoing the log also rewinds the round.
-    const roundCycle = cycleDay && activeCycle ? activeCycle : null
+    // Tagging a cycle day advances THAT cycle's current round (§6B) — days can
+    // come from any cycle (multiple splits/day). Kept inside withUndo so undo
+    // also rewinds the round.
+    const roundCycle = selCycle && selLabel ? selCycle : null
     const { result: { entry }, undo } = await withUndo(['workout_entries', 'sets', 'cycle_rounds'], async () => {
       const res = await createEntryWithSets(
         {
@@ -169,7 +183,8 @@ export function LogScreen() {
           is_superset: setInputs.some((s) => s.set_type === 'superset'),
           note_raw: note,
           note_tags: parsed.tagKeys,
-          cycle_day_label: cycleDay || null,
+          cycle_day_label: roundCycle ? selLabel : null,
+          cycle_id: roundCycle?.id ?? null,
           // rehab moves link straight to the injury they rehab (no modified flag);
           // strength lifts only link when marked reduced/paused.
           injury_modified: sel.ex.is_rehab ? null : injuryMod === 'none' ? null : injuryMod,
@@ -177,7 +192,7 @@ export function LogScreen() {
         },
         setInputs,
       )
-      if (roundCycle) await recordCycleDay(roundCycle, cycleDay, date)
+      if (roundCycle) await recordCycleDay(roundCycle, selLabel, date)
       return res
     })
     if (roundCycle) void reloadRounds()
@@ -235,18 +250,19 @@ export function LogScreen() {
     const n = parseInt(intimacyCount, 10)
     if (!Number.isFinite(n) || n <= 0 || saving) return
     setSaving(true)
-    const { result: row, undo } = await withUndo(['optional_trackers'], () => logTracker('intimacy', date, n, intimacyCat))
+    const { result: row, undo } = await withUndo(['optional_trackers'], () => logTracker('intimacy', date, n, intimacyCat, intimacyNote))
     const loggedId = crypto.randomUUID()
     const name = lang === 'zh' ? '成人亲密健康' : 'Adult wellness'
     setLogged((prev) => [{
       id: loggedId,
       name,
-      detail: `${intimacyLabel(intimacyCat, lang, true)} ×${n}`,
+      detail: `${intimacyLabel(intimacyCat, lang, true)} ×${n}${intimacyNote.trim() ? ' · ' + intimacyNote.trim() : ''}`,
       tagKeys: [],
       kind: 'intimacy',
       realId: row.id,
     }, ...prev])
     setIntimacyCount('1')
+    setIntimacyNote('')
     setSaving(false)
     push(lang === 'zh' ? `已记录「${name}」` : `Logged “${name}”`, async () => {
       await undo()
@@ -284,31 +300,35 @@ export function LogScreen() {
           <label className="th-label" htmlFor="log-date">{lang === 'zh' ? '日期' : 'Date'}</label>
           <input id="log-date" className="th-input log-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </div>
-        {activeCycle && activeCycle.days.length > 0 && (
+        {cycles.some((c) => c.days.length > 0) && (
           <div className="log-field">
             <label className="th-label" htmlFor="log-cd">{lang === 'zh' ? '循环日' : 'Cycle day'}</label>
-            <select id="log-cd" className="th-input log-cycleday" value={cycleDay} onChange={(e) => setCycleDay(e.target.value)}>
+            <select id="log-cd" className="th-input log-cycleday" value={cycleSel} onChange={(e) => setCycleSel(e.target.value)}>
               <option value="">—</option>
-              {activeCycle.days.map((d) => (
-                <option key={d.label} value={d.label}>
-                  {cycleDayOptionLabel(d, lang)}
-                </option>
+              {cycles.filter((c) => c.days.length > 0).map((c) => (
+                <optgroup key={c.id} label={c.name}>
+                  {c.days.map((d) => (
+                    <option key={`${c.id}::${d.label}`} value={`${c.id}::${d.label}`}>
+                      {cycleDayOptionLabel(d, lang)}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
           </div>
         )}
       </header>
 
-      {roundView && (
+      {roundView && selCycle && (
         <div className="log-round-hint">
-          <span className="log-round-badge">Round {roundView.index}</span>
+          <span className="log-round-badge">{selCycle.name} · Round {roundView.index}</span>
           <span className="log-round-state">
             {roundView.open
               ? (lang === 'zh' ? `还差 ${roundView.remaining.join(' / ') || '—'}` : `remaining: ${roundView.remaining.join(' / ') || '—'}`)
               : (lang === 'zh' ? '新一轮待开始' : 'new round')}
           </span>
-          {roundView.nextLabel && cycleDay !== roundView.nextLabel && (
-            <button type="button" className="hist-link log-round-pick" onClick={() => setCycleDay(roundView.nextLabel!)}>
+          {roundView.nextLabel && selLabel !== roundView.nextLabel && (
+            <button type="button" className="hist-link log-round-pick" onClick={() => setCycleSel(`${selCycle.id}::${roundView.nextLabel}`)}>
               {lang === 'zh' ? `选 ${roundView.nextLabel} 天` : `pick day ${roundView.nextLabel}`}
             </button>
           )}
@@ -345,6 +365,8 @@ export function LogScreen() {
               {lang === 'zh' ? '记录' : 'Log'}
             </button>
           </div>
+          <input className="th-input log-intimacy-note" value={intimacyNote} onChange={(e) => setIntimacyNote(e.target.value)}
+            placeholder={lang === 'zh' ? '备注(可选)' : 'note (optional)'} />
         </section>
       )}
 
@@ -375,7 +397,7 @@ export function LogScreen() {
 
           {sel.ex.is_rehab && <RehabKnowledge ex={sel.ex} lang={lang} />}
 
-          <SetEditor lang={lang} measureType={sel.ex.measure_type} sets={sets} onChange={setSets} />
+          <SetEditor lang={lang} measureType={sel.ex.measure_type} durationHm={sel.ex.duration_hm} sets={sets} onChange={setSets} />
 
           <NoteField lang={lang} note={note} setNote={setNote} tagKeys={parsed.tagKeys} />
 

@@ -112,31 +112,31 @@
   border-radius: 10px;
 }
 .dash-intimacy-head { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
-.dash-intimacy-head h3 { margin: 4px 0 0; font: 700 16px/1 var(--mono); color: #ffe4f1; }
+.dash-intimacy-head h3 { margin: 4px 0 0; font: 700 16px/1 var(--mono); color: var(--text-bright); }
 .dash-intimacy-kicker {
   font: 700 10px/1 var(--mono);
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: #f9a8d4;
+  color: #e0559e;
 }
 .dash-intimacy-total { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
-.dash-intimacy-total strong { font: 800 28px/1 var(--mono); color: #f472b6; }
+.dash-intimacy-total strong { font: 800 28px/1 var(--mono); color: #e0559e; }
 .dash-intimacy-total span,
 .dash-intimacy-metric span { font: 11px/1 var(--mono); color: var(--text-dim); }
 .dash-intimacy-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .dash-intimacy-metric {
   display: flex; justify-content: space-between; align-items: center;
   padding: 10px 12px;
-  background: rgba(12, 21, 28, 0.54);
-  border: 1px solid rgba(244, 114, 182, 0.18);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
   border-radius: 8px;
 }
-.dash-intimacy-metric strong { font: 700 18px/1 var(--mono); color: #f9a8d4; }
+.dash-intimacy-metric strong { font: 700 18px/1 var(--mono); color: var(--text-bright); }
 .dash-intimacy-bars { display: flex; flex-direction: column; gap: 8px; }
-.dash-intimacy-bar-row { display: grid; grid-template-columns: 74px 1fr 28px; align-items: center; gap: 8px; font: 12px/1 var(--mono); color: var(--text-dim); }
-.dash-intimacy-bar-track { height: 8px; overflow: hidden; background: rgba(255,255,255,0.06); border-radius: 999px; }
+.dash-intimacy-bar-row { display: grid; grid-template-columns: 74px 1fr 28px; align-items: center; gap: 8px; font: 12px/1 var(--mono); color: var(--text); }
+.dash-intimacy-bar-track { height: 8px; overflow: hidden; background: var(--panelhi); border-radius: 999px; }
 .dash-intimacy-bar-track i { display: block; height: 100%; border-radius: inherit; }
-.dash-intimacy-bar-row b { text-align: right; color: #ffe4f1; }
+.dash-intimacy-bar-row b { text-align: right; color: var(--text-bright); }
 
 @media (max-width: 640px) {
   .dash-charts { grid-template-columns: 1fr; }

@@ -6,9 +6,9 @@ export const INTIMACY_VISIBLE_KEY = 'th.tracker.intimacy.enabled'
 export const INTIMACY_CATEGORIES: IntimacyCategory[] = ['solo', 'partner_low', 'partner_active']
 
 export const INTIMACY_LABEL: Record<IntimacyCategory, { zh: string; en: string; shortZh: string; shortEn: string }> = {
-  solo: { zh: '独处放松', en: 'Solo / Masturbation', shortZh: '独处', shortEn: 'Solo' },
-  partner_low: { zh: '伴侣互动 - 低能耗', en: 'Partner - Oral / Low Energy', shortZh: '低能耗', shortEn: 'Low' },
-  partner_active: { zh: '伴侣互动 - 高能耗', en: 'Partner - Active Sex', shortZh: '高能耗', shortEn: 'Active' },
+  solo: { zh: '自慰', en: 'Masturbation', shortZh: '自慰', shortEn: 'Solo' },
+  partner_low: { zh: '前戏 / 口交', en: 'Foreplay / Oral', shortZh: '前戏', shortEn: 'Foreplay' },
+  partner_active: { zh: '性交', en: 'Sex', shortZh: '性交', shortEn: 'Sex' },
 }
 
 export const INTIMACY_COLORS: Record<IntimacyCategory, string> = {

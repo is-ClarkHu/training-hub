@@ -77,3 +77,9 @@ create policy cycle_rounds_owner on public.cycle_rounds
 alter table public.training_cycle
   add column if not exists display_mode text not null default 'circle'
   check (display_mode in ('body','circle'));
+
+-- Duration format (mm:ss vs hh:mm); which cycle a logged day belongs to (multiple
+-- splits per day); optional note on a private/intimacy tracker entry.
+alter table public.exercises        add column if not exists duration_hm boolean not null default false;
+alter table public.workout_entries  add column if not exists cycle_id uuid;
+alter table public.optional_trackers add column if not exists note text;
