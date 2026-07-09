@@ -14,16 +14,19 @@ import {
   softDeleteEntry,
   softDeleteSportSession,
   deleteTrackerEntry,
+  updateTrackerEntry,
   updateEntry,
 } from '../../db'
 import { parseNote, noteTagLabel } from '../../translation'
 import { useLanguage } from '../../i18n'
-import type { CycleRound, Exercise, ExerciseSet, OptionalTracker, Sport, SportSession, TrainingCycle, WorkoutEntry } from '../../supabase/types'
+import type { CycleRound, Exercise, ExerciseSet, IntimacyCategory, OptionalTracker, Sport, SportSession, TrainingCycle, WorkoutEntry } from '../../supabase/types'
 import { SetEditor } from '../log/SetEditor'
 import { sportName, attrLabel, SportSessionDialog } from '../sports'
-import { intimacyCategory, intimacyLabel, intimacyVisible } from '../intimacy'
+import { INTIMACY_CATEGORIES, intimacyCategory, intimacyLabel, intimacyVisible } from '../intimacy'
 import {
+  ACTIVITY_COLORS,
   draftsToSetInputs,
+  exerciseKind,
   exerciseName,
   formatHours,
   formatSet,
@@ -45,6 +48,7 @@ export function HistoryScreen() {
   const [showIntimacy, setShowIntimacy] = useState(false)
   const [loading, setLoading] = useState(true)
   const [sportEditing, setSportEditing] = useState<SportSession | null>(null)
+  const [intimacyEditing, setIntimacyEditing] = useState<OptionalTracker | null>(null)
   const [selectMode, setSelectMode] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [discreet, setDiscreet] = useState(false)
@@ -133,11 +137,6 @@ export function HistoryScreen() {
   }
 
 
-  async function delIntimacy(id: string) {
-    if (!confirm(lang === 'zh' ? '隐藏这条私密记录?' : 'Hide this private record?')) return
-    await deleteTrackerEntry(id)
-    await reload()
-  }
 
   if (loading) return <p className="hist-empty">Loading…</p>
   if (entries.length === 0 && sportSessions.length === 0 && intimacyRows.length === 0) {
@@ -221,6 +220,7 @@ export function HistoryScreen() {
                   )}
                   <div className="hist-row-main">
                     <div className="hist-row-top">
+                      <span className="hist-dot" style={{ background: ACTIVITY_COLORS.sport }} />
                       <span className="hist-name">🏃 {sp ? sportName(sp, lang) : '(sport)'}</span>
                       {ss.injury && <span className="hist-badge injury">{lang === 'zh' ? '带伤' : 'injury'}</span>}
                     </div>
@@ -236,24 +236,26 @@ export function HistoryScreen() {
               )
             })}
             {showIntimacy && s.intimacy.map((r) => (
-              <div key={r.id} className={`hist-entry hist-intimacy ${selected.has(r.id) ? 'sel' : ''}`}>
-                <div className="hist-entry-head">
-                  {selectMode && (
-                    <input type="checkbox" className="hist-check" checked={selected.has(r.id)} onChange={() => toggleSel(r.id)} aria-label="select" />
-                  )}
-                  <span className="hist-name">{lang === 'zh' ? '成人亲密健康' : 'Adult wellness'}</span>
-                  {!selectMode && (
-                    <div className="hist-actions">
-                      <button className="hist-link danger" type="button" onClick={() => void delIntimacy(r.id)}>
-                        {lang === 'zh' ? '隐藏' : 'hide'}
-                      </button>
+              <div
+                key={r.id}
+                className={`hist-row hist-intimacy ${selected.has(r.id) ? 'sel' : ''} ${selectMode ? '' : 'clickable'}`}
+                onClick={() => (selectMode ? toggleSel(r.id) : setIntimacyEditing(r))}
+              >
+                {selectMode && (
+                  <input type="checkbox" className="hist-check" checked={selected.has(r.id)} onChange={() => toggleSel(r.id)} onClick={(e) => e.stopPropagation()} aria-label="select" />
+                )}
+                <div className="hist-row-main">
+                  <div className="hist-row-top">
+                    <span className="hist-dot" style={{ background: '#f472b6' }} />
+                    <span className="hist-name">{lang === 'zh' ? '成人亲密健康' : 'Adult wellness'}</span>
+                  </div>
+                  {!discreet && (
+                    <div className="hist-sets">
+                      <span className="hist-intimacy-pill">{intimacyLabel(intimacyCategory(r), lang)}</span>
+                      <span className="hist-set">×{r.count}</span>
+                      {r.note && <em className="hist-setnote"> · {r.note}</em>}
                     </div>
                   )}
-                </div>
-                <div className="hist-sets">
-                  <span className="hist-intimacy-pill">{intimacyLabel(intimacyCategory(r), lang)}</span>
-                  <span className="hist-set">×{r.count}</span>
-                  {r.note && <em className="hist-setnote"> · {r.note}</em>}
                 </div>
               </div>
             ))}
@@ -270,6 +272,75 @@ export function HistoryScreen() {
           onClose={() => setSportEditing(null)}
         />
       )}
+
+      {intimacyEditing && (
+        <IntimacyDialog
+          lang={lang}
+          entry={intimacyEditing}
+          onSaved={() => { setIntimacyEditing(null); void reload() }}
+          onClose={() => setIntimacyEditing(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+function IntimacyDialog({
+  lang,
+  entry,
+  onSaved,
+  onClose,
+}: {
+  lang: 'en' | 'zh'
+  entry: OptionalTracker
+  onSaved: () => void
+  onClose: () => void
+}) {
+  const [cat, setCat] = useState<IntimacyCategory>(intimacyCategory(entry))
+  const [count, setCount] = useState(String(entry.count))
+  const [note, setNote] = useState(entry.note ?? '')
+  const [busy, setBusy] = useState(false)
+
+  async function save() {
+    const n = parseInt(count, 10)
+    if (!Number.isFinite(n) || n <= 0) return
+    setBusy(true)
+    await updateTrackerEntry(entry.id, { category: cat, count: n, note: note.trim() || null })
+    setBusy(false)
+    onSaved()
+  }
+  async function del() {
+    if (!confirm(lang === 'zh' ? '删除这条私密记录?' : 'Delete this private record?')) return
+    setBusy(true)
+    await deleteTrackerEntry(entry.id)
+    onSaved()
+  }
+
+  return (
+    <div className="log-dialog-backdrop" onClick={() => !busy && onClose()}>
+      <div className="log-dialog" onClick={(e) => e.stopPropagation()}>
+        <h3>{lang === 'zh' ? '成人亲密健康' : 'Adult wellness'}</h3>
+        <div className="log-field">
+          <label className="th-label">{lang === 'zh' ? '类型' : 'Type'}</label>
+          <select className="th-input" value={cat} onChange={(e) => setCat(e.target.value as IntimacyCategory)}>
+            {INTIMACY_CATEGORIES.map((c) => (<option key={c} value={c}>{intimacyLabel(c, lang)}</option>))}
+          </select>
+        </div>
+        <div className="log-grid2">
+          <div className="log-field">
+            <label className="th-label">{lang === 'zh' ? '次数' : 'Count'}</label>
+            <input className="th-input" inputMode="numeric" value={count} onChange={(e) => setCount(e.target.value)} />
+          </div>
+        </div>
+        <div className="log-field">
+          <label className="th-label">{lang === 'zh' ? '备注' : 'Note'}</label>
+          <input className="th-input" value={note} onChange={(e) => setNote(e.target.value)} placeholder={lang === 'zh' ? '可选' : 'optional'} />
+        </div>
+        <div className="log-dialog-actions">
+          <button className="th-btn-ghost" type="button" onClick={del} disabled={busy}>{lang === 'zh' ? '删除' : 'Delete'}</button>
+          <button className="th-btn" type="button" onClick={save} disabled={busy}>{lang === 'zh' ? '保存' : 'Save'}</button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -352,6 +423,7 @@ function EntryCard({
         )}
         <div className="hist-row-main">
           <div className="hist-row-top">
+            <span className="hist-dot" style={{ background: exercise ? ACTIVITY_COLORS[exerciseKind(exercise)] : 'var(--text-dim)' }} />
             <span className="hist-name">{name}</span>
             {entry.injury_modified && (
               <span className="hist-badge injury">{entry.injury_modified === 'paused' ? (lang === 'zh' ? '因伤暂停' : 'paused') : (lang === 'zh' ? '因伤减量' : 'reduced')}</span>

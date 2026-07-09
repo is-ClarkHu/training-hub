@@ -26,6 +26,26 @@ export function exerciseName(ex: Exercise, lang: TranslationTarget): string {
   return primary || ex.name_zh || ex.name_en // fall back only if a name is genuinely missing
 }
 
+// Activity kinds — colour the History dot + Dashboard breakdown. `gym` = weighted
+// (健身房), `bodyweight` = 徒手/home, `sport` = a logged sport session.
+export type ActivityKind = 'gym' | 'bodyweight' | 'sport'
+export const ACTIVITY_COLORS: Record<ActivityKind, string> = {
+  gym: '#8ab4f8',
+  bodyweight: '#7dd3a0',
+  sport: '#f5b544',
+}
+export const ACTIVITY_LABEL: Record<ActivityKind, { zh: string; en: string }> = {
+  gym: { zh: '健身房', en: 'Gym' },
+  bodyweight: { zh: '徒手健身', en: 'Bodyweight' },
+  sport: { zh: '运动', en: 'Sport' },
+}
+/** Gym vs bodyweight for a strength exercise (explicit flag, else inferred from
+ *  measure type — only weight_reps defaults to gym). */
+export function exerciseKind(ex: Exercise): 'gym' | 'bodyweight' {
+  if (ex.bodyweight != null) return ex.bodyweight ? 'bodyweight' : 'gym'
+  return ex.measure_type === 'weight_reps' ? 'gym' : 'bodyweight'
+}
+
 const MEASURE_ORDER: Record<MeasureType, number> = { weight_reps: 0, reps_only: 1, duration: 2 }
 
 function nameKey(ex: Exercise, lang: TranslationTarget): string {

@@ -45,6 +45,7 @@ export function AddExerciseDialog({
     setBodyParts((ps) => (ps.includes(k) ? ps.filter((p) => p !== k) : [...ps, k]))
   const [measureType, setMeasureType] = useState<MeasureType>('weight_reps')
   const [durationHm, setDurationHm] = useState(false)
+  const [bodyweight, setBodyweight] = useState(false)
   const [busy, setBusy] = useState(false)
   const [hint, setHint] = useState<string | null>(null)
 
@@ -81,6 +82,7 @@ export function AddExerciseDialog({
       body_parts: bodyParts,
       measure_type: measureType,
       duration_hm: durationHm,
+      bodyweight,
       is_custom: true,
       needs_translation: !zh || !en,
     }))
@@ -128,8 +130,15 @@ export function AddExerciseDialog({
         </div>
         <div className="log-field">
           <label className="th-label">{lang === 'zh' ? '类型' : 'Measure'}</label>
-          <select className="th-input" value={measureType} onChange={(e) => setMeasureType(e.target.value as MeasureType)}>
+          <select className="th-input" value={measureType} onChange={(e) => { const v = e.target.value as MeasureType; setMeasureType(v); setBodyweight(v !== 'weight_reps') }}>
             {MEASURE_TYPES.map((mt) => (<option key={mt} value={mt}>{MEASURE_TYPE_LABELS[mt][lang]}</option>))}
+          </select>
+        </div>
+        <div className="log-field">
+          <label className="th-label">{lang === 'zh' ? '类型' : 'Kind'}</label>
+          <select className="th-input" value={bodyweight ? 'bodyweight' : 'gym'} onChange={(e) => setBodyweight(e.target.value === 'bodyweight')}>
+            <option value="gym">{lang === 'zh' ? '健身房 (上重量)' : 'Gym (weighted)'}</option>
+            <option value="bodyweight">{lang === 'zh' ? '徒手健身' : 'Bodyweight'}</option>
           </select>
         </div>
         {measureType === 'duration' && (

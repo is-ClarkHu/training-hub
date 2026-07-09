@@ -48,6 +48,7 @@ export {
   logTracker,
   getTrackerEntries,
   deleteTrackerEntry,
+  updateTrackerEntry,
   deleteAllTracker,
 } from './records'
 export type {

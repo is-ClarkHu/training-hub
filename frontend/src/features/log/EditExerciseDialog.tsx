@@ -12,7 +12,7 @@ import {
 } from '../../supabase/types'
 import { useCategories, categoryLabel } from '../../categories'
 import type { TranslationTarget } from '../../translation'
-import { sortExercises } from './util'
+import { exerciseKind, sortExercises } from './util'
 import './log.css'
 
 const MEASURE_TYPES: MeasureType[] = ['weight_reps', 'reps_only', 'duration']
@@ -40,6 +40,7 @@ export function EditExerciseDialog({
   const [measureType, setMeasureType] = useState<MeasureType>(exercise.measure_type)
   const [perSide, setPerSide] = useState(exercise.default_per_side ?? false)
   const [durationHm, setDurationHm] = useState(exercise.duration_hm ?? false)
+  const [bodyweight, setBodyweight] = useState(exerciseKind(exercise) === 'bodyweight')
   const [mergeTarget, setMergeTarget] = useState('')
   const [usage, setUsage] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
@@ -65,6 +66,7 @@ export function EditExerciseDialog({
       measure_type: measureType,
       default_per_side: perSide,
       duration_hm: durationHm,
+      bodyweight,
       name_locked: true,
     }))
     setBusy(false)
@@ -132,6 +134,14 @@ export function EditExerciseDialog({
             </select>
           </div>
         )}
+
+        <div className="log-field">
+          <label className="th-label">{lang === 'zh' ? '类型' : 'Kind'}</label>
+          <select className="th-input" value={bodyweight ? 'bodyweight' : 'gym'} onChange={(e) => setBodyweight(e.target.value === 'bodyweight')}>
+            <option value="gym">{lang === 'zh' ? '健身房 (上重量)' : 'Gym (weighted)'}</option>
+            <option value="bodyweight">{lang === 'zh' ? '徒手健身' : 'Bodyweight'}</option>
+          </select>
+        </div>
 
         <label className="log-perside">
           <input type="checkbox" checked={perSide} onChange={(e) => setPerSide(e.target.checked)} />

@@ -154,6 +154,8 @@ export interface Exercise extends SyncFields {
   needs_translation: boolean
   default_per_side?: boolean // this movement is inherently per-side (prefills the toggle)
   duration_hm?: boolean      // duration entered/shown as hh:mm instead of mm:ss (long cardio)
+  bodyweight?: boolean       // 徒手 (home/calisthenics) vs 健身房 (gym/weighted). See exerciseKind()
+  // ── strength kind: from raw_data's 类型 (健身房 vs 健身/徒手). Drives the History dot colour. ──
   is_warmup?: boolean        // classified as a warmup movement (own group in the picker)
   // ── rehab library (§6A Phase 2). is_rehab is orthogonal to body_part — a rehab
   //    move still belongs to an anatomical part (e.g. knee) but carries knowledge. ──

@@ -83,3 +83,6 @@ alter table public.training_cycle
 alter table public.exercises        add column if not exists duration_hm boolean not null default false;
 alter table public.workout_entries  add column if not exists cycle_id uuid;
 alter table public.optional_trackers add column if not exists note text;
+
+-- Strength kind: 徒手/bodyweight vs 健身房/gym (raw_data 类型). Drives History dot colour.
+alter table public.exercises        add column if not exists bodyweight boolean not null default false;

@@ -57,7 +57,7 @@ const COLUMN_DEFAULTS: Record<string, unknown> = {
   deleted: false, assisted: false, is_custom: false, name_locked: false,
   needs_translation: false, default_per_side: false, is_warmup: false, is_rehab: false,
   is_superset: false, needs_review: false, active: false, injury: false, skipped: false,
-  is_default: false, verified: false, per_side: false, duration_hm: false,
+  is_default: false, verified: false, per_side: false, duration_hm: false, bodyweight: false,
   name_en: '', rehab_purpose_zh: '', rehab_purpose_en: '', rehab_cues_zh: '',
   rehab_cues_en: '', rehab_dosage: '', display_mode: 'circle',
   body_parts: [], sub_sets: [], fields: [], attributes: {}, completed_labels: [],

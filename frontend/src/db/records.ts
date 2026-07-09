@@ -49,6 +49,7 @@ export interface NewExerciseInput {
   needs_translation?: boolean
   default_per_side?: boolean
   duration_hm?: boolean
+  bodyweight?: boolean
   is_rehab?: boolean
   rehab_purpose_zh?: string
   rehab_purpose_en?: string
@@ -78,7 +79,7 @@ export async function getExercises(): Promise<Exercise[]> {
 
 export async function updateExercise(
   id: string,
-  patch: Partial<Pick<Exercise, 'name_zh' | 'name_en' | 'body_parts' | 'measure_type' | 'assisted' | 'name_locked' | 'needs_translation' | 'default_per_side' | 'duration_hm' | 'is_rehab' | 'rehab_purpose_zh' | 'rehab_purpose_en' | 'rehab_cues_zh' | 'rehab_cues_en' | 'rehab_dosage'>>,
+  patch: Partial<Pick<Exercise, 'name_zh' | 'name_en' | 'body_parts' | 'measure_type' | 'assisted' | 'name_locked' | 'needs_translation' | 'default_per_side' | 'duration_hm' | 'bodyweight' | 'is_rehab' | 'rehab_purpose_zh' | 'rehab_purpose_en' | 'rehab_cues_zh' | 'rehab_cues_en' | 'rehab_dosage'>>,
 ): Promise<void> {
   const e = await db.exercises.get(id)
   if (e) await db.exercises.put({ ...e, ...patch, updated_at: nowIso() })
@@ -631,6 +632,15 @@ export async function deleteTrackerEntry(id: string): Promise<void> {
   if (currentUserId()) {
     await supabase.from('optional_trackers').delete().eq('id', id)
   }
+}
+
+/** Edit a tracker entry (category / count / note / date). */
+export async function updateTrackerEntry(
+  id: string,
+  patch: Partial<Pick<OptionalTracker, 'count' | 'category' | 'note' | 'date'>>,
+): Promise<void> {
+  const t = await db.optional_trackers.get(id)
+  if (t) await db.optional_trackers.put({ ...t, ...patch, updated_at: nowIso() })
 }
 
 /** Easy off + delete (§6C): soft-delete every row for a tracker. */

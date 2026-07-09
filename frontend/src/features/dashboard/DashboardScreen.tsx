@@ -33,7 +33,7 @@ import type { CycleRound, TrainingCycle } from '../../supabase/types'
 import { ActiveInjuryBanner, bodyAreaLabel } from '../injuries'
 import { INJURY_STATUS_LABELS, daysBetween, daysSince } from '../injuries/util'
 import { SportCharts, sportName } from '../sports'
-import { exerciseName, sortExercises } from '../log/util'
+import { ACTIVITY_COLORS, ACTIVITY_LABEL, exerciseKind, exerciseName, sortExercises } from '../log/util'
 import {
   INTIMACY_CATEGORIES,
   INTIMACY_COLORS,
@@ -146,6 +146,17 @@ export function DashboardScreen() {
   const recovery = useMemo(() => muscleRecovery(entries, exById), [entries, exById])
   const bpCounts = useMemo(() => bodyPartCounts(entries, exById), [entries, exById])
   const stCounts = useMemo(() => setTypeCounts(allSets), [allSets])
+  // Activity-kind split: gym vs bodyweight (from entries) + sport sessions.
+  const kindCounts = useMemo(() => {
+    let gym = 0, bw = 0
+    for (const e of entries) {
+      const ex = exById[e.exercise_id]
+      if (!ex) continue
+      if (exerciseKind(ex) === 'gym') gym++
+      else bw++
+    }
+    return { gym, bodyweight: bw, sport: sessions.length }
+  }, [entries, exById, sessions])
   const weekly = useMemo(() => weeklyEntryVolume(entries), [entries])
   const heat = useMemo(() => intensityHeatmap(entries, sessions, showIntimacy ? intimacyRows : []), [entries, sessions, intimacyRows, showIntimacy])
   // per-date detail for the heatmap tooltip
@@ -478,6 +489,17 @@ export function DashboardScreen() {
           <span className="th-label">{lang === 'zh' ? '组类型分布' : 'Set-type distribution'}</span>
           <div className="dash-cbox">
             <Doughnut data={{ labels: stCounts.labels, datasets: [{ data: stCounts.data, backgroundColor: TINTS, borderColor: 'transparent', borderWidth: 2 }] }}
+              options={{ plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, padding: 8 } } } }} />
+          </div>
+        </div>
+        <div className="dash-chart">
+          <span className="th-label">{lang === 'zh' ? '训练类型' : 'Activity kind'}</span>
+          <div className="dash-cbox">
+            <Doughnut
+              data={{
+                labels: [ACTIVITY_LABEL.gym[lang], ACTIVITY_LABEL.bodyweight[lang], ACTIVITY_LABEL.sport[lang]],
+                datasets: [{ data: [kindCounts.gym, kindCounts.bodyweight, kindCounts.sport], backgroundColor: [ACTIVITY_COLORS.gym, ACTIVITY_COLORS.bodyweight, ACTIVITY_COLORS.sport], borderColor: 'transparent', borderWidth: 2 }],
+              }}
               options={{ plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, padding: 8 } } } }} />
           </div>
         </div>
