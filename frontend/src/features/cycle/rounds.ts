@@ -69,8 +69,12 @@ export function roundMetrics(
   const inRound = entries.filter(
     (e) => e.date >= round.started_on && (!round.ended_on || e.date <= round.ended_on) && e.cycle_day_label && labels.has(e.cycle_day_label),
   )
+  // Derive completed days from LIVE entries (not the stored completed_labels) so
+  // deleting a day's last entry rolls the count back. A label counts as done only
+  // while some entry still carries it.
+  const doneLabels = new Set(inRound.map((e) => e.cycle_day_label as string))
   return {
-    completedDays: round.completed_labels.filter((l) => labels.has(l)).length,
+    completedDays: doneLabels.size,
     totalDays: cycle.days.length,
     sets: inRound.reduce((s, e) => s + setCount(e.id), 0),
     sessions: new Set(inRound.map((e) => e.date)).size,

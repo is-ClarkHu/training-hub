@@ -689,7 +689,7 @@ export async function softDeleteEntry(entryId: string): Promise<void> {
 /** Field-only patch of an entry (does NOT touch its sets). Used by the History
  *  review flow ("确认无误" clears the flags) and the mode-2 module chooser. */
 export type EntryPatch = Partial<
-  Pick<WorkoutEntry, 'exercise_id' | 'note_raw' | 'note_tags' | 'is_superset' | 'needs_review' | 'needs_translation' | 'injury_modified' | 'injury_id' | 'module_part'>
+  Pick<WorkoutEntry, 'exercise_id' | 'note_raw' | 'note_tags' | 'is_superset' | 'needs_review' | 'needs_translation' | 'injury_modified' | 'injury_id' | 'module_part' | 'superset_group'>
 >
 
 export async function patchEntry(entryId: string, patch: EntryPatch): Promise<void> {

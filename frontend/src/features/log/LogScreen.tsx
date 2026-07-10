@@ -2,17 +2,23 @@
 // — a strength exercise (→ per-set inputs) or a sport (→ tier + hours). Date is
 // shared; when an active training cycle is set you can tag the cycle day and the
 // day's planned exercises appear as a quick-pick. Local-first writes.
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   createEntryWithSets,
   createSportSession,
   getActiveCycle,
   getCycles,
   getCycleRounds,
+  getEntries,
   getExercises,
   getInjuries,
+  getSetsByEntryIds,
   getSports,
+  getSportSessions,
+  getTrackerEntries,
   logTracker,
+  newId,
+  patchEntry,
   recordCycleDay,
   softDeleteEntry,
   softDeleteSportSession,
@@ -41,7 +47,7 @@ import { AddInjuryDialog, bodyAreaLabel } from '../injuries'
 import { ExercisePicker } from './ExercisePicker'
 import { SetEditor } from './SetEditor'
 import { AddExerciseDialog } from './AddExerciseDialog'
-import { draftsToSetInputs, emptySet, exerciseName, parseHours, formatHours, type SetDraft } from './util'
+import { draftsToSetInputs, emptySet, exerciseName, formatSetLine, parseHours, formatHours, type SetDraft } from './util'
 import './log.css'
 
 type Selection =
@@ -49,7 +55,7 @@ type Selection =
   | { kind: 'sport'; sport: Sport }
   | null
 
-interface LoggedItem { id: string; name: string; detail: string; tagKeys: string[]; kind: 'exercise' | 'sport' | 'intimacy'; realId: string }
+interface LoggedItem { id: string; name: string; detail: string; tagKeys: string[]; kind: 'exercise' | 'sport' | 'intimacy'; realId: string; group?: string }
 
 export function LogScreen() {
   const { lang } = useLanguage()
@@ -65,6 +71,7 @@ export function LogScreen() {
   const [sel, setSel] = useState<Selection>(null)
   const [dialog, setDialog] = useState<{ open: boolean; name: string }>({ open: false, name: '' })
   const [logged, setLogged] = useState<LoggedItem[]>([])
+  const [circuitSel, setCircuitSel] = useState<Set<string>>(new Set())
   const [saving, setSaving] = useState(false)
 
   // exercise form
@@ -105,6 +112,50 @@ export function LogScreen() {
     const pairs = await Promise.all(cycles.map(async (c) => [c.id, await getCycleRounds(c.id)] as const))
     setRoundsByCycle(Object.fromEntries(pairs))
   }
+
+  // Today's logged items, rebuilt from the store so the list survives navigating
+  // away and back (it's not just this-session memory). Keyed by the real row id.
+  const loadToday = useCallback(async () => {
+    const [es, ss, exs] = await Promise.all([getEntries(), getSportSessions(), getExercises()])
+    const dayEntries = es.filter((e) => e.date === date)
+    const setsMap = await getSetsByEntryIds(dayEntries.map((e) => e.id))
+    const exMap = Object.fromEntries(exs.map((e) => [e.id, e]))
+    const items: LoggedItem[] = []
+    for (const e of dayEntries) {
+      const ex = exMap[e.exercise_id]
+      const esets = setsMap[e.id] ?? []
+      items.push({
+        id: e.id, realId: e.id, kind: 'exercise',
+        name: ex ? exerciseName(ex, lang) : '(deleted)',
+        detail: ex ? esets.map((s) => formatSetLine(s, ex.measure_type, lang, ex.duration_hm)).join(' · ') : '',
+        tagKeys: e.note_tags, group: e.superset_group ?? undefined,
+      })
+    }
+    for (const s of ss.filter((x) => x.date === date)) {
+      const sp = sports.find((x) => x.id === s.sport_id)
+      const attrSummary = (sp?.fields ?? []).map((f) => s.attributes?.[f.key]).filter(Boolean).join(' · ')
+      items.push({
+        id: s.id, realId: s.id, kind: 'sport',
+        name: sp ? (lang === 'zh' ? sp.name_zh : sp.name_en) || sp.name_zh : 'sport',
+        detail: `${formatHours(s.hours)}${attrSummary ? ' · ' + attrSummary : ''}${s.injury ? ' · injury' : ''}`,
+        tagKeys: s.note_tags,
+      })
+    }
+    if (intimacyVisible()) {
+      const trackers = await getTrackerEntries('intimacy')
+      for (const r of trackers.filter((x) => x.date === date)) {
+        items.push({
+          id: r.id, realId: r.id, kind: 'intimacy',
+          name: lang === 'zh' ? '成人亲密健康' : 'Adult wellness',
+          detail: `${intimacyLabel(r.category ?? 'partner_active', lang, true)} ×${r.count}${r.note ? ' · ' + r.note : ''}`,
+          tagKeys: [],
+        })
+      }
+    }
+    setLogged(items)
+  }, [date, lang, sports])
+
+  useEffect(() => { void loadToday() }, [loadToday])
   const selCycle = cycleSel ? cycles.find((c) => c.id === cycleSel.split('::')[0]) ?? null : null
   const selLabel = cycleSel ? cycleSel.split('::')[1] : ''
   const roundView = selCycle && selCycle.days.length > 0 ? currentRound(selCycle, roundsByCycle[selCycle.id] ?? []) : null
@@ -170,12 +221,11 @@ export function LogScreen() {
     if (setInputs.length === 0) return
     setSaving(true)
     const exName = exerciseName(sel.ex, lang)
-    const measureType = sel.ex.measure_type
     // Tagging a cycle day advances THAT cycle's current round (§6B) — days can
     // come from any cycle (multiple splits/day). Kept inside withUndo so undo
     // also rewinds the round.
     const roundCycle = selCycle && selLabel ? selCycle : null
-    const { result: { entry }, undo } = await withUndo(['workout_entries', 'sets', 'cycle_rounds'], async () => {
+    const { undo } = await withUndo(['workout_entries', 'sets', 'cycle_rounds'], async () => {
       const res = await createEntryWithSets(
         {
           date,
@@ -196,19 +246,10 @@ export function LogScreen() {
       return res
     })
     if (roundCycle) void reloadRounds()
-    const detail = setInputs
-      .map((s) =>
-        measureType === 'duration'
-          ? `${s.duration_sec}s`
-          : measureType === 'reps_only'
-            ? `${s.reps}${s.per_side ? '/side' : ''}`
-            : `${s.weight ?? '–'}×${s.reps ?? '–'}`,
-      )
-      .join(', ')
-    const loggedId = finishSave(exName, detail, 'exercise', entry.id)
+    finishSave()
     push(lang === 'zh' ? `已记录「${exName}」` : `Logged “${exName}”`, async () => {
       await undo()
-      setLogged((prev) => prev.filter((x) => x.id !== loggedId))
+      await loadToday()
       if (roundCycle) void reloadRounds()
     })
   }
@@ -220,8 +261,7 @@ export function LogScreen() {
     setSaving(true)
     const injured = activeInjuries.length > 0 // auto: derived from active injuries (§6A)
     const sportName = (lang === 'zh' ? sel.sport.name_zh : sel.sport.name_en) || sel.sport.name_zh
-    const fields = sel.sport.fields ?? []
-    const { result: session, undo } = await withUndo(['sport_sessions'], () => createSportSession({
+    const { undo } = await withUndo(['sport_sessions'], () => createSportSession({
       date,
       sport_id: sel.sport.id,
       hours: h,
@@ -230,19 +270,10 @@ export function LogScreen() {
       note_raw: note,
       note_tags: parsed.tagKeys,
     }))
-    const attrSummary = fields
-      .map((f) => attrs[f.key])
-      .filter(Boolean)
-      .join(' · ')
-    const loggedId = finishSave(
-      sportName,
-      `${formatHours(h)}${attrSummary ? ' · ' + attrSummary : ''}${injured ? ' · injury' : ''}`,
-      'sport',
-      session.id,
-    )
+    finishSave()
     push(lang === 'zh' ? `已记录「${sportName}」` : `Logged “${sportName}”`, async () => {
       await undo()
-      setLogged((prev) => prev.filter((x) => x.id !== loggedId))
+      await loadToday()
     })
   }
 
@@ -250,33 +281,41 @@ export function LogScreen() {
     const n = parseInt(intimacyCount, 10)
     if (!Number.isFinite(n) || n <= 0 || saving) return
     setSaving(true)
-    const { result: row, undo } = await withUndo(['optional_trackers'], () => logTracker('intimacy', date, n, intimacyCat, intimacyNote))
-    const loggedId = crypto.randomUUID()
+    const { undo } = await withUndo(['optional_trackers'], () => logTracker('intimacy', date, n, intimacyCat, intimacyNote))
     const name = lang === 'zh' ? '成人亲密健康' : 'Adult wellness'
-    setLogged((prev) => [{
-      id: loggedId,
-      name,
-      detail: `${intimacyLabel(intimacyCat, lang, true)} ×${n}${intimacyNote.trim() ? ' · ' + intimacyNote.trim() : ''}`,
-      tagKeys: [],
-      kind: 'intimacy',
-      realId: row.id,
-    }, ...prev])
     setIntimacyCount('1')
     setIntimacyNote('')
     setSaving(false)
+    void loadToday()
     push(lang === 'zh' ? `已记录「${name}」` : `Logged “${name}”`, async () => {
       await undo()
-      setLogged((prev) => prev.filter((x) => x.id !== loggedId))
+      await loadToday()
     })
   }
 
-  function finishSave(name: string, detail: string, kind: 'exercise' | 'sport' | 'intimacy', realId: string): string {
-    const id = crypto.randomUUID()
-    setLogged((prev) => [{ id, name, detail, tagKeys: parsed.tagKeys, kind, realId }, ...prev])
+  function finishSave() {
     setSel(null)
     resetForms()
     setSaving(false)
-    return id
+    void loadToday()
+  }
+
+  function toggleCircuit(itemId: string) {
+    setCircuitSel((prev) => {
+      const next = new Set(prev)
+      if (next.has(itemId)) next.delete(itemId); else next.add(itemId)
+      return next
+    })
+  }
+  // Mark the selected just-logged exercises as one circuit (alternating movements) —
+  // same superset_group used by the History merge, so it shows round-major there.
+  async function mergeLoggedCircuit() {
+    const picks = logged.filter((x) => x.kind === 'exercise' && circuitSel.has(x.id))
+    if (picks.length < 2) return
+    const gid = newId()
+    for (const p of picks) await patchEntry(p.realId, { superset_group: gid })
+    setCircuitSel(new Set())
+    await loadToday()
   }
 
   async function deleteLogged(item: LoggedItem) {
@@ -286,10 +325,10 @@ export function LogScreen() {
       else if (item.kind === 'sport') await softDeleteSportSession(item.realId)
       else await deleteTrackerEntry(item.realId)
     })
-    setLogged((prev) => prev.filter((x) => x.id !== item.id))
+    void loadToday()
     push(lang === 'zh' ? `已删除「${item.name}」` : `Deleted “${item.name}”`, async () => {
       await undo()
-      setLogged((prev) => (prev.some((x) => x.id === item.id) ? prev : [item, ...prev]))
+      await loadToday()
     })
   }
 
@@ -488,12 +527,24 @@ export function LogScreen() {
 
       {logged.length > 0 && (
         <section className="log-session">
-          <span className="th-label">{lang === 'zh' ? '本次已记录' : 'Logged this session'}</span>
+          <div className="log-session-head">
+            <span className="th-label">{lang === 'zh' ? '本次已记录' : 'Logged this session'}</span>
+            {logged.filter((x) => x.kind === 'exercise' && circuitSel.has(x.id)).length >= 2 && (
+              <button className="th-pill accent" type="button" onClick={() => void mergeLoggedCircuit()}>
+                ⛓ {lang === 'zh' ? '合并为循环' : 'merge circuit'}
+              </button>
+            )}
+          </div>
+          <p className="log-session-hint">{lang === 'zh' ? '勾选交替做的动作 → 合并为循环' : 'tick alternating moves → merge into a circuit'}</p>
           <ul className="log-session-list">
             {logged.map((item) => (
-              <li key={item.id} className="log-session-item">
+              <li key={item.id} className={`log-session-item ${item.group ? 'grouped' : ''}`}>
+                {item.kind === 'exercise' && (
+                  <input type="checkbox" className="log-session-check" checked={circuitSel.has(item.id)} onChange={() => toggleCircuit(item.id)} aria-label="circuit" />
+                )}
                 <span className="log-session-name">{item.name}</span>
                 <span className="log-session-detail">{item.detail}</span>
+                {item.group && <span className="log-tagchip sm">⛓ {lang === 'zh' ? '循环' : 'circuit'}</span>}
                 {item.tagKeys.map((k) => (<span key={k} className="log-tagchip sm">{noteTagLabel(k, lang)}</span>))}
                 <button className="hist-link danger log-session-del" type="button" onClick={() => void deleteLogged(item)}>{lang === 'zh' ? '删除' : 'delete'}</button>
               </li>

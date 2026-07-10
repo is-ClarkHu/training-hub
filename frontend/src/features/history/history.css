@@ -1,7 +1,19 @@
 .hist-screen { display: flex; flex-direction: column; gap: 22px; }
 .hist-empty { color: var(--faint); font: 12px var(--mono); }
 
-.hist-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+/* Sticky so merge / select / mode stay reachable when scrolled deep into history.
+   Opaque bg hides cards scrolling underneath; negative margin cancels the added
+   padding so nothing shifts at rest. */
+.hist-toolbar {
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  position: sticky; top: 0; z-index: 20;
+  background: var(--bg); padding: 10px 0; margin-top: -10px;
+}
+/* mask the scroll-container top padding so no content peeks above the pinned bar */
+.hist-toolbar::before {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 100%; height: 28px;
+  background: var(--bg);
+}
 .hist-check { width: 17px; height: 17px; accent-color: var(--lime); flex: none; }
 
 /* layout-mode toggle — pinned to the right edge of the toolbar */
@@ -54,6 +66,28 @@
   background: var(--teal); border-radius: 999px;
 }
 .hist-entries { display: flex; flex-direction: column; gap: 8px; }
+
+/* circuit (交替/alternating) — round-major block */
+.hist-circuit {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 13px 15px;
+  background: var(--bg-panel);
+  border: 1px solid color-mix(in srgb, var(--teal) 35%, var(--border));
+  border-radius: 12px;
+}
+.hist-circuit-top { display: flex; align-items: center; gap: 8px; }
+.hist-circuit-top .hist-name { font: 700 14px/1.2 var(--sans); color: var(--text-bright); }
+.hist-circuit-split {
+  margin-left: auto; padding: 3px 9px;
+  font: 600 11px/1 var(--mono); color: var(--text-dim); cursor: pointer;
+  background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 6px;
+}
+.hist-circuit-split:hover { color: var(--accent); border-color: var(--accent); }
+/* no rounds: every set its own line ("name value"), stacked vertically */
+.hist-circuit-flat { display: flex; flex-direction: column; gap: 4px; padding-top: 7px; border-top: 1px solid var(--border); }
+.hist-circuit-line { display: flex; align-items: baseline; gap: 8px; }
+.hist-circuit-nm { font: 600 12px/1.4 var(--sans); color: var(--teal); min-width: 84px; }
+.hist-circuit-flat .hist-set { font: 13px/1.4 var(--mono); }
 
 /* mode-2: category modules, each a row of movement cards flowing left→right */
 .hist-modules { display: flex; flex-direction: column; gap: 14px; }

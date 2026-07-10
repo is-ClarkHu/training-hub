@@ -13,6 +13,7 @@ import {
   getSportSessions,
   getSports,
   getTrackerEntries,
+  newId,
   patchEntry,
   softDeleteEntry,
   softDeleteSportSession,
@@ -46,6 +47,22 @@ const MODE_KEY = 'th.history.mode'
 interface LoopInfo {
   labels: { label: string; title: string }[]
   round: number | null
+}
+
+/** Split a date's entries into circuits (≥2 entries sharing a superset_group —
+ *  alternating/交替 movements) and standalone singles. */
+function partitionCircuits(items: WorkoutEntry[]): { circuits: WorkoutEntry[][]; singles: WorkoutEntry[] } {
+  const groups = new Map<string, WorkoutEntry[]>()
+  const singles: WorkoutEntry[] = []
+  for (const e of items) {
+    if (e.superset_group) {
+      const g = groups.get(e.superset_group)
+      if (g) g.push(e); else groups.set(e.superset_group, [e])
+    } else singles.push(e)
+  }
+  const circuits: WorkoutEntry[][] = []
+  for (const g of groups.values()) { if (g.length >= 2) circuits.push(g); else singles.push(...g) }
+  return { circuits, singles }
 }
 
 export function HistoryScreen() {
@@ -195,6 +212,22 @@ export function HistoryScreen() {
     await reload()
   }
 
+  // Selected workout entries (excludes sports/intimacy). A circuit must be one day.
+  const selWorkout = useMemo(() => [...selected].map((id) => entriesById[id]).filter(Boolean), [selected, entriesById])
+  const canMerge = selWorkout.length >= 2 && new Set(selWorkout.map((e) => e.date)).size === 1
+  async function mergeCircuit() {
+    if (!canMerge) return
+    const gid = newId()
+    for (const e of selWorkout) await patchEntry(e.id, { superset_group: gid })
+    setSelected(new Set())
+    setSelectMode(false)
+    await reload()
+  }
+  async function unmergeCircuit(members: WorkoutEntry[]) {
+    for (const e of members) await patchEntry(e.id, { superset_group: null })
+    await reload()
+  }
+
   if (loading) return <p className="hist-empty">Loading…</p>
   if (entries.length === 0 && sportSessions.length === 0 && intimacyRows.length === 0) {
     return <p className="hist-empty">No sessions logged yet. Head to the Log tab.</p>
@@ -238,6 +271,11 @@ export function HistoryScreen() {
             {selected.size === selectableIds.length ? (lang === 'zh' ? '全不选' : 'none') : (lang === 'zh' ? '全选' : 'all')}
           </button>
         )}
+        {selectMode && canMerge && (
+          <button className="th-pill accent" type="button" onClick={mergeCircuit}>
+            ⛓ {lang === 'zh' ? '合并为循环' : 'merge circuit'}
+          </button>
+        )}
         {selectMode && (
           <button className="th-pill danger" type="button" onClick={deleteSelected} disabled={selected.size === 0}>
             🗑 {lang === 'zh' ? `删除 ${selected.size}` : `delete ${selected.size}`}
@@ -276,6 +314,9 @@ export function HistoryScreen() {
 
       {sessions.map((s) => {
         const loop = loopInfo(s.date, s.items)
+        // Fold circuits into round-major blocks only when NOT selecting (select mode
+        // keeps every entry individually clickable for select / delete / merge).
+        const { circuits, singles } = selectMode ? { circuits: [], singles: s.items } : partitionCircuits(s.items)
         return (
           <section key={s.date} className="hist-session">
             <div className="hist-date-row">
@@ -290,9 +331,21 @@ export function HistoryScreen() {
               )}
             </div>
 
+            {circuits.map((members) => (
+              <CircuitCard
+                key={members[0].superset_group ?? members[0].id}
+                members={members}
+                exById={exById}
+                setMap={setMap}
+                lang={lang}
+                discreet={discreet}
+                onUnmerge={() => unmergeCircuit(members)}
+              />
+            ))}
+
             {mode === 'grouped' ? (
               <div className="hist-modules">
-                {groupByModule(s.items).map((g) => (
+                {groupByModule(singles).map((g) => (
                   <div key={g.key} className="hist-module">
                     <div className="hist-module-head">{g.key === '__none' ? '—' : categoryLabel(g.key, lang)}</div>
                     <div className="hist-cards">
@@ -309,7 +362,7 @@ export function HistoryScreen() {
               </div>
             ) : (
               <div className="hist-entries">
-                {s.items.map((entry) => <EntryCard {...cardProps(entry, 'row')} />)}
+                {singles.map((entry) => <EntryCard {...cardProps(entry, 'row')} />)}
                 {s.sports.map((ss) => <SportRow key={ss.id} ss={ss} sport={sportById[ss.sport_id]} lang={lang} selectMode={selectMode} selected={selected.has(ss.id)} onToggle={() => toggleSel(ss.id)} onOpen={() => setSportEditing(ss)} />)}
                 {showIntimacy && s.intimacy.map((r) => <IntimacyRow key={r.id} r={r} lang={lang} discreet={discreet} selectMode={selectMode} selected={selected.has(r.id)} onToggle={() => toggleSel(r.id)} onOpen={() => setIntimacyEditing(r)} />)}
               </div>
@@ -540,6 +593,59 @@ function IntimacyDialog({
   )
 }
 
+/** A circuit (alternating movements). No round concept — every set is its own
+ *  line ("movement value"), stacked vertically in performed (interleaved) order,
+ *  so it stays narrow and handles uneven / all-different sets. */
+function CircuitCard({
+  members,
+  exById,
+  setMap,
+  lang,
+  discreet,
+  onUnmerge,
+}: {
+  members: WorkoutEntry[]
+  exById: Record<string, Exercise>
+  setMap: Record<string, ExerciseSet[]>
+  lang: 'en' | 'zh'
+  discreet: boolean
+  onUnmerge: () => void
+}) {
+  const cols = members.map((e) => ({ ex: exById[e.exercise_id], sets: setMap[e.id] ?? [] }))
+  const maxRounds = Math.max(0, ...cols.map((c) => c.sets.length))
+  // Flatten to one line per set, in the order performed (set 1 of each movement,
+  // then set 2, …). Uneven set counts just contribute fewer lines.
+  const lines: { name: string; set: ExerciseSet; ex: Exercise }[] = []
+  for (let r = 0; r < maxRounds; r++) {
+    for (const c of cols) {
+      const st = c.sets[r]
+      if (st && c.ex) lines.push({ name: exerciseName(c.ex, lang), set: st, ex: c.ex })
+    }
+  }
+  return (
+    <div className="hist-circuit">
+      <div className="hist-circuit-top">
+        <span className="hist-dot" style={{ background: ACTIVITY_COLORS.bodyweight }} />
+        <span className="hist-name">{lang === 'zh' ? '循环 · 交替' : 'Circuit'}</span>
+        <button type="button" className="hist-circuit-split" onClick={onUnmerge}>{lang === 'zh' ? '拆开' : 'split'}</button>
+      </div>
+      {discreet ? (
+        <div className="hist-circuit-flat"><span className="hist-set">{lines.length} {lang === 'zh' ? '组' : 'sets'}</span></div>
+      ) : (
+        <div className="hist-circuit-flat">
+          {lines.map((ln, i) => (
+            <div key={i} className="hist-circuit-line">
+              <span className="hist-circuit-nm">{ln.name}</span>
+              <span className="hist-set">{formatSetLine(ln.set, ln.ex.measure_type, lang, ln.ex.duration_hm)}</span>
+              {ln.set.note && <em className="hist-setnote"> · {ln.set.note}</em>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function EntryCard({
   entry,
   exercise,
@@ -575,7 +681,8 @@ function EntryCard({
     (exercise ? exercise.needs_translation || !exercise.name_en || !exercise.name_zh : false)
 
   const name = exercise ? exerciseName(exercise, lang) : '(deleted exercise)'
-  const canChooseModule = variant === 'card' && !!exercise && exercise.body_parts.length > 1
+  // Hidden during select mode so the ⇄ chip doesn't collide with the checkbox.
+  const canChooseModule = variant === 'card' && !selectMode && !!exercise && exercise.body_parts.length > 1
 
   const badges = (
     <>
