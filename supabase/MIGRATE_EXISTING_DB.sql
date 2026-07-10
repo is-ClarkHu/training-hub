@@ -100,3 +100,7 @@ alter table public.sets
 alter table public.sport_sessions
   add column if not exists calories numeric,
   add column if not exists bpm      numeric;
+
+-- Performed-order of each entry within its day (reorderable in History).
+alter table public.workout_entries
+  add column if not exists sort_order bigint;

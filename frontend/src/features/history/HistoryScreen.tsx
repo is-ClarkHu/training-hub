@@ -3,7 +3,7 @@
 // cleanup. Two layouts (list / grouped-by-module, toggled top-right); a guided
 // review stepper; per-date loop badges. Reads the local-first store; edits/deletes
 // are soft (sync-safe, §3).
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import {
   getActiveCycle,
   getCycleRounds,
@@ -15,11 +15,15 @@ import {
   getTrackerEntries,
   newId,
   patchEntry,
+  reorderEntries,
+  entrySortKey,
   softDeleteEntry,
   softDeleteSportSession,
   deleteTrackerEntry,
   updateTrackerEntry,
+  withUndo,
 } from '../../db'
+import { useUndo } from '../../undo'
 import { categoryKeys, categoryLabel } from '../../categories'
 import { noteTagLabel } from '../../translation'
 import { useLanguage } from '../../i18n'
@@ -49,6 +53,14 @@ const MODE_KEY = 'th.history.mode'
 interface LoopInfo {
   labels: { label: string; title: string }[]
   round: number | null
+}
+
+/** Immutable array move: element at `from` relocated to `to`. */
+function moveItem<T>(arr: T[], from: number, to: number): T[] {
+  const copy = arr.slice()
+  const [x] = copy.splice(from, 1)
+  copy.splice(to, 0, x)
+  return copy
 }
 
 /** Split a date's entries into circuits (≥2 entries sharing a superset_group —
@@ -152,6 +164,8 @@ export function HistoryScreen() {
     }
     if (!reviewOnly) for (const s of sportSessions) get(s.date).sports.push(s)
     if (!reviewOnly && showIntimacy) for (const r of intimacyRows) get(r.date).intimacy.push(r)
+    // Within a day, order by performed order (sort_order asc) — first done, first shown.
+    for (const g of map.values()) g.items.sort((a, b) => entrySortKey(a) - entrySortKey(b))
     return [...map.values()].sort((a, b) => (a.date < b.date ? 1 : -1))
   }, [entries, sportSessions, intimacyRows, reviewOnly, showIntimacy, flagged])
 
@@ -245,6 +259,42 @@ export function HistoryScreen() {
     await reload()
   }
 
+  // ── Reorder within a module (grouped view): pointer-drag from a grip handle ──
+  const { push } = useUndo()
+  const [reorderMode, setReorderMode] = useState(false)
+  const drag = useRef<{ modKey: string; ids: string[]; from: number; over: number } | null>(null)
+  const [, bumpDrag] = useReducer((x: number) => x + 1, 0)
+  function startDrag(modKey: string, ids: string[], id: string, ev: React.PointerEvent) {
+    ev.preventDefault(); ev.stopPropagation()
+    const state = { modKey, ids, from: ids.indexOf(id), over: ids.indexOf(id) }
+    drag.current = state
+    bumpDrag()
+    const onMove = (e: PointerEvent) => {
+      const card = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.closest('.hist-card') as HTMLElement | null
+      const eid = card?.dataset.eid
+      if (!eid) return
+      const idx = state.ids.indexOf(eid)
+      if (idx >= 0 && idx !== state.over) { state.over = idx; bumpDrag() }
+    }
+    const onUp = async () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      drag.current = null; bumpDrag()
+      if (state.from === state.over) return
+      const newIds = moveItem(state.ids, state.from, state.over)
+      const { undo } = await withUndo(['workout_entries'], () => reorderEntries(newIds))
+      await reload()
+      push(lang === 'zh' ? '已调整顺序' : 'Reordered', async () => { await undo(); await reload() })
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+  }
+  // Apply the in-progress drag to a module's items for live feedback.
+  const dragOrder = (modKey: string, items: WorkoutEntry[]): WorkoutEntry[] => {
+    const d = drag.current
+    return d && d.modKey === modKey ? moveItem(items, d.from, d.over) : items
+  }
+
   if (loading) return <p className="hist-empty">Loading…</p>
   if (entries.length === 0 && sportSessions.length === 0 && intimacyRows.length === 0) {
     return <p className="hist-empty">No sessions logged yet. Head to the Log tab.</p>
@@ -296,6 +346,11 @@ export function HistoryScreen() {
         {selectMode && (
           <button className="th-pill danger" type="button" onClick={deleteSelected} disabled={selected.size === 0}>
             🗑 {lang === 'zh' ? `删除 ${selected.size}` : `delete ${selected.size}`}
+          </button>
+        )}
+        {mode === 'grouped' && !selectMode && (
+          <button className={`th-pill ${reorderMode ? 'on' : ''}`} type="button" onClick={() => { setReorderMode((v) => !v); drag.current = null }}>
+            ↕ {reorderMode ? (lang === 'zh' ? '完成' : 'done') : (lang === 'zh' ? '排序' : 'reorder')}
           </button>
         )}
         <button
@@ -367,14 +422,23 @@ export function HistoryScreen() {
 
             {mode === 'grouped' ? (
               <div className="hist-modules">
-                {groupByModule(singles).map((g) => (
-                  <div key={g.key} className="hist-module" data-count={Math.min(g.items.length, 4)}>
-                    <div className="hist-module-head">{g.key === '__none' ? '—' : categoryLabel(g.key, lang)}</div>
-                    <div className="hist-cards">
-                      {g.items.map((entry) => <EntryCard {...cardProps(entry, 'card')} />)}
+                {groupByModule(singles).map((g) => {
+                  const ids = g.items.map((e) => e.id)
+                  return (
+                    <div key={g.key} className="hist-module" data-count={Math.min(g.items.length, 4)}>
+                      <div className="hist-module-head">{g.key === '__none' ? '—' : categoryLabel(g.key, lang)}</div>
+                      <div className="hist-cards">
+                        {dragOrder(g.key, g.items).map((entry) => (
+                          <EntryCard
+                            {...cardProps(entry, 'card')}
+                            reorderMode={reorderMode}
+                            onDragStart={(ev) => startDrag(g.key, ids, entry.id, ev)}
+                          />
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
                 {(s.sports.length > 0 || (showIntimacy && s.intimacy.length > 0)) && (
                   <div className="hist-entries">
                     {s.sports.map((ss) => <SportRow key={ss.id} ss={ss} sport={sportById[ss.sport_id]} lang={lang} selectMode={selectMode} selected={selected.has(ss.id)} onToggle={() => toggleSel(ss.id)} onOpen={() => setSportEditing(ss)} />)}
@@ -685,6 +749,8 @@ function EntryCard({
   discreet,
   variant,
   onChooseModule,
+  reorderMode = false,
+  onDragStart,
 }: {
   entry: WorkoutEntry
   exercise: Exercise | undefined
@@ -698,6 +764,8 @@ function EntryCard({
   discreet: boolean
   variant: 'row' | 'card'
   onChooseModule: () => void
+  reorderMode?: boolean
+  onDragStart?: (ev: React.PointerEvent) => void
 }) {
   const [editing, setEditing] = useState(false)
 
@@ -708,7 +776,7 @@ function EntryCard({
 
   const name = exercise ? exerciseName(exercise, lang) : '(deleted exercise)'
   // Hidden during select mode so the ⇄ chip doesn't collide with the checkbox.
-  const canChooseModule = variant === 'card' && !selectMode && !!exercise && exercise.body_parts.length > 1
+  const canChooseModule = variant === 'card' && !selectMode && !reorderMode && !!exercise && exercise.body_parts.length > 1
 
   const badges = (
     <>
@@ -760,8 +828,16 @@ function EntryCard({
   if (variant === 'card') {
     return (
       <>
-        <div className={`hist-card ${needsAttention ? 'needs' : ''} ${selected ? 'sel' : ''} ${selectMode ? '' : 'clickable'}`} onClick={onClick}>
+        <div
+          data-eid={entry.id}
+          className={`hist-card ${needsAttention ? 'needs' : ''} ${selected ? 'sel' : ''} ${!selectMode && !reorderMode ? 'clickable' : ''} ${reorderMode ? 'reordering' : ''}`}
+          onClick={reorderMode ? undefined : onClick}
+        >
           <div className="hist-card-top">
+            {reorderMode && (
+              <button type="button" className="hist-drag" aria-label={lang === 'zh' ? '拖动排序' : 'drag to reorder'}
+                onPointerDown={onDragStart} onClick={(e) => e.stopPropagation()} style={{ touchAction: 'none' }}>⠿</button>
+            )}
             <span className="hist-dot" style={{ background: exercise ? ACTIVITY_COLORS[exerciseKind(exercise)] : 'var(--text-dim)' }} />
             <span className="hist-name">{name}</span>
             {selectMode && (

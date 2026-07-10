@@ -143,6 +143,16 @@
 .hist-card-badges { display: flex; flex-wrap: wrap; gap: 5px; }
 .hist-card-sets { display: flex; flex-direction: column; gap: 3px; }
 .hist-card-sets .hist-set { font: 13px/1.5 var(--mono); overflow-wrap: anywhere; }
+/* reorder mode: grip handle in the card header (only from here can you drag) */
+.hist-drag {
+  flex: none; width: 22px; height: 22px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 15px; line-height: 1; color: var(--text-dim); cursor: grab;
+  background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 6px;
+}
+.hist-drag:active { cursor: grabbing; }
+.hist-card.reordering { border-style: dashed; border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+
 .hist-module-chip {
   position: absolute; top: 8px; right: 8px;
   width: 22px; height: 22px; padding: 0;

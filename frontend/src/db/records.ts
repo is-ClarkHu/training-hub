@@ -150,6 +150,7 @@ export async function createEntryWithSets(
     injury_id: null,
     needs_review: false,
     needs_translation: false,
+    sort_order: Date.now(), // performed order within the day (log order); reorderable
     ...entryInput,
   }
   const sets: ExerciseSet[] = setInputs.map((s, i) => ({
@@ -707,6 +708,31 @@ export async function patchEntry(entryId: string, patch: EntryPatch): Promise<vo
   const e = await db.workout_entries.get(entryId)
   if (!e) return
   await db.workout_entries.put({ ...e, ...patch, updated_at: ts })
+}
+
+/** Order key for sorting entries within a day (performed order). Falls back to the
+ *  updated_at timestamp for legacy rows that predate sort_order. */
+export function entrySortKey(e: WorkoutEntry): number {
+  if (e.sort_order != null) return e.sort_order
+  const t = Date.parse(e.updated_at)
+  return Number.isNaN(t) ? 0 : t
+}
+
+/** Reorder a set of entries (e.g. one History module) into `orderedIds`. They keep
+ *  their existing sort slots (so other entries stay put), just permuted among
+ *  themselves — the first id gets the earliest slot. */
+export async function reorderEntries(orderedIds: string[]): Promise<void> {
+  const ts = nowIso()
+  await db.transaction('rw', db.workout_entries, async () => {
+    const rows = await Promise.all(orderedIds.map((id) => db.workout_entries.get(id)))
+    const slots = rows.filter((r): r is WorkoutEntry => !!r).map(entrySortKey).sort((a, b) => a - b)
+    let i = 0
+    for (const r of rows) {
+      if (!r) continue
+      await db.workout_entries.put({ ...r, sort_order: slots[i], updated_at: ts })
+      i++
+    }
+  })
 }
 
 /** Edit an entry: patch fields, soft-delete old sets, add the new ones. */

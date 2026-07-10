@@ -178,6 +178,8 @@ export interface WorkoutEntry extends SyncFields {
   cycle_id?: string | null           // which cycle the day label belongs to (multiple cycles/day)
   module_part?: BodyPart | null      // History mode-2: user override of which category module
                                      // this occurrence files under (null = exercise's primary)
+  sort_order?: number                // performed order within the day (set at log time =
+                                     // creation ms; user can reorder). Lower = done earlier.
   injury_modified: InjuryModified | null
   injury_id: string | null
   needs_review: boolean
