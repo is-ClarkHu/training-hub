@@ -344,11 +344,12 @@ def build_memory_context(
             if files:
                 lines.append("== Reference files ==")
                 for f in files:
-                    excerpt = (f.get("content") or "").strip()
-                    if excerpt:
-                        lines.append(f"[{f['name']}]\n{excerpt[:FILE_EXCERPT_CHARS]}")
+                    summary = (f.get("summary") or "").strip()
+                    if summary:
+                        lines.append(f"[{f['name']}] {summary}")
                     else:
-                        lines.append(f"[{f['name']}] (no readable text extracted)")
+                        excerpt = (f.get("content") or "").strip()
+                        lines.append(f"[{f['name']}]\n{excerpt[:FILE_EXCERPT_CHARS]}" if excerpt else f"[{f['name']}] (no readable text extracted)")
                     lines.append("")
                     sources.append(f"File · {f['name']}")
 

@@ -90,6 +90,7 @@ export {
   deleteFoodLog,
   getPublicFiles,
   createPublicFile,
+  setPublicFileSummary,
   deletePublicFile,
   getFileAccess,
   setFileAccess,

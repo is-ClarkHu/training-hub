@@ -25,7 +25,8 @@ create table if not exists public.public_files (
   user_id      uuid not null default auth.uid() references auth.users (id) on delete cascade,
   name         text not null,
   storage_path text,                -- original file in the public-files bucket
-  content      text,                -- extracted text (text files); capped excerpt used in context
+  content      text,                -- extracted text (text files)
+  summary      text,                -- LLM summary (preferred in context; §5.4)
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now(),
   deleted      boolean not null default false

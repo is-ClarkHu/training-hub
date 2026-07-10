@@ -1000,9 +1000,14 @@ export async function createPublicFile(file: File): Promise<PublicFile> {
   if (file.type.startsWith('text/') || /\.(txt|md|csv|json)$/i.test(file.name)) {
     content = (await file.text()).slice(0, 20000)
   }
-  const row: PublicFile = { ...base, name: file.name, storage_path, content, created_at: nowIso() }
+  const row: PublicFile = { ...base, name: file.name, storage_path, content, summary: null, created_at: nowIso() }
   await db.public_files.add(row)
   return row
+}
+/** Store an LLM summary for a file (generated after upload). */
+export async function setPublicFileSummary(id: string, summary: string): Promise<void> {
+  const f = await db.public_files.get(id)
+  if (f) await db.public_files.put({ ...f, summary: summary.trim() || null, updated_at: nowIso() })
 }
 export async function deletePublicFile(id: string): Promise<void> {
   const f = await db.public_files.get(id)

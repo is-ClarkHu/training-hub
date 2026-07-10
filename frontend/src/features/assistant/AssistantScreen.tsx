@@ -13,6 +13,7 @@ import {
   reorderChatrooms,
   updateChatroomPerms,
   deleteChatroom,
+  createChatroomMemory,
 } from '../../db'
 import type { Chatroom, ChatroomPermCategory } from '../../supabase/types'
 import { useLanguage } from '../../i18n'
@@ -25,6 +26,7 @@ interface Msg {
   role: 'user' | 'assistant'
   content: string
   sources?: string[]
+  suggestedMemory?: string      // AI-proposed memory pending the user's save/dismiss
 }
 
 // Permission categories. `level`: 'sensitive' = visual cue; 'high' = high-sensitivity
@@ -142,6 +144,14 @@ export function AssistantScreen() {
     await refreshRooms()
   }
 
+  function dismissSuggestion(i: number) {
+    setMessages((ms) => ms.map((m, idx) => (idx === i ? { ...m, suggestedMemory: undefined } : m)))
+  }
+  async function saveSuggestion(i: number, text: string) {
+    if (activeId) await createChatroomMemory(activeId, text, false)
+    dismissSuggestion(i)
+  }
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
     const text = input.trim()
@@ -151,8 +161,8 @@ export function AssistantScreen() {
     setMessages((m) => [...m, { role: 'user', content: text }])
     setBusy(true)
     try {
-      const { reply, sources } = await askAssistant(text, activeId)
-      setMessages((m) => [...m, { role: 'assistant', content: reply, sources }])
+      const { reply, sources, suggestedMemory } = await askAssistant(text, activeId)
+      setMessages((m) => [...m, { role: 'assistant', content: reply, sources, suggestedMemory: suggestedMemory || undefined }])
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -247,6 +257,15 @@ export function AssistantScreen() {
               {m.role === 'assistant' && m.sources && m.sources.length > 0 && (
                 <span className="asst-sources">
                   {(lang === 'zh' ? '本次使用:' : 'Used: ') + m.sources.join(' · ')}
+                </span>
+              )}
+              {m.role === 'assistant' && m.suggestedMemory && (
+                <span className="asst-suggest">
+                  <span className="asst-suggest-text">💡 {m.suggestedMemory}</span>
+                  <button type="button" onClick={() => saveSuggestion(i, m.suggestedMemory!)}>
+                    {lang === 'zh' ? '存为记忆' : 'Save'}
+                  </button>
+                  <button type="button" className="asst-suggest-x" onClick={() => dismissSuggestion(i)}>×</button>
                 </span>
               )}
             </div>

@@ -6,6 +6,7 @@ import { aiPayload, backendUrl } from '../../ai/config'
 export interface AssistantReply {
   reply: string
   sources: string[] // human-readable labels of the data used this turn (§ sources_used)
+  suggestedMemory: string // AI-proposed memory to save (empty = none); user confirms
 }
 
 export async function askAssistant(message: string, chatroomId?: string): Promise<AssistantReply> {
@@ -22,8 +23,27 @@ export async function askAssistant(message: string, chatroomId?: string): Promis
     const detail = await res.text().catch(() => '')
     throw new Error(`Assistant error ${res.status}${detail ? `: ${detail}` : ''}`)
   }
-  const json = (await res.json()) as { reply: string; sources_used?: string[] }
-  return { reply: json.reply, sources: json.sources_used ?? [] }
+  const json = (await res.json()) as { reply: string; sources_used?: string[]; suggested_memory?: string }
+  return { reply: json.reply, sources: json.sources_used ?? [], suggestedMemory: json.suggested_memory ?? '' }
+}
+
+/** Summarize a reference file's extracted text for AI context (§5.4). */
+export async function summarizeFile(text: string): Promise<string> {
+  const { data } = await supabase.auth.getSession()
+  const token = data.session?.access_token
+  if (!token) throw new Error('Not signed in')
+
+  const res = await fetch(`${backendUrl()}/api/summarize-file`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ text, ...aiPayload('assistant') }),
+  })
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '')
+    throw new Error(`Summarize error ${res.status}${detail ? `: ${detail}` : ''}`)
+  }
+  const json = (await res.json()) as { summary: string }
+  return json.summary
 }
 
 /** Vision: recognize a meal photo (data URL) → short description text. */

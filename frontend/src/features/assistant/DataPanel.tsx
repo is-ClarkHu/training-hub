@@ -13,10 +13,10 @@ import {
   getNotes, createNote, deleteNote,
   getSupplements, createSupplement, updateSupplement, deleteSupplement,
   getFoodLog, createFoodLog, deleteFoodLog,
-  getPublicFiles, createPublicFile, deletePublicFile,
+  getPublicFiles, createPublicFile, setPublicFileSummary, deletePublicFile,
   today,
 } from '../../db'
-import { describeFood } from './assistantClient'
+import { describeFood, summarizeFile } from './assistantClient'
 import type {
   Basics, BodyMeasurement, FoodLog, MedicalBackground, Note, NoteTag, PublicFile, Supplement, TrainingEnv,
 } from '../../supabase/types'
@@ -48,6 +48,7 @@ export function DataPanel({ lang }: { lang: L }) {
   const [foodDraft, setFoodDraft] = useState<{ date: string; description: string; photo?: string; aiDesc?: string }>({ date: today(), description: '' })
   const [recognizing, setRecognizing] = useState(false)
   const [foodErr, setFoodErr] = useState<string | null>(null)
+  const [summarizing, setSummarizing] = useState<string | null>(null)
 
   // draft rows for the "add" forms
   const [mDraft, setMDraft] = useState<Partial<BodyMeasurement>>({ date: today() })
@@ -272,13 +273,31 @@ export function DataPanel({ lang }: { lang: L }) {
         <p className="asst-hint">{t('小文件;文本会被提取供 AI 读取。按聊天室在「记忆」页授权。', 'Small files; text is extracted for the AI. Grant per room in the Memory tab.')}</p>
         <input type="file" onChange={async (e) => {
           const f = e.target.files?.[0]
-          if (f) { await createPublicFile(f); e.target.value = ''; await reload() }
+          if (!f) return
+          e.target.value = ''
+          const row = await createPublicFile(f)
+          await reload()
+          if (row.content) {
+            setSummarizing(row.id)
+            try {
+              const s = await summarizeFile(row.content)
+              if (s) await setPublicFileSummary(row.id, s)
+            } catch { /* summary is best-effort; excerpt still works */ }
+            finally { setSummarizing(null); await reload() }
+          }
         }} />
         <ul className="asst-mem-list">
           {files.map((f) => (
-            <li key={f.id} className="asst-data-row">
-              <span>{f.name}{f.content ? '' : ' (无文本)'}</span>
-              <button type="button" onClick={async () => { await deletePublicFile(f.id); await reload() }}>🗑</button>
+            <li key={f.id} className="asst-mem-item">
+              <span className="asst-data-row">
+                <span>{f.name}{f.content ? '' : t(' (无文本)', ' (no text)')}</span>
+                <button type="button" onClick={async () => { await deletePublicFile(f.id); await reload() }}>🗑</button>
+              </span>
+              {summarizing === f.id ? (
+                <span className="asst-hint">{t('生成摘要中…', 'Summarizing…')}</span>
+              ) : f.summary ? (
+                <span className="asst-hint">{f.summary}</span>
+              ) : null}
             </li>
           ))}
         </ul>

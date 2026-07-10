@@ -428,7 +428,8 @@ export interface FoodLog extends SyncFields {
 export interface PublicFile extends SyncFields {
   name: string
   storage_path: string | null
-  content: string | null
+  content: string | null             // extracted text
+  summary: string | null             // LLM summary, preferred in AI context
   created_at: string
 }
 

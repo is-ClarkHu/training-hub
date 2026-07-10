@@ -34,8 +34,14 @@ ASSISTANT_SYSTEM = (
     "You are a knowledgeable, supportive strength-and-conditioning coach embedded "
     "in the user's training-log app. Answer using the user's own data below. Be "
     "concrete and concise; cite specific numbers and dates. Respect active injuries. "
-    "Reply in the user's language (match their question)."
+    "Reply in the user's language (match their question). "
+    "If the exchange produces a durable fact, decision, or preference worth "
+    "remembering for THIS chatroom long-term, end your reply with one line exactly "
+    "like [[MEMORY: <concise one-line memory>]]. Only when genuinely useful; "
+    "otherwise omit it entirely."
 )
+
+MEMORY_TAG = re.compile(r"\[\[MEMORY:\s*(.+?)\]\]", re.S)
 
 app = FastAPI(title="training-hub backend")
 app.add_middleware(
@@ -65,6 +71,10 @@ class TranslateRequest(AiConfig):
 
 class DescribeFoodRequest(AiConfig):
     image: str  # data URL of the meal photo
+
+
+class SummarizeFileRequest(AiConfig):
+    text: str
 
 
 def _now() -> str:
@@ -202,6 +212,31 @@ def describe_food(body: DescribeFoodRequest, authorization: str = Header(default
     return {"description": desc}
 
 
+# ── file summary (P5 / §5.4) ─────────────────────────────────
+FILE_SUMMARY_SYSTEM = (
+    "Summarize this reference document for a strength-and-conditioning assistant. "
+    "Capture the key facts, instructions, numbers, and constraints compactly (a few "
+    "sentences or short bullets). Reply with ONLY the summary, in the document's language."
+)
+
+
+@app.post("/api/summarize-file")
+def summarize_file(body: SummarizeFileRequest, authorization: str = Header(default="")) -> dict:
+    _user_client(_jwt(authorization))  # require a valid session
+    if body.provider not in PROVIDERS:
+        raise HTTPException(400, f"Unknown provider '{body.provider}'")
+    text = body.text.strip()
+    if not text:
+        return {"summary": ""}
+    try:
+        summary = chat(body.provider, body.model, body.api_key, FILE_SUMMARY_SYSTEM, text[:12000], 400)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:  # noqa: BLE001 — upstream error
+        raise HTTPException(502, f"{body.provider} error: {e}")
+    return {"summary": summary}
+
+
 # ── assistant (§9) ───────────────────────────────────────────
 @app.post("/api/assistant")
 def assistant(body: AssistantRequest, authorization: str = Header(default="")) -> dict:
@@ -217,7 +252,12 @@ def assistant(body: AssistantRequest, authorization: str = Header(default="")) -
             perms = pr.data[0].get("perms") or {}
 
     context, sources_used = build_memory_context(sb, user_id, room, perms)
-    reply = _relay(body, f"{ASSISTANT_SYSTEM}\n\n{context}", body.message, 1500)
+    raw = _relay(body, f"{ASSISTANT_SYSTEM}\n\n{context}", body.message, 1500)
+
+    # Split off the optional [[MEMORY: ...]] suggestion; it never appears in chat.
+    m = MEMORY_TAG.search(raw)
+    suggested_memory = m.group(1).strip() if m else ""
+    reply = MEMORY_TAG.sub("", raw).strip()
 
     ts = _now()
     rows = [
@@ -239,4 +279,4 @@ def assistant(body: AssistantRequest, authorization: str = Header(default="")) -
         except Exception:  # noqa: BLE001
             pass
 
-    return {"reply": reply, "sources_used": sources_used}
+    return {"reply": reply, "sources_used": sources_used, "suggested_memory": suggested_memory}

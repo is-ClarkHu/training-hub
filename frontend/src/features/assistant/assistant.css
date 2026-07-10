@@ -167,6 +167,29 @@
 .asst-msg.user { align-items: flex-end; }
 .asst-msg.assistant { align-items: flex-start; }
 .asst-sources { font-size: 11px; color: var(--text-dim); margin-top: 3px; padding: 0 2px; }
+.asst-suggest {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 5px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--text);
+  background: rgba(79, 209, 224, 0.08);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.asst-suggest-text { flex: 1; }
+.asst-suggest button {
+  background: var(--teal);
+  border: none;
+  border-radius: 6px;
+  color: #04181a;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 3px 10px;
+}
+.asst-suggest button.asst-suggest-x { background: none; color: var(--text-dim); padding: 3px 6px; }
 .asst-bubble {
   max-width: 80%;
   padding: 10px 13px;
