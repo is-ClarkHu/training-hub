@@ -17,12 +17,14 @@ export function SetEditor({
   lang,
   measureType,
   durationHm = false,
+  cardio = false,
   sets,
   onChange,
 }: {
   lang: TranslationTarget
   measureType: MeasureType
   durationHm?: boolean
+  cardio?: boolean            // show optional distance / calories / bpm inputs
   sets: SetDraft[]
   onChange: (sets: SetDraft[]) => void
 }) {
@@ -94,6 +96,17 @@ export function SetEditor({
               <button type="button" className="th-btn-ghost log-addsub" onClick={() => addSub(i)}>
                 {lang === 'zh' ? '+ 子组' : '+ sub-set'}
               </button>
+            )}
+
+            {cardio && (
+              <div className="log-cardio">
+                <input className="th-input log-num" inputMode="decimal" value={s.distance}
+                  onChange={(e) => update(i, { distance: e.target.value })} placeholder={lang === 'zh' ? '距离mi' : 'dist mi'} aria-label="distance" />
+                <input className="th-input log-num" inputMode="numeric" value={s.calories}
+                  onChange={(e) => update(i, { calories: e.target.value })} placeholder={lang === 'zh' ? '卡路里' : 'kcal'} aria-label="calories" />
+                <input className="th-input log-num" inputMode="numeric" value={s.bpm}
+                  onChange={(e) => update(i, { bpm: e.target.value })} placeholder={lang === 'zh' ? '心率bpm' : 'bpm'} aria-label="heart rate" />
+              </div>
             )}
 
             <input className="th-input log-set-note" value={s.note} onChange={(e) => update(i, { note: e.target.value })}

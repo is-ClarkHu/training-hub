@@ -89,3 +89,14 @@ alter table public.exercises        add column if not exists bodyweight boolean 
 
 -- History mode-2: per-occurrence category-module override (null = exercise primary).
 alter table public.workout_entries  add column if not exists module_part text;
+
+-- Optional cardio metrics per set (treadmill/stair climber): distance/calories/bpm.
+alter table public.sets
+  add column if not exists distance numeric,
+  add column if not exists calories numeric,
+  add column if not exists bpm      numeric;
+
+-- Optional sport-session metrics (watch): active calories + heart rate.
+alter table public.sport_sessions
+  add column if not exists calories numeric,
+  add column if not exists bpm      numeric;

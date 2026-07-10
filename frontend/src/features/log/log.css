@@ -255,6 +255,10 @@
 .log-tagchip.sm { background: var(--grid); color: var(--ice); }
 
 /* session feedback */
+/* optional cardio metrics row (duration exercises): distance / calories / bpm */
+.log-cardio { display: flex; gap: 6px; flex-wrap: wrap; }
+.log-cardio .log-num { flex: 1 1 72px; min-width: 0; }
+
 .log-session { display: flex; flex-direction: column; gap: 8px; }
 .log-session-head { display: flex; align-items: center; gap: 10px; }
 .log-session-hint { margin: -2px 0 0; font: 11px/1.3 var(--mono); color: var(--faint); }

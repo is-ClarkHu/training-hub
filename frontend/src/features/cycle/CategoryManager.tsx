@@ -2,7 +2,7 @@
 // Defaults (chest…core, warmup, sports) can be renamed but not deleted; custom
 // ones are fully editable. Like adding an exercise: type one language, machine-
 // translate the other (or fill both yourself).
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   useCategories,
   addCategory,
@@ -12,6 +12,7 @@ import {
   snapshotCategories,
   type Category,
 } from '../../categories'
+import { getExercises } from '../../db'
 import { requestTranslation } from '../../translation'
 import type { TranslationTarget } from '../../translation'
 import { useUndo } from '../../undo'
@@ -22,6 +23,10 @@ export function CategoryManager({ lang }: { lang: TranslationTarget }) {
   const cats = useCategories()
   const [editing, setEditing] = useState<Category | null>(null)
   const [adding, setAdding] = useState(false)
+  // Category keys still used by at least one exercise — those can't be deleted.
+  const [usedKeys, setUsedKeys] = useState<Set<string>>(new Set())
+  const reloadUsage = () => void getExercises().then((exs) => setUsedKeys(new Set(exs.flatMap((e) => e.body_parts))))
+  useEffect(() => { reloadUsage() }, [])
 
   return (
     <div className="cyc-cat-mgr">
@@ -41,7 +46,8 @@ export function CategoryManager({ lang }: { lang: TranslationTarget }) {
         <CategoryDialog
           lang={lang}
           category={editing}
-          onClose={() => { setAdding(false); setEditing(null) }}
+          used={editing ? usedKeys.has(editing.key) : false}
+          onClose={() => { setAdding(false); setEditing(null); reloadUsage() }}
         />
       )}
     </div>
@@ -51,15 +57,16 @@ export function CategoryManager({ lang }: { lang: TranslationTarget }) {
 function CategoryDialog({
   lang,
   category,
+  used,
   onClose,
 }: {
   lang: TranslationTarget
   category: Category | null
+  used: boolean
   onClose: () => void
 }) {
   const { push } = useUndo()
   const editing = !!category
-  const custom = category ? isCustomCategory(category.key) : true
   const [raw, setRaw] = useState('')
   const [zh, setZh] = useState(category?.zh ?? '')
   const [en, setEn] = useState(category?.en ?? '')
@@ -96,8 +103,8 @@ function CategoryDialog({
     )
   }
   function del() {
-    if (!category) return
-    if (!confirm(lang === 'zh' ? '删除该分类?(已用它的动作会保留原分类名)' : 'Delete this category? (exercises keep the raw key)')) return
+    if (!category || used) return
+    if (!confirm(lang === 'zh' ? '删除该空分类?' : 'Delete this empty category?')) return
     const restore = snapshotCategories()
     const label = lang === 'zh' ? category.zh : category.en
     removeCategory(category.key)
@@ -134,8 +141,9 @@ function CategoryDialog({
           </div>
         </div>
 
+        {editing && used && <p className="cyc-cat-usedhint">{lang === 'zh' ? '有动作在用，清空后才能删除' : 'In use by exercises — empty it first to delete'}</p>}
         <div className="log-dialog-actions">
-          {editing && custom && <button className="th-btn-ghost" type="button" onClick={del}>{lang === 'zh' ? '删除' : 'Delete'}</button>}
+          {editing && <button className="th-btn-ghost" type="button" onClick={del} disabled={used}>{lang === 'zh' ? '删除' : 'Delete'}</button>}
           <button className="th-btn-ghost" type="button" onClick={onClose}>{lang === 'zh' ? '取消' : 'Cancel'}</button>
           <button className="th-btn" type="button" onClick={save}>{lang === 'zh' ? '保存' : 'Save'}</button>
         </div>

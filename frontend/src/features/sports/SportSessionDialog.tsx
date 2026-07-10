@@ -5,7 +5,7 @@ import { updateSportSession, softDeleteSportSession } from '../../db'
 import type { Sport, SportSession } from '../../supabase/types'
 import type { TranslationTarget } from '../../translation'
 import { fieldLabel } from './util'
-import { parseHours, formatHours } from '../log/util'
+import { parseHours, formatHours, toNumber } from '../log/util'
 import './sports.css'
 
 export function SportSessionDialog({
@@ -26,13 +26,15 @@ export function SportSessionDialog({
   const [attrs, setAttrs] = useState<Record<string, string>>({ ...(session.attributes ?? {}) })
   const [injury, setInjury] = useState(session.injury)
   const [note, setNote] = useState(session.note_raw)
+  const [cal, setCal] = useState(session.calories != null ? String(session.calories) : '')
+  const [bpm, setBpm] = useState(session.bpm != null ? String(session.bpm) : '')
   const [busy, setBusy] = useState(false)
 
   async function save() {
     const h = parseHours(hours)
     if (!h || h <= 0) return
     setBusy(true)
-    await updateSportSession(session.id, { date, hours: h, attributes: attrs, injury, note_raw: note })
+    await updateSportSession(session.id, { date, hours: h, attributes: attrs, injury, note_raw: note, calories: toNumber(cal), bpm: toNumber(bpm) })
     setBusy(false)
     onSaved()
   }
@@ -76,6 +78,17 @@ export function SportSessionDialog({
             )}
           </div>
         ))}
+
+        <div className="sport-grid2">
+          <div className="sport-field">
+            <label className="th-label">{lang === 'zh' ? '卡路里(可选)' : 'Calories (opt)'}</label>
+            <input className="th-input" inputMode="numeric" value={cal} onChange={(e) => setCal(e.target.value)} placeholder="kcal" />
+          </div>
+          <div className="sport-field">
+            <label className="th-label">{lang === 'zh' ? '心率(可选)' : 'Heart rate (opt)'}</label>
+            <input className="th-input" inputMode="numeric" value={bpm} onChange={(e) => setBpm(e.target.value)} placeholder="bpm" />
+          </div>
+        </div>
 
         <label className="log-perside">
           <input type="checkbox" checked={injury} onChange={(e) => setInjury(e.target.checked)} />

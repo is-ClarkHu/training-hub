@@ -117,6 +117,9 @@ export interface NewSetInput {
   per_side?: boolean
   sub_sets?: SubSet[]
   note?: string
+  distance?: number | null
+  calories?: number | null
+  bpm?: number | null
 }
 
 export interface NewEntryInput {
@@ -160,6 +163,9 @@ export async function createEntryWithSets(
     per_side: false,
     sub_sets: [],
     note: '',
+    distance: null,
+    calories: null,
+    bpm: null,
     ...s,
   }))
   await db.transaction('rw', db.workout_entries, db.sets, async () => {
@@ -233,6 +239,8 @@ export interface NewSportSessionInput {
   injury?: boolean
   note_raw?: string
   note_tags?: string[]
+  calories?: number | null
+  bpm?: number | null
 }
 
 export async function createSportSession(input: NewSportSessionInput): Promise<SportSession> {
@@ -242,6 +250,8 @@ export async function createSportSession(input: NewSportSessionInput): Promise<S
     injury: false,
     note_raw: '',
     note_tags: [],
+    calories: null,
+    bpm: null,
     ...input,
   }
   await db.sport_sessions.add(row)
@@ -262,7 +272,7 @@ export async function softDeleteSportSession(id: string): Promise<void> {
 
 export async function updateSportSession(
   id: string,
-  patch: Partial<Pick<SportSession, 'date' | 'hours' | 'attributes' | 'injury' | 'note_raw'>>,
+  patch: Partial<Pick<SportSession, 'date' | 'hours' | 'attributes' | 'injury' | 'note_raw' | 'calories' | 'bpm'>>,
 ): Promise<void> {
   const s = await db.sport_sessions.get(id)
   if (s) await db.sport_sessions.put({ ...s, ...patch, updated_at: nowIso() })
@@ -723,6 +733,9 @@ export async function updateEntry(
       per_side: false,
       sub_sets: [],
       note: '',
+      distance: null,
+      calories: null,
+      bpm: null,
       ...s,
     }))
     await db.sets.bulkAdd(fresh)

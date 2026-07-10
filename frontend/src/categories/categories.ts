@@ -28,6 +28,7 @@ export const DEFAULT_CATEGORIES: Category[] = [
 
 const LS = 'th.categories.custom'
 const LS_OVERRIDES = 'th.categories.overrides' // renamed labels for built-in categories
+const LS_HIDDEN = 'th.categories.hidden'       // built-in keys removed (only when empty)
 const DEFAULT_KEYS = new Set(DEFAULT_CATEGORIES.map((d) => d.key))
 const listeners = new Set<() => void>()
 const notify = () => listeners.forEach((l) => l())
@@ -73,10 +74,21 @@ function saveOverrides(o: Record<string, Override>) {
   localStorage.setItem(LS_OVERRIDES, JSON.stringify(o))
   notify()
 }
-/** Built-ins with any renamed labels applied. */
+function loadHidden(): Set<string> {
+  try { return new Set(JSON.parse(localStorage.getItem(LS_HIDDEN) ?? '[]') as string[]) } catch { return new Set() }
+}
+function saveHidden(s: Set<string>) {
+  localStorage.setItem(LS_HIDDEN, JSON.stringify([...s]))
+  notify()
+}
+
+/** Built-ins with any renamed labels applied, minus the ones the user removed. */
 function builtins(): Category[] {
   const ov = loadOverrides()
-  return DEFAULT_CATEGORIES.map((d) => (ov[d.key] ? { ...d, zh: ov[d.key].zh || d.zh, en: ov[d.key].en || d.en } : d))
+  const hidden = loadHidden()
+  return DEFAULT_CATEGORIES
+    .filter((d) => !hidden.has(d.key))
+    .map((d) => (ov[d.key] ? { ...d, zh: ov[d.key].zh || d.zh, en: ov[d.key].en || d.en } : d))
 }
 
 function loadCustom(): Category[] {
@@ -158,17 +170,28 @@ export function updateCategory(key: string, patch: { zh?: string; en?: string })
   }
   saveCustom(loadCustom().map((c) => (c.key === key ? { ...c, ...patch } : c)))
 }
+/** Remove a category. Custom → dropped from the custom store; built-in → hidden
+ *  (defaults are hardcoded, so we mask it). Callers gate this on the category
+ *  being empty (no exercises use it). */
 export function removeCategory(key: string): void {
+  if (DEFAULT_KEYS.has(key)) {
+    const h = loadHidden()
+    h.add(key)
+    saveHidden(h)
+    return
+  }
   saveCustom(loadCustom().filter((c) => c.key !== key))
 }
 
-/** Capture the category stores (custom + built-in overrides); returns an undo fn. */
+/** Capture the category stores (custom + overrides + hidden); returns an undo fn. */
 export function snapshotCategories(): () => void {
   const rawCustom = localStorage.getItem(LS)
   const rawOv = localStorage.getItem(LS_OVERRIDES)
+  const rawHidden = localStorage.getItem(LS_HIDDEN)
   return () => {
     if (rawCustom == null) localStorage.removeItem(LS); else localStorage.setItem(LS, rawCustom)
     if (rawOv == null) localStorage.removeItem(LS_OVERRIDES); else localStorage.setItem(LS_OVERRIDES, rawOv)
+    if (rawHidden == null) localStorage.removeItem(LS_HIDDEN); else localStorage.setItem(LS_HIDDEN, rawHidden)
     notify()
   }
 }

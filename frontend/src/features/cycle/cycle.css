@@ -393,6 +393,7 @@
 .cyc-cat-chip:hover { border-color: var(--accent); color: var(--text-bright); }
 .cyc-cat-custom { color: var(--accent); margin-left: 4px; }
 .cyc-cat-add { width: auto; padding: 6px 12px; font-size: 12px; }
+.cyc-cat-usedhint { margin: 0 0 4px; font: 11px/1.4 var(--mono); color: var(--faint); }
 
 @media (max-width: 720px) {
   .cyc-loop-board.has-side { grid-template-columns: 1fr; }

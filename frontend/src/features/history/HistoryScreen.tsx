@@ -34,6 +34,7 @@ import {
   exerciseKind,
   exerciseName,
   formatHours,
+  formatMetrics,
   formatSetLine,
   primaryCategory,
 } from '../log/util'
@@ -492,7 +493,7 @@ function SportRow({
           {ss.injury && <span className="hist-badge injury">{lang === 'zh' ? '带伤' : 'injury'}</span>}
         </div>
         <div className="hist-sets">
-          <span className="hist-set">{formatHours(ss.hours)}</span>
+          <span className="hist-set">{formatHours(ss.hours)}{formatMetrics(ss)}</span>
           {(sport?.fields ?? []).map((f) => ss.attributes?.[f.key] && (
             <span key={f.key} className="hist-settype">{attrLabel(f, ss.attributes[f.key], lang)}</span>
           ))}

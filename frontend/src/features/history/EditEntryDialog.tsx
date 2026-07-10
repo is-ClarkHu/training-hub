@@ -69,7 +69,7 @@ export function EditEntryDialog({
               .map((e) => (<option key={e.id} value={e.id}>{exerciseName(e, lang)}</option>))}
           </select>
         </div>
-        <SetEditor lang={lang} measureType={exercise.measure_type} durationHm={exercise.duration_hm} sets={drafts} onChange={setDrafts} />
+        <SetEditor lang={lang} measureType={exercise.measure_type} durationHm={exercise.duration_hm} cardio={exercise.body_parts.includes('cardio')} sets={drafts} onChange={setDrafts} />
         <input className="th-input" value={note} onChange={(e) => setNote(e.target.value)} placeholder={lang === 'zh' ? '笔记' : 'note'} />
         <div className="log-dialog-actions">
           <button className="th-btn-ghost" type="button" onClick={remove} disabled={busy}>{lang === 'zh' ? '删除' : 'Delete'}</button>

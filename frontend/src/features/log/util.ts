@@ -11,15 +11,19 @@ export interface SubDraft {
 export const emptySub = (): SubDraft => ({ weight: '', reps: '', duration: '' })
 
 /** One editable SET in the Log form. `subs` has 1 row for a normal set, 2+ for a
- *  superset/dropset (each sub-set its own weight×reps). */
+ *  superset/dropset (each sub-set its own weight×reps). `distance`/`calories`/`bpm`
+ *  are optional cardio metrics (duration exercises only). */
 export interface SetDraft {
   subs: SubDraft[]
   per_side: boolean
   set_type: SetType
   note: string
+  distance: string
+  calories: string
+  bpm: string
 }
 
-export const emptySet = (): SetDraft => ({ subs: [emptySub()], per_side: false, set_type: 'normal', note: '' })
+export const emptySet = (): SetDraft => ({ subs: [emptySub()], per_side: false, set_type: 'normal', note: '', distance: '', calories: '', bpm: '' })
 
 export function exerciseName(ex: Exercise, lang: TranslationTarget): string {
   const primary = lang === 'zh' ? ex.name_zh : ex.name_en
@@ -187,6 +191,9 @@ export function draftsToSetInputs(
       sub_sets: rest,
       set_type: d.set_type !== 'normal' ? d.set_type : globalType,
       ...(d.note.trim() ? { note: d.note.trim() } : {}),
+      // Optional cardio metrics — saved whenever the user entered any (the SetEditor
+      // only shows these inputs for cardio exercises).
+      ...(d.distance || d.calories || d.bpm ? { distance: toNumber(d.distance), calories: toNumber(d.calories), bpm: toNumber(d.bpm) } : {}),
     })
   }
   return out
@@ -204,7 +211,12 @@ export function setToDraft(s: ExerciseSet, hm = false): SetDraft {
     reps: ss.reps != null ? String(ss.reps) : '',
     duration: ss.duration_sec != null ? formatDuration(ss.duration_sec, hm) : '',
   }))
-  return { subs: [primary, ...rest], per_side: s.per_side, set_type: s.set_type, note: s.note ?? '' }
+  return {
+    subs: [primary, ...rest], per_side: s.per_side, set_type: s.set_type, note: s.note ?? '',
+    distance: s.distance != null ? String(s.distance) : '',
+    calories: s.calories != null ? String(s.calories) : '',
+    bpm: s.bpm != null ? String(s.bpm) : '',
+  }
 }
 
 /** The primary (grouping) category of an exercise — its first body_part. Single
@@ -244,9 +256,18 @@ export function formatSubSet(
   return w ? `${w} ${reps}` : reps
 }
 
+/** Optional cardio metrics suffix, e.g. " · 5.2mi · 320kcal · 145bpm". */
+export function formatMetrics(s: { distance?: number | null; calories?: number | null; bpm?: number | null }): string {
+  const bits: string[] = []
+  if (s.distance != null) bits.push(`${s.distance}mi`)
+  if (s.calories != null) bits.push(`${s.calories}kcal`)
+  if (s.bpm != null) bits.push(`${s.bpm}bpm`)
+  return bits.length ? ' · ' + bits.join(' · ') : ''
+}
+
 /** One-line summary of a set — sub-sets joined by ' / ' (e.g. "25lb 13个 / 20lb 13个"),
- *  with a localized per-side suffix. */
+ *  with a localized per-side suffix and any cardio metrics. */
 export function formatSetLine(s: ExerciseSet, mt: MeasureType, lang: TranslationTarget, hm = false): string {
   const parts = [formatSubSet(s, mt, lang, hm), ...(s.sub_sets ?? []).map((v) => formatSubSet(v, mt, lang, hm))]
-  return parts.join(' / ') + (s.per_side ? (lang === 'zh' ? '/侧' : '/side') : '')
+  return parts.join(' / ') + (s.per_side ? (lang === 'zh' ? '/侧' : '/side') : '') + formatMetrics(s)
 }

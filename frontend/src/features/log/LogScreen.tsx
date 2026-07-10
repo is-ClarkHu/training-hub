@@ -47,7 +47,7 @@ import { AddInjuryDialog, bodyAreaLabel } from '../injuries'
 import { ExercisePicker } from './ExercisePicker'
 import { SetEditor } from './SetEditor'
 import { AddExerciseDialog } from './AddExerciseDialog'
-import { draftsToSetInputs, emptySet, exerciseName, formatSetLine, parseHours, formatHours, type SetDraft } from './util'
+import { draftsToSetInputs, emptySet, exerciseName, formatMetrics, formatSetLine, parseHours, formatHours, toNumber, type SetDraft } from './util'
 import './log.css'
 
 type Selection =
@@ -82,6 +82,8 @@ export function LogScreen() {
   // sport form
   const [hours, setHours] = useState('')
   const [attrs, setAttrs] = useState<Record<string, string>>({})
+  const [sportCal, setSportCal] = useState('')
+  const [sportBpm, setSportBpm] = useState('')
   const [showIntimacy, setShowIntimacy] = useState(false)
   const [intimacyCat, setIntimacyCat] = useState<IntimacyCategory>('partner_active')
   const [intimacyCount, setIntimacyCount] = useState('1')
@@ -137,7 +139,7 @@ export function LogScreen() {
       items.push({
         id: s.id, realId: s.id, kind: 'sport',
         name: sp ? (lang === 'zh' ? sp.name_zh : sp.name_en) || sp.name_zh : 'sport',
-        detail: `${formatHours(s.hours)}${attrSummary ? ' · ' + attrSummary : ''}${s.injury ? ' · injury' : ''}`,
+        detail: `${formatHours(s.hours)}${attrSummary ? ' · ' + attrSummary : ''}${formatMetrics(s)}${s.injury ? ' · injury' : ''}`,
         tagKeys: s.note_tags,
       })
     }
@@ -168,6 +170,8 @@ export function LogScreen() {
     setInjuryId('')
     setHours('')
     setAttrs({})
+    setSportCal('')
+    setSportBpm('')
     setNote('')
   }
   function selectExercise(ex: Exercise) {
@@ -269,6 +273,8 @@ export function LogScreen() {
       injury: injured,
       note_raw: note,
       note_tags: parsed.tagKeys,
+      calories: toNumber(sportCal),
+      bpm: toNumber(sportBpm),
     }))
     finishSave()
     push(lang === 'zh' ? `已记录「${sportName}」` : `Logged “${sportName}”`, async () => {
@@ -436,7 +442,7 @@ export function LogScreen() {
 
           {sel.ex.is_rehab && <RehabKnowledge ex={sel.ex} lang={lang} />}
 
-          <SetEditor lang={lang} measureType={sel.ex.measure_type} durationHm={sel.ex.duration_hm} sets={sets} onChange={setSets} />
+          <SetEditor lang={lang} measureType={sel.ex.measure_type} durationHm={sel.ex.duration_hm} cardio={sel.ex.body_parts.includes('cardio')} sets={sets} onChange={setSets} />
 
           <NoteField lang={lang} note={note} setNote={setNote} tagKeys={parsed.tagKeys} />
 
@@ -509,6 +515,15 @@ export function LogScreen() {
               )}
             </div>
           ))}
+          <div className="log-field">
+            <label className="th-label">{lang === 'zh' ? '手表数据(可选)' : 'Watch data (optional)'}</label>
+            <div className="log-cardio">
+              <input className="th-input log-num" inputMode="numeric" value={sportCal}
+                onChange={(e) => setSportCal(e.target.value)} placeholder={lang === 'zh' ? '卡路里' : 'kcal'} aria-label="calories" />
+              <input className="th-input log-num" inputMode="numeric" value={sportBpm}
+                onChange={(e) => setSportBpm(e.target.value)} placeholder={lang === 'zh' ? '心率bpm' : 'bpm'} aria-label="heart rate" />
+            </div>
+          </div>
           {activeInjuries.length > 0 && (
             <p className="log-hint">{lang === 'zh' ? '⚠ 有活动伤病,本场次自动标记为带伤(可在 Injuries 里管理状态)' : '⚠ Active injury — this session is auto-flagged as injured (manage status in Injuries)'}</p>
           )}

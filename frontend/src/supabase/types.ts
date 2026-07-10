@@ -202,6 +202,11 @@ export interface ExerciseSet extends SyncFields {
   per_side: boolean
   sub_sets?: SubSet[]                // ADDITIONAL sub-sets (superset/dropset); empty = single
   note?: string                      // per-set note (e.g. to-failure); §5.3
+  // Optional cardio metrics (treadmill / stair climber / …), all nullable — shown
+  // for duration exercises alongside the time; never required.
+  distance?: number | null           // km
+  calories?: number | null           // active kcal
+  bpm?: number | null                // average heart rate
 }
 
 export interface Sport extends SyncFields {
@@ -222,6 +227,8 @@ export interface SportSession extends SyncFields {
   injury: boolean
   note_raw: string
   note_tags: string[]
+  calories?: number | null           // optional active kcal (e.g. from a watch)
+  bpm?: number | null                // optional average heart rate
   tier?: number                      // legacy — ignored; kept so old rows parse
 }
 
