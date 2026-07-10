@@ -25,3 +25,22 @@ export async function askAssistant(message: string, chatroomId?: string): Promis
   const json = (await res.json()) as { reply: string; sources_used?: string[] }
   return { reply: json.reply, sources: json.sources_used ?? [] }
 }
+
+/** Vision: recognize a meal photo (data URL) → short description text. */
+export async function describeFood(image: string): Promise<string> {
+  const { data } = await supabase.auth.getSession()
+  const token = data.session?.access_token
+  if (!token) throw new Error('Not signed in')
+
+  const res = await fetch(`${backendUrl()}/api/describe-food`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ image, ...aiPayload('assistant') }),
+  })
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '')
+    throw new Error(`Describe error ${res.status}${detail ? `: ${detail}` : ''}`)
+  }
+  const json = (await res.json()) as { description: string }
+  return json.description
+}

@@ -285,11 +285,14 @@ def build_memory_context(
         food = _rows(
             sb.table("food_log").select("*").eq("deleted", False).order("eaten_at", desc=True).limit(MAX_FOOD).execute()
         )
-        food = [f for f in food if (f.get("description") or "").strip()]
+        food = [f for f in food if (f.get("description") or f.get("ai_description") or "").strip()]
         if food:
             lines.append("== Recent food log ==")
             for f in food:
-                lines.append(f"- {str(f.get('eaten_at', ''))[:10]}: {f['description']}")
+                text = (f.get("description") or "").strip()
+                ai = (f.get("ai_description") or "").strip()
+                detail = "; ".join(p for p in [text, f"AI: {ai}" if ai else ""] if p)
+                lines.append(f"- {str(f.get('eaten_at', ''))[:10]}: {detail}")
             lines.append("")
             sources.append("Food log")
 

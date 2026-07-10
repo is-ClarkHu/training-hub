@@ -3,13 +3,14 @@
 -- food_log: photo + text description + time. The assistant reads the description
 -- (§4.5); the image is only shown in the UI, not re-analyzed every turn.
 create table if not exists public.food_log (
-  id          uuid primary key default gen_random_uuid(),
-  user_id     uuid not null default auth.uid() references auth.users (id) on delete cascade,
-  description text not null default '',
-  photo_path  text,                 -- storage path in the food-photos bucket
-  eaten_at    timestamptz not null default now(),
-  updated_at  timestamptz not null default now(),
-  deleted     boolean not null default false
+  id             uuid primary key default gen_random_uuid(),
+  user_id        uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  description    text not null default '',   -- the user's own text
+  ai_description text,                        -- AI vision recognition result (P6c)
+  photo_path     text,                        -- storage path in the food-photos bucket
+  eaten_at       timestamptz not null default now(),
+  updated_at     timestamptz not null default now(),
+  deleted        boolean not null default false
 );
 create index if not exists food_log_sync_idx on public.food_log (user_id, updated_at);
 alter table public.food_log enable row level security;

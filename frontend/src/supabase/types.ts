@@ -417,7 +417,8 @@ export interface MedicalBackground extends SyncFields {
 }
 
 export interface FoodLog extends SyncFields {
-  description: string
+  description: string                 // the user's own text
+  ai_description: string | null       // AI vision recognition result
   photo_path: string | null
   eaten_at: string
 }

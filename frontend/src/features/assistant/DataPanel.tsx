@@ -14,6 +14,7 @@ import {
   getPublicFiles, createPublicFile, deletePublicFile,
   today,
 } from '../../db'
+import { describeFood } from './assistantClient'
 import type {
   Basics, BodyMeasurement, FoodLog, MedicalBackground, Note, NoteTag, PublicFile, Supplement, TrainingEnv,
 } from '../../supabase/types'
@@ -40,7 +41,9 @@ export function DataPanel({ lang }: { lang: L }) {
   const [supps, setSupps] = useState<Supplement[]>([])
   const [food, setFood] = useState<FoodLog[]>([])
   const [files, setFiles] = useState<PublicFile[]>([])
-  const [foodDraft, setFoodDraft] = useState<{ description: string; photo?: string }>({ description: '' })
+  const [foodDraft, setFoodDraft] = useState<{ date: string; description: string; photo?: string; aiDesc?: string }>({ date: today(), description: '' })
+  const [recognizing, setRecognizing] = useState(false)
+  const [foodErr, setFoodErr] = useState<string | null>(null)
 
   // draft rows for the "add" forms
   const [mDraft, setMDraft] = useState<Partial<BodyMeasurement>>({ date: today() })
@@ -180,25 +183,49 @@ export function DataPanel({ lang }: { lang: L }) {
         </ul>
       </details>
 
-      {/* Food */}
+      {/* Food — one entry = date + photo + text (+ AI recognition) */}
       <details>
         <summary>{t('饮食', 'Food')}</summary>
-        <textarea className="th-input" rows={2} value={foodDraft.description} onChange={(e) => setFoodDraft({ ...foodDraft, description: e.target.value })} placeholder={t('吃了什么…', 'What you ate…')} />
-        <div className="asst-data-noteadd">
-          <input type="file" accept="image/*" onChange={async (e) => {
+        <div className="asst-data-grid">
+          <label>{t('日期', 'Date')}<input className="th-input" type="date" value={foodDraft.date} onChange={(e) => setFoodDraft({ ...foodDraft, date: e.target.value })} /></label>
+          <label>{t('图片', 'Photo')}<input type="file" accept="image/*" onChange={async (e) => {
             const f = e.target.files?.[0]
-            if (f) setFoodDraft({ ...foodDraft, photo: await fileToDataUrl(f) })
-          }} />
-          <button className="th-btn" type="button" disabled={!foodDraft.description.trim() && !foodDraft.photo} onClick={async () => {
-            await createFoodLog(foodDraft.description, new Date().toISOString(), foodDraft.photo)
-            setFoodDraft({ description: '' })
-            await reload()
-          }}>{t('添加', 'Add')}</button>
+            if (f) setFoodDraft({ ...foodDraft, photo: await fileToDataUrl(f), aiDesc: undefined })
+          }} /></label>
         </div>
+        {foodDraft.photo && <img className="asst-food-preview" src={foodDraft.photo} alt="" />}
+        {foodDraft.photo && (
+          <button className="th-btn" type="button" disabled={recognizing} onClick={async () => {
+            if (!foodDraft.photo) return
+            setRecognizing(true); setFoodErr(null)
+            try {
+              const desc = await describeFood(foodDraft.photo)
+              setFoodDraft((d) => ({ ...d, aiDesc: desc }))
+            } catch (err) {
+              setFoodErr(err instanceof Error ? err.message : String(err))
+            } finally {
+              setRecognizing(false)
+            }
+          }}>{recognizing ? t('识别中…', 'Recognizing…') : t('AI 识别图片', 'AI recognize')}</button>
+        )}
+        {foodDraft.aiDesc !== undefined && (
+          <label className="asst-data-full">{t('AI 识别(可改)', 'AI recognition (editable)')}
+            <textarea className="th-input" rows={2} value={foodDraft.aiDesc} onChange={(e) => setFoodDraft({ ...foodDraft, aiDesc: e.target.value })} />
+          </label>
+        )}
+        {foodErr && <p className="th-error">{foodErr}</p>}
+        <label className="asst-data-full">{t('我的描述', 'My note')}
+          <textarea className="th-input" rows={2} value={foodDraft.description} onChange={(e) => setFoodDraft({ ...foodDraft, description: e.target.value })} placeholder={t('吃了什么…', 'What you ate…')} />
+        </label>
+        <button className="th-btn" type="button" disabled={!foodDraft.description.trim() && !foodDraft.photo && !foodDraft.aiDesc} onClick={async () => {
+          await createFoodLog(foodDraft.description, new Date(foodDraft.date).toISOString(), foodDraft.photo, foodDraft.aiDesc)
+          setFoodDraft({ date: today(), description: '' })
+          await reload()
+        }}>{t('添加一条', 'Add entry')}</button>
         <ul className="asst-mem-list">
-          {food.slice(0, 8).map((f) => (
+          {food.slice(0, 12).map((f) => (
             <li key={f.id} className="asst-data-row">
-              <span>{f.eaten_at.slice(0, 10)}: {f.description}{f.photo_path ? ' 📷' : ''}</span>
+              <span>{f.eaten_at.slice(0, 10)}: {f.description || f.ai_description}{f.ai_description && f.description ? ` · AI:${f.ai_description}` : ''}{f.photo_path ? ' 📷' : ''}</span>
               <button type="button" onClick={async () => { await deleteFoodLog(f.id); await reload() }}>🗑</button>
             </li>
           ))}

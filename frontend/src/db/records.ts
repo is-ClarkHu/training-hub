@@ -943,7 +943,12 @@ export async function getFoodLog(): Promise<FoodLog[]> {
   const all = await db.food_log.toArray()
   return all.filter((f) => !f.deleted).sort((a, b) => (a.eaten_at < b.eaten_at ? 1 : -1))
 }
-export async function createFoodLog(description: string, eatenAt: string, photoDataUrl?: string): Promise<FoodLog> {
+export async function createFoodLog(
+  description: string,
+  eatenAt: string,
+  photoDataUrl?: string,
+  aiDescription?: string | null,
+): Promise<FoodLog> {
   const base = syncFields()
   let photo_path: string | null = null
   if (photoDataUrl && currentUserId()) {
@@ -954,7 +959,13 @@ export async function createFoodLog(description: string, eatenAt: string, photoD
     })
     if (!error) photo_path = path
   }
-  const row: FoodLog = { ...base, description: description.trim(), photo_path, eaten_at: eatenAt }
+  const row: FoodLog = {
+    ...base,
+    description: description.trim(),
+    ai_description: aiDescription?.trim() || null,
+    photo_path,
+    eaten_at: eatenAt,
+  }
   await db.food_log.add(row)
   return row
 }

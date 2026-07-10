@@ -21,7 +21,7 @@ from pydantic import BaseModel
 from supabase import create_client
 
 from .memory import SUMMARY_MAX_TOKENS, build_memory_context, maybe_update_summary
-from .providers import PROVIDERS, chat
+from .providers import PROVIDERS, chat, describe_image
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")  # anon key (RLS-scoped via JWT)
@@ -61,6 +61,10 @@ class TranslateRequest(AiConfig):
     domain: str
     text: str
     target: str = "en"
+
+
+class DescribeFoodRequest(AiConfig):
+    image: str  # data URL of the meal photo
 
 
 def _now() -> str:
@@ -174,6 +178,28 @@ def translate(body: TranslateRequest, authorization: str = Header(default="")) -
     ).execute()
     row = ins.data[0] if ins.data else None
     return {"text": translation, "suggested_body_part": bp, "suggested_measure_type": mt, "source": "ai", "row": row}
+
+
+# ── food photo recognition (P6c) ─────────────────────────────
+FOOD_VISION_PROMPT = (
+    "Identify this meal from the photo. In one or two short sentences, describe the "
+    "foods and rough portions factually. Reply in the user's likely language "
+    "(Chinese if the dish looks Chinese). No preamble, just the description."
+)
+
+
+@app.post("/api/describe-food")
+def describe_food(body: DescribeFoodRequest, authorization: str = Header(default="")) -> dict:
+    _user_client(_jwt(authorization))  # require a valid session
+    if body.provider not in PROVIDERS:
+        raise HTTPException(400, f"Unknown provider '{body.provider}'")
+    try:
+        desc = describe_image(body.provider, body.model, body.api_key, body.image, FOOD_VISION_PROMPT, 300)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:  # noqa: BLE001 — upstream/vision error
+        raise HTTPException(502, f"{body.provider} error: {e}")
+    return {"description": desc}
 
 
 # ── assistant (§9) ───────────────────────────────────────────
