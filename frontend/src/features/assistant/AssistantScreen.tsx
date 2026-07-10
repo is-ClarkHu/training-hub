@@ -18,6 +18,7 @@ import type { Chatroom, ChatroomPermCategory } from '../../supabase/types'
 import { useLanguage } from '../../i18n'
 import { askAssistant } from './assistantClient'
 import { MemoryPanel } from './MemoryPanel'
+import { DataPanel } from './DataPanel'
 import './assistant.css'
 
 interface Msg {
@@ -26,12 +27,19 @@ interface Msg {
   sources?: string[]
 }
 
-// v1 permission categories (existing data). `sensitive` flags injuries for a
-// visual cue. intimacy is deliberately absent — hard-isolated, never AI.
-const PERM_CATS: { key: ChatroomPermCategory; zh: string; en: string; sensitive?: boolean }[] = [
-  { key: 'profile_min', zh: '基础资料', en: 'Profile' },
+// Permission categories. `level`: 'sensitive' = visual cue; 'high' = high-sensitivity
+// (medical) → enabling asks for confirmation. intimacy is deliberately absent —
+// hard-isolated, never AI.
+const PERM_CATS: { key: ChatroomPermCategory; zh: string; en: string; level?: 'sensitive' | 'high' }[] = [
+  { key: 'profile_min', zh: '目标/体重', en: 'Goals' },
   { key: 'training', zh: '训练记录', en: 'Training' },
-  { key: 'injuries', zh: '伤病记录', en: 'Injuries', sensitive: true },
+  { key: 'injuries', zh: '伤病记录', en: 'Injuries', level: 'sensitive' },
+  { key: 'basics', zh: '基础资料', en: 'Basics' },
+  { key: 'training_env', zh: '训练环境', en: 'Environment' },
+  { key: 'supplements', zh: '补剂', en: 'Supplements' },
+  { key: 'food', zh: '饮食', en: 'Food' },
+  { key: 'notes', zh: '笔记', en: 'Notes' },
+  { key: 'medical', zh: '医疗背景', en: 'Medical', level: 'high' },
 ]
 
 export function AssistantScreen() {
@@ -39,7 +47,7 @@ export function AssistantScreen() {
   const [rooms, setRooms] = useState<Chatroom[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [memoryOpen, setMemoryOpen] = useState(false)
+  const [rightPanel, setRightPanel] = useState<null | 'memory' | 'data'>(null)
   const [messages, setMessages] = useState<Msg[]>([])
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
@@ -119,7 +127,17 @@ export function AssistantScreen() {
 
   async function onTogglePerm(cat: ChatroomPermCategory) {
     if (!activeRoom) return
-    const next = { ...activeRoom.perms, [cat]: !activeRoom.perms[cat] }
+    const turningOn = !activeRoom.perms[cat]
+    // High-sensitivity (medical): require an explicit confirm to enable.
+    if (turningOn && PERM_CATS.find((c) => c.key === cat)?.level === 'high') {
+      const ok = window.confirm(
+        lang === 'zh'
+          ? '允许这个聊天室读取你的医疗背景?这属于高敏感信息,AI 会用它来注意运动安全。'
+          : 'Let this room read your medical background? This is highly sensitive; the AI uses it for exercise safety.',
+      )
+      if (!ok) return
+    }
+    const next = { ...activeRoom.perms, [cat]: turningOn }
     await updateChatroomPerms(activeRoom.id, next)
     await refreshRooms()
   }
@@ -180,13 +198,22 @@ export function AssistantScreen() {
             ☰
           </button>
           <span className="asst-roomhead">{activeRoom?.name ?? ''}</span>
-          <button
-            className={`asst-mem-toggle ${memoryOpen ? 'is-on' : ''}`}
-            type="button"
-            onClick={() => setMemoryOpen((o) => !o)}
-          >
-            {lang === 'zh' ? '记忆' : 'Memory'}
-          </button>
+          <span className="asst-right-tabs">
+            <button
+              className={`asst-mem-toggle ${rightPanel === 'memory' ? 'is-on' : ''}`}
+              type="button"
+              onClick={() => setRightPanel((p) => (p === 'memory' ? null : 'memory'))}
+            >
+              {lang === 'zh' ? '记忆' : 'Memory'}
+            </button>
+            <button
+              className={`asst-mem-toggle ${rightPanel === 'data' ? 'is-on' : ''}`}
+              type="button"
+              onClick={() => setRightPanel((p) => (p === 'data' ? null : 'data'))}
+            >
+              {lang === 'zh' ? '资料' : 'Data'}
+            </button>
+          </span>
         </div>
 
         {activeRoom && (
@@ -196,7 +223,7 @@ export function AssistantScreen() {
               <button
                 key={c.key}
                 type="button"
-                className={`asst-perm ${activeRoom.perms[c.key] ? 'is-on' : ''} ${c.sensitive ? 'sensitive' : ''}`}
+                className={`asst-perm ${activeRoom.perms[c.key] ? 'is-on' : ''} ${c.level ? `lvl-${c.level}` : ''}`}
                 onClick={() => onTogglePerm(c.key)}
               >
                 {activeRoom.perms[c.key] ? '✓ ' : ''}
@@ -243,7 +270,8 @@ export function AssistantScreen() {
         </form>
       </div>
 
-      {memoryOpen && activeRoom && <MemoryPanel room={activeRoom} rooms={rooms} lang={lang} />}
+      {rightPanel === 'memory' && activeRoom && <MemoryPanel room={activeRoom} rooms={rooms} lang={lang} />}
+      {rightPanel === 'data' && <DataPanel lang={lang} />}
     </div>
   )
 }

@@ -25,6 +25,15 @@ import type {
   ChatroomMemoryAccess,
   ChatMessage,
   Insight,
+  Basics,
+  BodyMeasurement,
+  Note,
+  Supplement,
+  TrainingEnv,
+  MedicalBackground,
+  FoodLog,
+  PublicFile,
+  ChatroomFileAccess,
 } from '../supabase/types'
 
 export class TrainingHubDB extends Dexie {
@@ -43,6 +52,15 @@ export class TrainingHubDB extends Dexie {
   chatroom_summaries!: Table<ChatroomSummary, string>
   chatroom_memories!: Table<ChatroomMemory, string>
   chatroom_memory_access!: Table<ChatroomMemoryAccess, string>
+  basics!: Table<Basics, string>
+  body_measurements!: Table<BodyMeasurement, string>
+  notes!: Table<Note, string>
+  supplements!: Table<Supplement, string>
+  training_env!: Table<TrainingEnv, string>
+  medical_background!: Table<MedicalBackground, string>
+  food_log!: Table<FoodLog, string>
+  public_files!: Table<PublicFile, string>
+  chatroom_file_access!: Table<ChatroomFileAccess, string>
   chat_messages!: Table<ChatMessage, string>
   insights!: Table<Insight, string>
   // Local-only (never synced): compressed injury photos (§6A Phase 4).
@@ -99,6 +117,21 @@ export class TrainingHubDB extends Dexie {
       chatroom_summaries: 'id, chatroom_id, updated_at',
       chatroom_memories: 'id, chatroom_id, updated_at',
       chatroom_memory_access: 'id, reader_room_id, source_room_id, updated_at',
+    })
+    // v8: AI pre-fillable data modules (P6).
+    this.version(8).stores({
+      basics: 'id, user_id, updated_at',
+      body_measurements: 'id, date, updated_at',
+      notes: 'id, tag, updated_at',
+      supplements: 'id, updated_at',
+      training_env: 'id, user_id, updated_at',
+      medical_background: 'id, user_id, updated_at',
+    })
+    // v9: food log + public files (P6c / P5).
+    this.version(9).stores({
+      food_log: 'id, eaten_at, updated_at',
+      public_files: 'id, updated_at',
+      chatroom_file_access: 'id, chatroom_id, file_id, updated_at',
     })
   }
 }

@@ -362,6 +362,80 @@ export interface Insight extends SyncFields {
   superseded_by: string | null       // null = current
 }
 
+// ─── AI pre-fillable data modules (PLAN-ai-chatrooms P6 / §3.1) ─────────────
+export interface Basics extends SyncFields {
+  age: number | null
+  sex: string | null
+  biological_sex: string | null
+  height_cm: number | null
+  training_years: number | null
+  training_level: string | null
+  work_type: string | null
+  sleep_hours: number | null
+  resting_hr: number | null          // sensitive
+  max_hr: number | null              // sensitive
+}
+
+export interface BodyMeasurement extends SyncFields {
+  date: string
+  weight_kg: number | null
+  body_fat_pct: number | null        // sensitive
+  muscle_kg: number | null           // sensitive
+  waist_cm: number | null            // sensitive
+}
+
+export type NoteTag = 'training' | 'injury' | 'goal' | 'habit' | 'medical' | 'equipment' | 'other'
+export interface Note extends SyncFields {
+  content: string
+  tag: NoteTag | null                // medical-tagged notes are treated as sensitive
+  created_at: string
+}
+
+export interface Supplement extends SyncFields {
+  name: string
+  brand: string | null
+  dose: string | null
+  timing: string | null
+  frequency: string | null
+  still_using: boolean
+}
+
+export interface TrainingEnv extends SyncFields {
+  gym: string | null
+  equipment: string | null
+  home_equipment: string | null
+}
+
+// High-sensitivity (default off per room; AI uses it for exercise safety).
+export interface MedicalBackground extends SyncFields {
+  conditions: string | null
+  surgeries: string | null
+  restrictions: string | null
+  allergies: string | null
+  family_history: string | null
+  recent_labs: string | null
+}
+
+export interface FoodLog extends SyncFields {
+  description: string
+  photo_path: string | null
+  eaten_at: string
+}
+
+// Small uploaded reference file. `content` = extracted text (text files); a capped
+// excerpt is what the assistant reads. Access is per-room via ChatroomFileAccess.
+export interface PublicFile extends SyncFields {
+  name: string
+  storage_path: string | null
+  content: string | null
+  created_at: string
+}
+
+export interface ChatroomFileAccess extends SyncFields {
+  chatroom_id: string
+  file_id: string
+}
+
 // ─── Table registry (table name → row type) ─────────────────────────────────
 export interface Database {
   exercises: Exercise
@@ -381,6 +455,15 @@ export interface Database {
   chatroom_memory_access: ChatroomMemoryAccess
   chat_messages: ChatMessage
   insights: Insight
+  basics: Basics
+  body_measurements: BodyMeasurement
+  notes: Note
+  supplements: Supplement
+  training_env: TrainingEnv
+  medical_background: MedicalBackground
+  food_log: FoodLog
+  public_files: PublicFile
+  chatroom_file_access: ChatroomFileAccess
 }
 
 export type TableName = keyof Database

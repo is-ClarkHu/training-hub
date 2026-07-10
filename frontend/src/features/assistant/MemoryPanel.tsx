@@ -11,8 +11,11 @@ import {
   deleteChatroomMemory,
   getMemoryAccess,
   setMemoryAccess,
+  getPublicFiles,
+  getFileAccess,
+  setFileAccess,
 } from '../../db'
-import type { Chatroom, ChatroomMemory, ChatroomSummary } from '../../supabase/types'
+import type { Chatroom, ChatroomMemory, ChatroomSummary, PublicFile } from '../../supabase/types'
 
 export function MemoryPanel({
   room,
@@ -26,17 +29,23 @@ export function MemoryPanel({
   const [summary, setSummary] = useState<ChatroomSummary | null>(null)
   const [memories, setMemories] = useState<ChatroomMemory[]>([])
   const [accessIds, setAccessIds] = useState<string[]>([])
+  const [files, setFiles] = useState<PublicFile[]>([])
+  const [fileAccessIds, setFileAccessIds] = useState<string[]>([])
   const [newText, setNewText] = useState('')
 
   async function reload() {
-    const [s, m, a] = await Promise.all([
+    const [s, m, a, fl, fa] = await Promise.all([
       getChatroomSummary(room.id),
       getChatroomMemories(room.id),
       getMemoryAccess(room.id),
+      getPublicFiles(),
+      getFileAccess(room.id),
     ])
     setSummary(s)
     setMemories(m)
     setAccessIds(a)
+    setFiles(fl)
+    setFileAccessIds(fa)
   }
 
   useEffect(() => {
@@ -85,6 +94,11 @@ export function MemoryPanel({
 
   async function onToggleAccess(sourceId: string, on: boolean) {
     await setMemoryAccess(room.id, sourceId, on)
+    await reload()
+  }
+
+  async function onToggleFile(fileId: string, on: boolean) {
+    await setFileAccess(room.id, fileId, on)
     await reload()
   }
 
@@ -162,6 +176,27 @@ export function MemoryPanel({
                   onChange={(e) => onToggleAccess(r.id, e.target.checked)}
                 />
                 {r.name}
+              </label>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="asst-mem-sec">
+        <h4>{lang === 'zh' ? '本室可读的公共文件' : 'Files this room can read'}</h4>
+        {files.length === 0 && (
+          <p className="asst-hint">{lang === 'zh' ? '还没有公共文件(在「资料」页上传)。' : 'No files yet (upload in the Data tab).'}</p>
+        )}
+        <ul className="asst-mem-access">
+          {files.map((f) => (
+            <li key={f.id}>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={fileAccessIds.includes(f.id)}
+                  onChange={(e) => onToggleFile(f.id, e.target.checked)}
+                />
+                {f.name}
               </label>
             </li>
           ))}

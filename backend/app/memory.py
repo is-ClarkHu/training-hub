@@ -23,6 +23,9 @@ RECENT_DAYS = 56  # ~8 weeks
 MAX_CHAT_MESSAGES = 12          # verbatim recent tail kept out of the summary
 MAX_UNFOLDED = MAX_CHAT_MESSAGES + 12  # safety cap on messages shown since the watermark
 MAX_INSIGHTS = 3
+MAX_NOTES = 10
+MAX_FOOD = 8
+FILE_EXCERPT_CHARS = 1500  # capped excerpt per authorized reference file
 MAX_SHARED_MEMORIES = 8  # cross-room shared memory units pulled in per answer
 
 # Rolling summary (P4): fold aged-out messages into the room summary once this many
@@ -163,6 +166,133 @@ def build_memory_context(
             lines.append("")
             sources.append("Prior AI insights")
 
+    # ── Basic info (perms: basics) ────────────────────────────────────
+    if allowed("basics"):
+        b = _rows(sb.table("basics").select("*").eq("deleted", False).limit(1).execute())
+        bm = _rows(
+            sb.table("body_measurements").select("*").eq("deleted", False).order("date", desc=True).limit(3).execute()
+        )
+        blines: list[str] = []
+        if b:
+            r = b[0]
+            fields = [
+                ("Age", r.get("age")),
+                ("Sex", r.get("sex")),
+                ("Height", f"{r['height_cm']} cm" if r.get("height_cm") else None),
+                ("Training level", r.get("training_level")),
+                ("Training years", r.get("training_years")),
+                ("Work type", r.get("work_type")),
+                ("Sleep", f"{r['sleep_hours']} h" if r.get("sleep_hours") else None),
+                ("Resting HR", r.get("resting_hr")),
+                ("Max HR", r.get("max_hr")),
+            ]
+            blines += [f"{k}: {v}" for k, v in fields if v not in (None, "")]
+        if bm:
+            latest = bm[0]
+            meas = [
+                ("Weight", f"{latest['weight_kg']} kg" if latest.get("weight_kg") else None),
+                ("Body fat", f"{latest['body_fat_pct']}%" if latest.get("body_fat_pct") else None),
+                ("Muscle", f"{latest['muscle_kg']} kg" if latest.get("muscle_kg") else None),
+                ("Waist", f"{latest['waist_cm']} cm" if latest.get("waist_cm") else None),
+            ]
+            cur = ", ".join(f"{k} {v}" for k, v in meas if v)
+            if cur:
+                blines.append(f"Latest measurements ({latest['date']}): {cur}")
+            weights = [(m["date"], m["weight_kg"]) for m in bm if m.get("weight_kg") is not None]
+            if len(weights) >= 2:
+                blines.append(
+                    f"Weight trend: {weights[-1][1]} kg ({weights[-1][0]}) -> {weights[0][1]} kg ({weights[0][0]})"
+                )
+        if blines:
+            lines.append("== Basic info ==")
+            lines.extend(blines)
+            lines.append("")
+            sources.append("Basic info")
+
+    # ── Training environment (perms: training_env) ────────────────────
+    if allowed("training_env"):
+        te = _rows(sb.table("training_env").select("*").eq("deleted", False).limit(1).execute())
+        if te:
+            r = te[0]
+            tl = [
+                f"{k}: {r[c]}"
+                for k, c in [("Gym", "gym"), ("Equipment", "equipment"), ("Home equipment", "home_equipment")]
+                if r.get(c)
+            ]
+            if tl:
+                lines.append("== Training environment ==")
+                lines.extend(tl)
+                lines.append("")
+                sources.append("Training environment")
+
+    # ── Supplements (perms: supplements) — only what's still in use ────
+    if allowed("supplements"):
+        sup = _rows(
+            sb.table("supplements").select("*").eq("still_using", True).eq("deleted", False).execute()
+        )
+        if sup:
+            lines.append("== Current supplements ==")
+            for s in sup:
+                parts = [s.get("name") or ""]
+                if s.get("brand"):
+                    parts.append(f"({s['brand']})")
+                if s.get("dose"):
+                    parts.append(str(s["dose"]))
+                if s.get("frequency"):
+                    parts.append(str(s["frequency"]))
+                lines.append("- " + " ".join(p for p in parts if p))
+            lines.append("")
+            sources.append("Supplements")
+
+    # ── Notes (perms: notes) ──────────────────────────────────────────
+    if allowed("notes"):
+        nts = _rows(
+            sb.table("notes").select("*").eq("deleted", False).order("created_at", desc=True).limit(MAX_NOTES).execute()
+        )
+        if nts:
+            lines.append("== Notes ==")
+            for n in nts:
+                tag = f"[{n['tag']}] " if n.get("tag") else ""
+                lines.append(f"- {tag}{n['content']}")
+            lines.append("")
+            sources.append("Notes")
+
+    # ── Medical background (perms: medical — HIGH-SENSITIVITY) ─────────
+    if allowed("medical"):
+        med = _rows(sb.table("medical_background").select("*").eq("deleted", False).limit(1).execute())
+        if med:
+            r = med[0]
+            ml = [
+                f"{k}: {r[c]}"
+                for k, c in [
+                    ("Conditions", "conditions"),
+                    ("Surgeries", "surgeries"),
+                    ("Exercise restrictions", "restrictions"),
+                    ("Allergies", "allergies"),
+                    ("Family history", "family_history"),
+                    ("Recent labs", "recent_labs"),
+                ]
+                if r.get(c)
+            ]
+            if ml:
+                lines.append("== Medical background (handle with care; respect restrictions & allergies) ==")
+                lines.extend(ml)
+                lines.append("")
+                sources.append("Medical background")
+
+    # ── Food log (perms: food) — text descriptions only (§4.5) ────────
+    if allowed("food"):
+        food = _rows(
+            sb.table("food_log").select("*").eq("deleted", False).order("eaten_at", desc=True).limit(MAX_FOOD).execute()
+        )
+        food = [f for f in food if (f.get("description") or "").strip()]
+        if food:
+            lines.append("== Recent food log ==")
+            for f in food:
+                lines.append(f"- {str(f.get('eaten_at', ''))[:10]}: {f['description']}")
+            lines.append("")
+            sources.append("Food log")
+
     # ── Shared memory from other rooms (authorized only; NEVER inherits the source
     #    room's raw data or full chat — only its flagged memory units, req §6.4) ──
     if chatroom_id:
@@ -186,6 +316,27 @@ def build_memory_context(
                 lines.append("")
                 for rn in sorted({room_names.get(m["chatroom_id"], "another room") for m in mems}):
                     sources.append(f"Memory · {rn}")
+
+    # ── Reference files this room may read (per-file grant; capped excerpt) ──
+    if chatroom_id:
+        fgrants = _rows(
+            sb.table("chatroom_file_access").select("file_id").eq("chatroom_id", chatroom_id).eq("deleted", False).execute()
+        )
+        file_ids = [g["file_id"] for g in fgrants]
+        if file_ids:
+            files = _rows(
+                sb.table("public_files").select("*").in_("id", file_ids).eq("deleted", False).execute()
+            )
+            if files:
+                lines.append("== Reference files ==")
+                for f in files:
+                    excerpt = (f.get("content") or "").strip()
+                    if excerpt:
+                        lines.append(f"[{f['name']}]\n{excerpt[:FILE_EXCERPT_CHARS]}")
+                    else:
+                        lines.append(f"[{f['name']}] (no readable text extracted)")
+                    lines.append("")
+                    sources.append(f"File · {f['name']}")
 
     # ── Room memory + recent conversation (always — the room's own history) ──
     summary_row = None

@@ -6,6 +6,8 @@ import { newId, nowIso, today } from './helpers'
 import { currentUserId, supabase } from '../supabase/client'
 import { FRISBEE_FIELDS } from '../supabase/types'
 import type {
+  Basics,
+  BodyMeasurement,
   BodyPart,
   Chatroom,
   ChatroomPerms,
@@ -13,6 +15,12 @@ import type {
   ChatroomSummary,
   CycleDay,
   Exercise,
+  FoodLog,
+  MedicalBackground,
+  Note,
+  PublicFile,
+  Supplement,
+  TrainingEnv,
   ExerciseSet,
   Injury,
   InjuryAssessment,
@@ -829,6 +837,183 @@ export async function reorderChatrooms(orderedIds: string[]): Promise<void> {
   for (let i = 0; i < orderedIds.length; i++) {
     const r = await db.chatrooms.get(orderedIds[i])
     if (r && r.sort_order !== i) await db.chatrooms.put({ ...r, sort_order: i, updated_at: ts })
+  }
+}
+
+// ── AI pre-fillable data modules (P6) ────────────────────────
+// Single-row modules: one row per user, upserted.
+export async function getBasics(): Promise<Basics | null> {
+  return (await db.basics.toArray()).find((r) => !r.deleted) ?? null
+}
+export async function saveBasics(patch: Partial<Basics>): Promise<Basics> {
+  const existing = await getBasics()
+  const base: Basics = existing ?? {
+    ...syncFields(),
+    age: null, sex: null, biological_sex: null, height_cm: null,
+    training_years: null, training_level: null, work_type: null,
+    sleep_hours: null, resting_hr: null, max_hr: null,
+  }
+  const row: Basics = { ...base, ...patch, updated_at: nowIso() }
+  await db.basics.put(row)
+  return row
+}
+
+export async function getTrainingEnv(): Promise<TrainingEnv | null> {
+  return (await db.training_env.toArray()).find((r) => !r.deleted) ?? null
+}
+export async function saveTrainingEnv(patch: Partial<TrainingEnv>): Promise<TrainingEnv> {
+  const existing = await getTrainingEnv()
+  const base: TrainingEnv = existing ?? { ...syncFields(), gym: null, equipment: null, home_equipment: null }
+  const row: TrainingEnv = { ...base, ...patch, updated_at: nowIso() }
+  await db.training_env.put(row)
+  return row
+}
+
+export async function getMedicalBackground(): Promise<MedicalBackground | null> {
+  return (await db.medical_background.toArray()).find((r) => !r.deleted) ?? null
+}
+export async function saveMedicalBackground(patch: Partial<MedicalBackground>): Promise<MedicalBackground> {
+  const existing = await getMedicalBackground()
+  const base: MedicalBackground = existing ?? {
+    ...syncFields(),
+    conditions: null, surgeries: null, restrictions: null,
+    allergies: null, family_history: null, recent_labs: null,
+  }
+  const row: MedicalBackground = { ...base, ...patch, updated_at: nowIso() }
+  await db.medical_background.put(row)
+  return row
+}
+
+// List modules: many rows per user.
+export async function getBodyMeasurements(): Promise<BodyMeasurement[]> {
+  const all = await db.body_measurements.toArray()
+  return all.filter((m) => !m.deleted).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+}
+export async function addBodyMeasurement(m: Omit<BodyMeasurement, keyof ReturnType<typeof syncFields>>): Promise<BodyMeasurement> {
+  const row: BodyMeasurement = { ...syncFields(), ...m }
+  await db.body_measurements.add(row)
+  return row
+}
+export async function deleteBodyMeasurement(id: string): Promise<void> {
+  const m = await db.body_measurements.get(id)
+  if (m) await db.body_measurements.put({ ...m, deleted: true, updated_at: nowIso() })
+}
+
+export async function getNotes(): Promise<Note[]> {
+  const all = await db.notes.toArray()
+  return all.filter((n) => !n.deleted).sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+}
+export async function createNote(content: string, tag: Note['tag'] = null): Promise<Note> {
+  const row: Note = { ...syncFields(), content: content.trim(), tag, created_at: nowIso() }
+  await db.notes.add(row)
+  return row
+}
+export async function updateNote(id: string, patch: Partial<Pick<Note, 'content' | 'tag'>>): Promise<void> {
+  const n = await db.notes.get(id)
+  if (n) await db.notes.put({ ...n, ...patch, updated_at: nowIso() })
+}
+export async function deleteNote(id: string): Promise<void> {
+  const n = await db.notes.get(id)
+  if (n) await db.notes.put({ ...n, deleted: true, updated_at: nowIso() })
+}
+
+export async function getSupplements(): Promise<Supplement[]> {
+  const all = await db.supplements.toArray()
+  return all.filter((s) => !s.deleted).sort((a, b) => Number(b.still_using) - Number(a.still_using))
+}
+export async function createSupplement(s: Pick<Supplement, 'name' | 'brand' | 'dose' | 'timing' | 'frequency'>): Promise<Supplement> {
+  const row: Supplement = { ...syncFields(), still_using: true, ...s }
+  await db.supplements.add(row)
+  return row
+}
+export async function updateSupplement(id: string, patch: Partial<Omit<Supplement, keyof ReturnType<typeof syncFields>>>): Promise<void> {
+  const s = await db.supplements.get(id)
+  if (s) await db.supplements.put({ ...s, ...patch, updated_at: nowIso() })
+}
+export async function deleteSupplement(id: string): Promise<void> {
+  const s = await db.supplements.get(id)
+  if (s) await db.supplements.put({ ...s, deleted: true, updated_at: nowIso() })
+}
+
+// ── food log (P6c) ───────────────────────────────────────────
+const FOOD_BUCKET = 'food-photos'
+const FILE_BUCKET = 'public-files'
+
+export async function getFoodLog(): Promise<FoodLog[]> {
+  const all = await db.food_log.toArray()
+  return all.filter((f) => !f.deleted).sort((a, b) => (a.eaten_at < b.eaten_at ? 1 : -1))
+}
+export async function createFoodLog(description: string, eatenAt: string, photoDataUrl?: string): Promise<FoodLog> {
+  const base = syncFields()
+  let photo_path: string | null = null
+  if (photoDataUrl && currentUserId()) {
+    const path = `${currentUserId()}/${base.id}.jpg`
+    const { error } = await supabase.storage.from(FOOD_BUCKET).upload(path, dataUrlToBlob(photoDataUrl), {
+      upsert: true,
+      contentType: 'image/jpeg',
+    })
+    if (!error) photo_path = path
+  }
+  const row: FoodLog = { ...base, description: description.trim(), photo_path, eaten_at: eatenAt }
+  await db.food_log.add(row)
+  return row
+}
+export async function getFoodPhotoUrl(path: string): Promise<string | null> {
+  const { data, error } = await supabase.storage.from(FOOD_BUCKET).createSignedUrl(path, 3600)
+  return error || !data ? null : data.signedUrl
+}
+export async function deleteFoodLog(id: string): Promise<void> {
+  const f = await db.food_log.get(id)
+  if (f) {
+    if (f.photo_path) await supabase.storage.from(FOOD_BUCKET).remove([f.photo_path])
+    await db.food_log.put({ ...f, deleted: true, updated_at: nowIso() })
+  }
+}
+
+// ── public files (P5) ────────────────────────────────────────
+export async function getPublicFiles(): Promise<PublicFile[]> {
+  const all = await db.public_files.toArray()
+  return all.filter((f) => !f.deleted).sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+}
+/** Upload a file: text is extracted into `content` (for the assistant); the raw
+ *  file is also stored in the private bucket. */
+export async function createPublicFile(file: File): Promise<PublicFile> {
+  const base = syncFields()
+  let storage_path: string | null = null
+  let content: string | null = null
+  if (currentUserId()) {
+    const path = `${currentUserId()}/${base.id}-${file.name}`
+    const { error } = await supabase.storage.from(FILE_BUCKET).upload(path, file, { upsert: true })
+    if (!error) storage_path = path
+  }
+  if (file.type.startsWith('text/') || /\.(txt|md|csv|json)$/i.test(file.name)) {
+    content = (await file.text()).slice(0, 20000)
+  }
+  const row: PublicFile = { ...base, name: file.name, storage_path, content, created_at: nowIso() }
+  await db.public_files.add(row)
+  return row
+}
+export async function deletePublicFile(id: string): Promise<void> {
+  const f = await db.public_files.get(id)
+  if (f) {
+    if (f.storage_path) await supabase.storage.from(FILE_BUCKET).remove([f.storage_path])
+    await db.public_files.put({ ...f, deleted: true, updated_at: nowIso() })
+  }
+}
+
+/** File ids the given room may read. */
+export async function getFileAccess(chatroomId: string): Promise<string[]> {
+  const all = await db.chatroom_file_access.where('chatroom_id').equals(chatroomId).toArray()
+  return all.filter((a) => !a.deleted).map((a) => a.file_id)
+}
+export async function setFileAccess(chatroomId: string, fileId: string, on: boolean): Promise<void> {
+  const all = await db.chatroom_file_access.where('chatroom_id').equals(chatroomId).toArray()
+  const existing = all.find((a) => a.file_id === fileId)
+  if (on) {
+    if (existing) await db.chatroom_file_access.put({ ...existing, deleted: false, updated_at: nowIso() })
+    else await db.chatroom_file_access.add({ ...syncFields(), chatroom_id: chatroomId, file_id: fileId })
+  } else if (existing && !existing.deleted) {
+    await db.chatroom_file_access.put({ ...existing, deleted: true, updated_at: nowIso() })
   }
 }
 
