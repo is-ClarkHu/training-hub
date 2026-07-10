@@ -23,6 +23,7 @@ const TABLES: TableName[] = [
   'cycle_rounds',
   'optional_trackers',
   'translation_dictionary',
+  'chatrooms',
   'chat_messages',
   'insights',
 ]

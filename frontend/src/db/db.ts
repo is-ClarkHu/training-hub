@@ -19,6 +19,7 @@ import type {
   CycleRound,
   OptionalTracker,
   TranslationDictionaryRow,
+  Chatroom,
   ChatMessage,
   Insight,
 } from '../supabase/types'
@@ -35,6 +36,7 @@ export class TrainingHubDB extends Dexie {
   cycle_rounds!: Table<CycleRound, string>
   optional_trackers!: Table<OptionalTracker, string>
   translation_dictionary!: Table<TranslationDictionaryRow, string>
+  chatrooms!: Table<Chatroom, string>
   chat_messages!: Table<ChatMessage, string>
   insights!: Table<Insight, string>
   // Local-only (never synced): compressed injury photos (§6A Phase 4).
@@ -77,6 +79,10 @@ export class TrainingHubDB extends Dexie {
     // v4: training-cycle rounds (§6B) — one pass through the cycle's days.
     this.version(4).stores({
       cycle_rounds: 'id, cycle_id, updated_at',
+    })
+    // v5: AI multi-chatroom (PLAN-ai-chatrooms) — rooms grouping chat by topic.
+    this.version(5).stores({
+      chatrooms: 'id, sort_order, updated_at',
     })
   }
 }

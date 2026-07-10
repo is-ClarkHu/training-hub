@@ -53,6 +53,10 @@ export {
   deleteTrackerEntry,
   updateTrackerEntry,
   deleteAllTracker,
+  createChatroom,
+  getChatrooms,
+  renameChatroom,
+  reorderChatrooms,
 } from './records'
 export type {
   NewExerciseInput,

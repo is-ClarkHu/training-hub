@@ -7,6 +7,7 @@ import { currentUserId, supabase } from '../supabase/client'
 import { FRISBEE_FIELDS } from '../supabase/types'
 import type {
   BodyPart,
+  Chatroom,
   CycleDay,
   Exercise,
   ExerciseSet,
@@ -660,6 +661,50 @@ export async function deleteAllTracker(tracker: TrackerType): Promise<void> {
   const all = await db.optional_trackers.toArray()
   const rows = all.filter((t) => t.tracker === tracker && !t.deleted)
   await db.optional_trackers.bulkPut(rows.map((t) => ({ ...t, deleted: true, updated_at: ts })))
+}
+
+// ── chatrooms (AI multi-chatroom; PLAN-ai-chatrooms) ─────────
+/** Create a room, appended to the end of the list. `perms` starts empty (nothing
+ *  granted — the AI reads no personal data until the user opts a category in). */
+export async function createChatroom(name: string, topic = ''): Promise<Chatroom> {
+  const rooms = await db.chatrooms.toArray()
+  const maxSort = rooms.filter((r) => !r.deleted).reduce((m, r) => Math.max(m, r.sort_order), -1)
+  const row: Chatroom = {
+    ...syncFields(),
+    name: name.trim(),
+    topic: topic.trim(),
+    sort_order: maxSort + 1,
+    perms: {},
+    created_at: nowIso(),
+  }
+  await db.chatrooms.add(row)
+  return row
+}
+
+/** Live rooms, ordered by sort_order then creation time. */
+export async function getChatrooms(): Promise<Chatroom[]> {
+  const all = await db.chatrooms.toArray()
+  return all
+    .filter((r) => !r.deleted)
+    .sort((a, b) => a.sort_order - b.sort_order || (a.created_at < b.created_at ? -1 : 1))
+}
+
+/** Rename a room (and optionally its topic blurb). */
+export async function renameChatroom(id: string, name: string, topic?: string): Promise<void> {
+  const r = await db.chatrooms.get(id)
+  if (!r) return
+  const next: Chatroom = { ...r, name: name.trim(), updated_at: nowIso() }
+  if (topic !== undefined) next.topic = topic.trim()
+  await db.chatrooms.put(next)
+}
+
+/** Persist a new room order (array of ids in display order → sort_order 0..n). */
+export async function reorderChatrooms(orderedIds: string[]): Promise<void> {
+  const ts = nowIso()
+  for (let i = 0; i < orderedIds.length; i++) {
+    const r = await db.chatrooms.get(orderedIds[i])
+    if (r && r.sort_order !== i) await db.chatrooms.put({ ...r, sort_order: i, updated_at: ts })
+  }
 }
 
 // ── History reads / edits (§7.2) ─────────────────────────────

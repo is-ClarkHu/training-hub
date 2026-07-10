@@ -298,6 +298,31 @@ export interface TranslationDictionaryRow extends SyncFields {
   verified: boolean                  // user-confirmed; protects from AI overwrite
 }
 
+// ─── AI multi-chatroom (PLAN-ai-chatrooms) ──────────────────────────────────
+// Per-category read-permission keys. `intimacy` is deliberately absent — it is
+// hard-isolated and never reaches the AI. `medical` is high-sensitivity but
+// AI-usable (default off per room). Track A uses profile_min/training/injuries;
+// Track B adds the rest.
+export type ChatroomPermCategory =
+  | 'profile_min'
+  | 'training'
+  | 'injuries'
+  | 'basics'
+  | 'training_env'
+  | 'food'
+  | 'supplements'
+  | 'notes'
+  | 'medical'
+export type ChatroomPerms = Partial<Record<ChatroomPermCategory, boolean>>
+
+export interface Chatroom extends SyncFields {
+  name: string
+  topic: string
+  sort_order: number
+  perms: ChatroomPerms                // per-category read switches; enforced backend-side
+  created_at: string
+}
+
 // Phase-2 tables (created empty now; §4.7)
 export interface ChatMessage extends SyncFields {
   role: ChatRole
@@ -325,6 +350,7 @@ export interface Database {
   cycle_rounds: CycleRound
   optional_trackers: OptionalTracker
   translation_dictionary: TranslationDictionaryRow
+  chatrooms: Chatroom
   chat_messages: ChatMessage
   insights: Insight
 }
