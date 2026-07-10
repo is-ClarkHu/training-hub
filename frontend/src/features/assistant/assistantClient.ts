@@ -3,7 +3,12 @@
 import { supabase } from '../../supabase/client'
 import { aiPayload, backendUrl } from '../../ai/config'
 
-export async function askAssistant(message: string, chatroomId?: string): Promise<string> {
+export interface AssistantReply {
+  reply: string
+  sources: string[] // human-readable labels of the data used this turn (§ sources_used)
+}
+
+export async function askAssistant(message: string, chatroomId?: string): Promise<AssistantReply> {
   const { data } = await supabase.auth.getSession()
   const token = data.session?.access_token
   if (!token) throw new Error('Not signed in')
@@ -17,6 +22,6 @@ export async function askAssistant(message: string, chatroomId?: string): Promis
     const detail = await res.text().catch(() => '')
     throw new Error(`Assistant error ${res.status}${detail ? `: ${detail}` : ''}`)
   }
-  const json = (await res.json()) as { reply: string }
-  return json.reply
+  const json = (await res.json()) as { reply: string; sources_used?: string[] }
+  return { reply: json.reply, sources: json.sources_used ?? [] }
 }

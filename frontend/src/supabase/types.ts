@@ -323,6 +323,29 @@ export interface Chatroom extends SyncFields {
   created_at: string
 }
 
+// One rolling summary per room (older turns compressed; P4).
+export interface ChatroomSummary extends SyncFields {
+  chatroom_id: string
+  content: string
+}
+
+// A concise memory unit belonging to its origin room. `shareable` units may be
+// read by other rooms via chatroom_memory_access (source relationship, not copied).
+export interface ChatroomMemory extends SyncFields {
+  chatroom_id: string                // origin room
+  content: string
+  shareable: boolean
+  pinned: boolean
+  created_at: string
+}
+
+// Grant: reader_room may read source_room's shareable memories. Never inherits the
+// source room's raw-data permissions or full chat (req §6.4).
+export interface ChatroomMemoryAccess extends SyncFields {
+  reader_room_id: string
+  source_room_id: string
+}
+
 // Phase-2 tables (created empty now; §4.7)
 export interface ChatMessage extends SyncFields {
   role: ChatRole
@@ -352,6 +375,9 @@ export interface Database {
   optional_trackers: OptionalTracker
   translation_dictionary: TranslationDictionaryRow
   chatrooms: Chatroom
+  chatroom_summaries: ChatroomSummary
+  chatroom_memories: ChatroomMemory
+  chatroom_memory_access: ChatroomMemoryAccess
   chat_messages: ChatMessage
   insights: Insight
 }

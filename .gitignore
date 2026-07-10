@@ -1,4 +1,6 @@
 # --- training-hub project (see SPEC §11 / §14) ---
+# macOS Finder metadata — local-only
+.DS_Store
 # Private build brief — never commit
 SPEC.md
 docs/

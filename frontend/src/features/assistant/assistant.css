@@ -1,3 +1,5 @@
+/* The assistant uses the full content width, not the app-wide 720px cap. */
+.app-main > .asst-layout { max-width: none; }
 .asst-layout {
   display: flex;
   gap: 12px;
@@ -53,7 +55,35 @@
   flex-direction: column;
   gap: 12px;
 }
-.asst-roomhead { font-size: 14px; font-weight: 600; color: var(--text); padding: 0 4px; }
+
+/* Header row: drawer toggle + active room name */
+.asst-header { display: flex; align-items: center; gap: 10px; }
+.asst-drawer-toggle {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  padding: 6px 10px;
+}
+.asst-roomhead { font-size: 15px; font-weight: 600; color: var(--text); }
+
+/* Per-room data-permission bar */
+.asst-perms { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 0 2px; }
+.asst-perms-label { font-size: 12px; color: var(--text-dim); }
+.asst-perm {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 4px 10px;
+}
+.asst-perm.is-on { background: var(--teal); border-color: var(--teal); color: #04181a; }
+.asst-perm.sensitive:not(.is-on) { border-style: dashed; }
 .asst-log {
   flex: 1;
   overflow-y: auto;
@@ -64,9 +94,10 @@
 }
 .asst-hint { color: var(--text-dim); font-size: 14px; }
 
-.asst-msg { display: flex; }
-.asst-msg.user { justify-content: flex-end; }
-.asst-msg.assistant { justify-content: flex-start; }
+.asst-msg { display: flex; flex-direction: column; }
+.asst-msg.user { align-items: flex-end; }
+.asst-msg.assistant { align-items: flex-start; }
+.asst-sources { font-size: 11px; color: var(--text-dim); margin-top: 3px; padding: 0 2px; }
 .asst-bubble {
   max-width: 80%;
   padding: 10px 13px;

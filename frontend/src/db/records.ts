@@ -8,6 +8,7 @@ import { FRISBEE_FIELDS } from '../supabase/types'
 import type {
   BodyPart,
   Chatroom,
+  ChatroomPerms,
   CycleDay,
   Exercise,
   ExerciseSet,
@@ -706,18 +707,50 @@ export async function renameChatroom(id: string, name: string, topic?: string): 
   await db.chatrooms.put(next)
 }
 
-/** Soft-delete a room and cascade its chat data (req §7.4). Messages are tombstoned
- *  so the delete syncs across devices. Raw training/injury/profile records are
- *  NEVER touched. Summaries / memories / cross-room access links join this cascade
- *  when those tables land in P4. */
+/** Soft-delete a room and cascade all its chat artefacts (req §7.4): messages,
+ *  the rolling summary, memory units, and both directions of its cross-room memory
+ *  grants. Everything is tombstoned so the delete syncs across devices. Raw
+ *  training/injury/profile records are NEVER touched. */
 export async function deleteChatroom(id: string): Promise<void> {
   const ts = nowIso()
-  await db.transaction('rw', db.chatrooms, db.chat_messages, async () => {
-    const room = await db.chatrooms.get(id)
-    if (room) await db.chatrooms.put({ ...room, deleted: true, updated_at: ts })
-    const msgs = await db.chat_messages.where('chatroom_id').equals(id).toArray()
-    await db.chat_messages.bulkPut(msgs.map((m) => ({ ...m, deleted: true, updated_at: ts })))
-  })
+  await db.transaction(
+    'rw',
+    db.chatrooms,
+    db.chat_messages,
+    db.chatroom_summaries,
+    db.chatroom_memories,
+    db.chatroom_memory_access,
+    async () => {
+      const room = await db.chatrooms.get(id)
+      if (room) await db.chatrooms.put({ ...room, deleted: true, updated_at: ts })
+
+      const tombstone = <T extends { deleted: boolean; updated_at: string }>(rows: T[]) =>
+        rows.map((r) => ({ ...r, deleted: true, updated_at: ts }))
+
+      const msgs = await db.chat_messages.where('chatroom_id').equals(id).toArray()
+      await db.chat_messages.bulkPut(tombstone(msgs))
+
+      const summaries = await db.chatroom_summaries.where('chatroom_id').equals(id).toArray()
+      await db.chatroom_summaries.bulkPut(tombstone(summaries))
+
+      const memories = await db.chatroom_memories.where('chatroom_id').equals(id).toArray()
+      await db.chatroom_memories.bulkPut(tombstone(memories))
+
+      // both directions: grants where this room reads, and where it is the source
+      const asReader = await db.chatroom_memory_access.where('reader_room_id').equals(id).toArray()
+      const asSource = await db.chatroom_memory_access.where('source_room_id').equals(id).toArray()
+      const links = new Map(([...asReader, ...asSource]).map((l) => [l.id, l]))
+      await db.chatroom_memory_access.bulkPut(tombstone([...links.values()]))
+    },
+  )
+}
+
+/** Set a room's data-read permission matrix. The backend re-reads this column at
+ *  answer time (never trusts the client), so this write is what actually gates
+ *  what the AI may read for this room. */
+export async function updateChatroomPerms(id: string, perms: ChatroomPerms): Promise<void> {
+  const r = await db.chatrooms.get(id)
+  if (r) await db.chatrooms.put({ ...r, perms, updated_at: nowIso() })
 }
 
 /** Persist a new room order (array of ids in display order → sort_order 0..n). */

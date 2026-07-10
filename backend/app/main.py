@@ -181,7 +181,16 @@ def translate(body: TranslateRequest, authorization: str = Header(default="")) -
 def assistant(body: AssistantRequest, authorization: str = Header(default="")) -> dict:
     sb, user_id = _user_client(_jwt(authorization))
     room = body.chatroom_id or None
-    context = build_memory_context(sb, user_id, room)
+
+    # Read the room's permission matrix from the DB (RLS-scoped) — never trust the
+    # client's toggles; enforcement happens here, at data-read time (req §14.4).
+    perms: dict = {}
+    if room:
+        pr = sb.table("chatrooms").select("perms").eq("id", room).limit(1).execute()
+        if pr.data:
+            perms = pr.data[0].get("perms") or {}
+
+    context, sources_used = build_memory_context(sb, user_id, room, perms)
     reply = _relay(body, f"{ASSISTANT_SYSTEM}\n\n{context}", body.message, 1500)
 
     ts = _now()
@@ -193,4 +202,4 @@ def assistant(body: AssistantRequest, authorization: str = Header(default="")) -
         sb.table("chat_messages").insert(rows).execute()
     except Exception:  # noqa: BLE001
         pass
-    return {"reply": reply}
+    return {"reply": reply, "sources_used": sources_used}

@@ -58,6 +58,7 @@ export {
   getChatrooms,
   renameChatroom,
   reorderChatrooms,
+  updateChatroomPerms,
   deleteChatroom,
 } from './records'
 export type {

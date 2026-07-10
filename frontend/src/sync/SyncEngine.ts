@@ -24,6 +24,9 @@ const TABLES: TableName[] = [
   'optional_trackers',
   'translation_dictionary',
   'chatrooms',
+  'chatroom_summaries',
+  'chatroom_memories',
+  'chatroom_memory_access',
   'chat_messages',
   'insights',
 ]

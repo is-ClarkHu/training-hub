@@ -20,6 +20,9 @@ import type {
   OptionalTracker,
   TranslationDictionaryRow,
   Chatroom,
+  ChatroomSummary,
+  ChatroomMemory,
+  ChatroomMemoryAccess,
   ChatMessage,
   Insight,
 } from '../supabase/types'
@@ -37,6 +40,9 @@ export class TrainingHubDB extends Dexie {
   optional_trackers!: Table<OptionalTracker, string>
   translation_dictionary!: Table<TranslationDictionaryRow, string>
   chatrooms!: Table<Chatroom, string>
+  chatroom_summaries!: Table<ChatroomSummary, string>
+  chatroom_memories!: Table<ChatroomMemory, string>
+  chatroom_memory_access!: Table<ChatroomMemoryAccess, string>
   chat_messages!: Table<ChatMessage, string>
   insights!: Table<Insight, string>
   // Local-only (never synced): compressed injury photos (§6A Phase 4).
@@ -87,6 +93,12 @@ export class TrainingHubDB extends Dexie {
     // v6: messages are scoped to a room — index chatroom_id for per-room reads.
     this.version(6).stores({
       chat_messages: 'id, chatroom_id, created_at, updated_at',
+    })
+    // v7: room memory lifecycle (P4) — rolling summaries, memory units, cross-room grants.
+    this.version(7).stores({
+      chatroom_summaries: 'id, chatroom_id, updated_at',
+      chatroom_memories: 'id, chatroom_id, updated_at',
+      chatroom_memory_access: 'id, reader_room_id, source_room_id, updated_at',
     })
   }
 }
