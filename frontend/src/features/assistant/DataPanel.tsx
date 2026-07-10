@@ -2,7 +2,9 @@
 // optional pre-fillable modules the assistant can read (per-room permission). All
 // fields optional. Medical is high-sensitivity — a room must be granted it and it
 // is never shared cross-room.
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { Chart, PointElement, LineElement, CategoryScale, LinearScale, Tooltip, Filler } from 'chart.js'
+import { Line } from 'react-chartjs-2'
 import {
   getBasics, saveBasics,
   getTrainingEnv, saveTrainingEnv,
@@ -18,6 +20,8 @@ import { describeFood } from './assistantClient'
 import type {
   Basics, BodyMeasurement, FoodLog, MedicalBackground, Note, NoteTag, PublicFile, Supplement, TrainingEnv,
 } from '../../supabase/types'
+
+Chart.register(PointElement, LineElement, CategoryScale, LinearScale, Tooltip, Filler)
 
 type L = 'zh' | 'en'
 const num = (v: string): number | null => (v.trim() === '' ? null : Number(v))
@@ -69,6 +73,14 @@ export function DataPanel({ lang }: { lang: L }) {
 
   const t = (zh: string, en: string) => (lang === 'zh' ? zh : en)
 
+  // Oldest→newest series for the trend chart (measurements come newest-first).
+  const trend = useMemo(() => {
+    const asc = [...measurements].reverse()
+    const pick = (key: 'weight_kg' | 'body_fat_pct') =>
+      asc.filter((m) => m[key] != null).map((m) => ({ x: m.date.slice(5), y: m[key] as number }))
+    return { weight: pick('weight_kg'), fat: pick('body_fat_pct') }
+  }, [measurements])
+
   return (
     <aside className="asst-memory asst-data">
       <p className="asst-hint">{t('都是可选的,填了对应聊天室授权后 AI 才会读。', 'All optional; the AI reads a module only in rooms you grant it.')}</p>
@@ -94,6 +106,28 @@ export function DataPanel({ lang }: { lang: L }) {
       {/* Body measurements */}
       <details>
         <summary>{t('体测趋势', 'Measurements')}</summary>
+        {(trend.weight.length >= 2 || trend.fat.length >= 2) && (
+          <div className="asst-chart">
+            <Line
+              data={{
+                labels: (trend.weight.length ? trend.weight : trend.fat).map((p) => p.x),
+                datasets: [
+                  ...(trend.weight.length >= 2 ? [{ label: t('体重kg', 'Weight'), data: trend.weight.map((p) => p.y), borderColor: '#4fd1e0', backgroundColor: 'rgba(79,209,224,0.12)', fill: true, tension: 0.3, pointRadius: 2 }] : []),
+                  ...(trend.fat.length >= 2 ? [{ label: t('体脂%', 'Body fat'), data: trend.fat.map((p) => p.y), borderColor: '#e0a24f', backgroundColor: 'transparent', fill: false, tension: 0.3, pointRadius: 2, yAxisID: 'y1' }] : []),
+                ],
+              }}
+              options={{
+                maintainAspectRatio: false,
+                plugins: { legend: { display: trend.fat.length >= 2, labels: { color: '#8b93a3', boxWidth: 10, font: { size: 10 } } } },
+                scales: {
+                  x: { grid: { display: false }, ticks: { color: '#8b93a3', font: { size: 9 }, maxRotation: 0 } },
+                  y: { grid: { color: 'rgba(255,255,255,0.06)' }, ticks: { color: '#8b93a3', font: { size: 9 } } },
+                  y1: { position: 'right', grid: { display: false }, ticks: { color: '#8b93a3', font: { size: 9 } }, display: trend.fat.length >= 2 },
+                },
+              }}
+            />
+          </div>
+        )}
         <div className="asst-data-grid">
           <label>{t('日期', 'Date')}<input className="th-input" type="date" value={mDraft.date ?? today()} onChange={(e) => setMDraft({ ...mDraft, date: e.target.value })} /></label>
           <label>{t('体重(kg)', 'Weight (kg)')}<input className="th-input" type="number" value={mDraft.weight_kg ?? ''} onChange={(e) => setMDraft({ ...mDraft, weight_kg: num(e.target.value) })} /></label>

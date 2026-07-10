@@ -135,6 +135,7 @@
 .asst-data-row label.is-stale { opacity: 0.5; text-decoration: line-through; }
 .asst-data-row button { background: none; border: none; color: var(--text-dim); cursor: pointer; }
 .asst-food-preview { max-width: 100%; border-radius: 8px; margin: 6px 0; }
+.asst-chart { height: 150px; margin: 8px 0; }
 
 /* Per-room data-permission bar */
 .asst-perms { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 0 2px; }

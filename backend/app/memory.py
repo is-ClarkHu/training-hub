@@ -24,6 +24,7 @@ MAX_CHAT_MESSAGES = 12          # verbatim recent tail kept out of the summary
 MAX_UNFOLDED = MAX_CHAT_MESSAGES + 12  # safety cap on messages shown since the watermark
 MAX_INSIGHTS = 3
 MAX_NOTES = 10
+MAX_MEASUREMENTS = 12  # body-measurement points fed as a trend series
 MAX_FOOD = 8
 FILE_EXCERPT_CHARS = 1500  # capped excerpt per authorized reference file
 MAX_SHARED_MEMORIES = 8  # cross-room shared memory units pulled in per answer
@@ -170,7 +171,7 @@ def build_memory_context(
     if allowed("basics"):
         b = _rows(sb.table("basics").select("*").eq("deleted", False).limit(1).execute())
         bm = _rows(
-            sb.table("body_measurements").select("*").eq("deleted", False).order("date", desc=True).limit(3).execute()
+            sb.table("body_measurements").select("*").eq("deleted", False).order("date", desc=True).limit(MAX_MEASUREMENTS).execute()
         )
         blines: list[str] = []
         if b:
@@ -198,11 +199,21 @@ def build_memory_context(
             cur = ", ".join(f"{k} {v}" for k, v in meas if v)
             if cur:
                 blines.append(f"Latest measurements ({latest['date']}): {cur}")
-            weights = [(m["date"], m["weight_kg"]) for m in bm if m.get("weight_kg") is not None]
-            if len(weights) >= 2:
-                blines.append(
-                    f"Weight trend: {weights[-1][1]} kg ({weights[-1][0]}) -> {weights[0][1]} kg ({weights[0][0]})"
-                )
+
+            # full recent trend series (oldest -> newest), so the AI sees trajectory
+            def _series(key: str, unit: str) -> str | None:
+                pts = [(m["date"], m[key]) for m in reversed(bm) if m.get(key) is not None]
+                return ", ".join(f"{v}{unit}({d})" for d, v in pts) if len(pts) >= 2 else None
+
+            for label, key, unit in [
+                ("Weight", "weight_kg", "kg"),
+                ("Body fat", "body_fat_pct", "%"),
+                ("Muscle", "muscle_kg", "kg"),
+                ("Waist", "waist_cm", "cm"),
+            ]:
+                s = _series(key, unit)
+                if s:
+                    blines.append(f"{label} trend: {s}")
         if blines:
             lines.append("== Basic info ==")
             lines.extend(blines)
