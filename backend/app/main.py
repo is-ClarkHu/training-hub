@@ -251,7 +251,7 @@ def assistant(body: AssistantRequest, authorization: str = Header(default="")) -
         if pr.data:
             perms = pr.data[0].get("perms") or {}
 
-    context, sources_used = build_memory_context(sb, user_id, room, perms)
+    context, sources_used = build_memory_context(sb, user_id, room, perms, body.message)
     raw = _relay(body, f"{ASSISTANT_SYSTEM}\n\n{context}", body.message, 1500)
 
     # Split off the optional [[MEMORY: ...]] suggestion; it never appears in chat.

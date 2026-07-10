@@ -18,6 +18,8 @@ from collections import Counter
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable
 
+from .aliases import expand_terms, mentioned_body_parts, relevance
+
 # How far back / how much to include (token-budget guards).
 RECENT_DAYS = 56  # ~8 weeks
 MAX_CHAT_MESSAGES = 12          # verbatim recent tail kept out of the summary
@@ -52,13 +54,15 @@ def _rows(resp: Any) -> list[dict]:
 
 
 def build_memory_context(
-    sb, user_id: str, chatroom_id: str | None = None, perms: dict | None = None
+    sb, user_id: str, chatroom_id: str | None = None, perms: dict | None = None, message: str = ""
 ) -> tuple[str, list[str]]:
     """Return `(context, sources_used)` for the system prompt.
 
     `sb` is a supabase client already scoped to the user (RLS). `perms` is the
     room's permission matrix ({category: bool}); only authorized categories are
-    queried. `sources_used` lists the labels of the data that actually made it in.
+    queried. `message` is the current question — used with the synonym/alias table
+    to focus retrieval (recall over synonyms). `sources_used` lists the labels of
+    the data that actually made it in.
     """
     perms = perms or {}
 
@@ -66,8 +70,14 @@ def build_memory_context(
         return bool(perms.get(cat))
 
     since = (date.today() - timedelta(days=RECENT_DAYS)).isoformat()
+    q_terms = expand_terms(message)
+    focus = mentioned_body_parts(message)
     lines: list[str] = []
     sources: list[str] = []
+
+    if focus:
+        lines.append(f"(Question focus: {', '.join(BODY_PART_LABELS.get(b, b) for b in focus)})")
+        lines.append("")
 
     # ── Basic profile (perms: profile_min) ────────────────────────────
     if allowed("profile_min"):
@@ -255,11 +265,14 @@ def build_memory_context(
             lines.append("")
             sources.append("Supplements")
 
-    # ── Notes (perms: notes) ──────────────────────────────────────────
+    # ── Notes (perms: notes) — rank by query relevance (synonyms), then recency ─
     if allowed("notes"):
         nts = _rows(
-            sb.table("notes").select("*").eq("deleted", False).order("created_at", desc=True).limit(MAX_NOTES).execute()
+            sb.table("notes").select("*").eq("deleted", False).order("created_at", desc=True).limit(40).execute()
         )
+        if q_terms:
+            nts.sort(key=lambda n: (relevance(n.get("content", ""), q_terms), n.get("created_at", "")), reverse=True)
+        nts = nts[:MAX_NOTES]
         if nts:
             lines.append("== Notes ==")
             for n in nts:
