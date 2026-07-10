@@ -17,6 +17,17 @@ export function openRound(rounds: CycleRound[]): CycleRound | null {
   return rounds.filter((r) => r.ended_on == null).sort((a, b) => b.index - a.index)[0] ?? null
 }
 
+/** Day labels a round actually covers RIGHT NOW, from live (non-deleted) entries —
+ *  self-heals when an entry is deleted, unlike the stored `completed_labels`. */
+export function liveCompletedLabels(cycle: TrainingCycle, round: CycleRound, entries: WorkoutEntry[]): string[] {
+  const out = new Set<string>()
+  for (const e of entries) {
+    if (!e.cycle_day_label || e.date < round.started_on || (round.ended_on && e.date > round.ended_on)) continue
+    out.add(e.cycle_day_label)
+  }
+  return cycle.days.map((d) => d.label).filter((l) => out.has(l)) // in day order
+}
+
 export interface RoundRegionActivity {
   sets: number
   items: Array<{ exId: string; sets: number; day: string; date: string | null }>
@@ -81,11 +92,17 @@ export function roundMetrics(
   }
 }
 
-export function currentRound(cycle: TrainingCycle, rounds: CycleRound[]): RoundView {
+// Pass `entries` to derive completion from live data (self-heals on delete);
+// omit it to fall back to the round's stored completed_labels.
+export function currentRound(cycle: TrainingCycle, rounds: CycleRound[], entries?: WorkoutEntry[]): RoundView {
   const labels = cycle.days.map((d) => d.label)
   const open = rounds.filter((r) => r.ended_on == null).sort((a, b) => b.index - a.index)[0] ?? null
   const maxIdx = rounds.reduce((m, r) => Math.max(m, r.index), 0)
-  const completed = open ? open.completed_labels.filter((l) => labels.includes(l)) : []
+  const completed = open
+    ? entries
+      ? liveCompletedLabels(cycle, open, entries).filter((l) => labels.includes(l))
+      : open.completed_labels.filter((l) => labels.includes(l))
+    : []
   const remaining = labels.filter((l) => !completed.includes(l))
   return {
     index: open ? open.index : maxIdx + 1,

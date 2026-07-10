@@ -25,6 +25,7 @@ import { noteTagLabel } from '../../translation'
 import { useLanguage } from '../../i18n'
 import type { CycleRound, Exercise, ExerciseSet, IntimacyCategory, OptionalTracker, Sport, SportSession, TrainingCycle, WorkoutEntry } from '../../supabase/types'
 import { cycleDayTitle } from '../cycle/day'
+import { liveCompletedLabels } from '../cycle/rounds'
 import { sportName, attrLabel, SportSessionDialog } from '../sports'
 import { INTIMACY_CATEGORIES, intimacyCategory, intimacyLabel, intimacyVisible } from '../intimacy'
 import {
@@ -298,16 +299,21 @@ export function HistoryScreen() {
             <span className="hist-rounds-cyc">{activeCycle.name}</span>
           </div>
           <ul className="hist-rounds-list">
-            {[...rounds].reverse().map((r) => (
-              <li key={r.id} className="hist-round-row">
-                <span className="hist-round-idx">R{r.index}</span>
-                <span className="hist-round-dates">{r.started_on} → {r.ended_on ?? '…'}</span>
-                <span className="hist-round-days">{r.completed_labels.join('') || '—'}</span>
-                {r.skipped && <span className="hist-round-badge skip">{lang === 'zh' ? '跳过' : 'skipped'}</span>}
-                {!r.ended_on && <span className="hist-round-badge open">{lang === 'zh' ? '进行中' : 'open'}</span>}
-                {r.ended_on && !r.skipped && <span className="hist-round-badge done">{lang === 'zh' ? '完成' : 'done'}</span>}
-              </li>
-            ))}
+            {[...rounds].reverse().map((r) => {
+              const done = liveCompletedLabels(activeCycle, r, entries)
+              const allDone = done.length === activeCycle.days.length
+              return (
+                <li key={r.id} className="hist-round-row">
+                  <span className="hist-round-idx">R{r.index}</span>
+                  <span className="hist-round-dates">{r.started_on} → {r.ended_on ?? '…'}</span>
+                  <span className="hist-round-days">{done.join('') || '—'}</span>
+                  {r.skipped ? <span className="hist-round-badge skip">{lang === 'zh' ? '跳过' : 'skipped'}</span>
+                    : allDone ? <span className="hist-round-badge done">{lang === 'zh' ? '完成' : 'done'}</span>
+                    : !r.ended_on ? <span className="hist-round-badge open">{lang === 'zh' ? '进行中' : 'open'}</span>
+                    : null}
+                </li>
+              )
+            })}
           </ul>
         </section>
       )}

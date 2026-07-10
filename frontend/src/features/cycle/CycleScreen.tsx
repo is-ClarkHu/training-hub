@@ -39,7 +39,7 @@ import { sportName } from '../sports'
 import { ExerciseManager } from '../log'
 import { RehabLoop } from '../injuries'
 import { CategoryManager } from './CategoryManager'
-import { currentRound } from './rounds'
+import { currentRound, liveCompletedLabels } from './rounds'
 import { BodyModel, type RegionView } from './BodyModel'
 import { REGIONS, regionLabel, type RegionId } from './anatomy'
 import { cycleDayTitle } from './day'
@@ -239,8 +239,8 @@ export function CycleScreen() {
         <section className={`cyc-loop-board ${sideCycles.length ? 'has-side' : ''}`}>
           <CycleVisualCard
             cycle={mainCycle}
-            round={currentRound(mainCycle, roundsByCycle[mainCycle.id] ?? [])}
-            activity={bodyActivityFor(mainCycle, currentRound(mainCycle, roundsByCycle[mainCycle.id] ?? []))}
+            round={currentRound(mainCycle, roundsByCycle[mainCycle.id] ?? [], entries)}
+            activity={bodyActivityFor(mainCycle, currentRound(mainCycle, roundsByCycle[mainCycle.id] ?? [], entries))}
             getDaySummary={daySummary}
             lang={lang}
             adult={showIntimacy}
@@ -250,7 +250,7 @@ export function CycleScreen() {
           {sideCycles.length > 0 && (
             <div className="cyc-loop-side">
               {sideCycles.map((c) => {
-                const rv = currentRound(c, roundsByCycle[c.id] ?? [])
+                const rv = currentRound(c, roundsByCycle[c.id] ?? [], entries)
                 return (
                   <CycleVisualCard
                     key={c.id}
@@ -274,6 +274,7 @@ export function CycleScreen() {
         <CyclePlanMatrix
           cycles={cycles}
           roundsByCycle={roundsByCycle}
+          entries={entries}
           getDaySummary={daySummary}
           sideCycleId={hoveredSideCycleId}
           lang={lang}
@@ -284,16 +285,21 @@ export function CycleScreen() {
         <section className="cyc-rounds-hist">
           <span className="th-label">{lang === 'zh' ? '轮次历史' : 'Round history'}</span>
           <ul className="cyc-rounds-list">
-            {[...rounds].reverse().map((r) => (
-              <li key={r.id} className="cyc-round-row">
-                <span className="cyc-round-row-idx">R{r.index}</span>
-                <span className="cyc-round-row-dates">{r.started_on} → {r.ended_on ?? '…'}</span>
-                <span className="cyc-round-row-days">{r.completed_labels.join('') || '—'}</span>
-                {r.skipped && <span className="cyc-round-badge skip">{lang === 'zh' ? '跳过' : 'skipped'}</span>}
-                {!r.ended_on && <span className="cyc-round-badge open">{lang === 'zh' ? '进行中' : 'open'}</span>}
-                {r.ended_on && !r.skipped && <span className="cyc-round-badge done">{lang === 'zh' ? '完成' : 'done'}</span>}
-              </li>
-            ))}
+            {[...rounds].reverse().map((r) => {
+              const done = liveCompletedLabels(active, r, entries)
+              const allDone = done.length === active.days.length
+              return (
+                <li key={r.id} className="cyc-round-row">
+                  <span className="cyc-round-row-idx">R{r.index}</span>
+                  <span className="cyc-round-row-dates">{r.started_on} → {r.ended_on ?? '…'}</span>
+                  <span className="cyc-round-row-days">{done.join('') || '—'}</span>
+                  {r.skipped ? <span className="cyc-round-badge skip">{lang === 'zh' ? '跳过' : 'skipped'}</span>
+                    : allDone ? <span className="cyc-round-badge done">{lang === 'zh' ? '完成' : 'done'}</span>
+                    : !r.ended_on ? <span className="cyc-round-badge open">{lang === 'zh' ? '进行中' : 'open'}</span>
+                    : null}
+                </li>
+              )
+            })}
           </ul>
         </section>
       )}
@@ -404,12 +410,14 @@ function dayTitle(day: CycleDay, lang: 'en' | 'zh'): string {
 function CyclePlanMatrix({
   cycles,
   roundsByCycle,
+  entries,
   getDaySummary,
   sideCycleId,
   lang,
 }: {
   cycles: TrainingCycle[]
   roundsByCycle: Record<string, CycleRound[]>
+  entries: WorkoutEntry[]
   getDaySummary: (day: CycleDay) => CycleDaySummary
   sideCycleId: string | null
   lang: 'en' | 'zh'
@@ -424,7 +432,7 @@ function CyclePlanMatrix({
       <div className={`cyc-plan-grid ${side ? 'has-side-detail' : ''}`}>
         <PlanCycleCard
           cycle={main}
-          round={currentRound(main, roundsByCycle[main.id] ?? [])}
+          round={currentRound(main, roundsByCycle[main.id] ?? [], entries)}
           getDaySummary={getDaySummary}
           lang={lang}
           primary
@@ -433,7 +441,7 @@ function CyclePlanMatrix({
           <aside className="cyc-plan-side">
             <PlanCycleCard
               cycle={side}
-              round={currentRound(side, roundsByCycle[side.id] ?? [])}
+              round={currentRound(side, roundsByCycle[side.id] ?? [], entries)}
               getDaySummary={getDaySummary}
               lang={lang}
             />
