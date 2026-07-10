@@ -3,7 +3,7 @@
 import { supabase } from '../../supabase/client'
 import { aiPayload, backendUrl } from '../../ai/config'
 
-export async function askAssistant(message: string): Promise<string> {
+export async function askAssistant(message: string, chatroomId?: string): Promise<string> {
   const { data } = await supabase.auth.getSession()
   const token = data.session?.access_token
   if (!token) throw new Error('Not signed in')
@@ -11,7 +11,7 @@ export async function askAssistant(message: string): Promise<string> {
   const res = await fetch(`${backendUrl()}/api/assistant`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ message, ...aiPayload('assistant') }),
+    body: JSON.stringify({ message, chatroom_id: chatroomId ?? '', ...aiPayload('assistant') }),
   })
   if (!res.ok) {
     const detail = await res.text().catch(() => '')

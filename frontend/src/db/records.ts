@@ -681,6 +681,14 @@ export async function createChatroom(name: string, topic = ''): Promise<Chatroom
   return row
 }
 
+/** Rooms, creating a default "General" room the first time the user opens chat. */
+export async function ensureDefaultChatroom(): Promise<Chatroom[]> {
+  const rooms = await getChatrooms()
+  if (rooms.length > 0) return rooms
+  const room = await createChatroom('General', 'Open chat')
+  return [room]
+}
+
 /** Live rooms, ordered by sort_order then creation time. */
 export async function getChatrooms(): Promise<Chatroom[]> {
   const all = await db.chatrooms.toArray()
@@ -696,6 +704,20 @@ export async function renameChatroom(id: string, name: string, topic?: string): 
   const next: Chatroom = { ...r, name: name.trim(), updated_at: nowIso() }
   if (topic !== undefined) next.topic = topic.trim()
   await db.chatrooms.put(next)
+}
+
+/** Soft-delete a room and cascade its chat data (req §7.4). Messages are tombstoned
+ *  so the delete syncs across devices. Raw training/injury/profile records are
+ *  NEVER touched. Summaries / memories / cross-room access links join this cascade
+ *  when those tables land in P4. */
+export async function deleteChatroom(id: string): Promise<void> {
+  const ts = nowIso()
+  await db.transaction('rw', db.chatrooms, db.chat_messages, async () => {
+    const room = await db.chatrooms.get(id)
+    if (room) await db.chatrooms.put({ ...room, deleted: true, updated_at: ts })
+    const msgs = await db.chat_messages.where('chatroom_id').equals(id).toArray()
+    await db.chat_messages.bulkPut(msgs.map((m) => ({ ...m, deleted: true, updated_at: ts })))
+  })
 }
 
 /** Persist a new room order (array of ids in display order → sort_order 0..n). */

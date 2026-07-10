@@ -54,9 +54,11 @@ export {
   updateTrackerEntry,
   deleteAllTracker,
   createChatroom,
+  ensureDefaultChatroom,
   getChatrooms,
   renameChatroom,
   reorderChatrooms,
+  deleteChatroom,
 } from './records'
 export type {
   NewExerciseInput,

@@ -30,11 +30,14 @@ def _rows(resp: Any) -> list[dict]:
     return getattr(resp, "data", None) or []
 
 
-def build_memory_context(sb, user_id: str) -> str:
+def build_memory_context(sb, user_id: str, chatroom_id: str | None = None) -> str:
     """Return a compact textual context string for the system prompt.
 
     `sb` is a supabase client already scoped to the user (RLS), so every query
-    returns only this user's rows.
+    returns only this user's rows. When `chatroom_id` is given, the recent-
+    conversation layer is limited to that room's messages (multi-chatroom, P1
+    step 3); the training/profile/injury layers are unchanged here — per-room
+    permission gating lands in P3.
     """
     since = (date.today() - timedelta(days=RECENT_DAYS)).isoformat()
 
@@ -83,10 +86,11 @@ def build_memory_context(sb, user_id: str) -> str:
             if w is not None and w > prs.get(ex["name_en"] or ex["name_zh"], 0):
                 prs[ex["name_en"] or ex["name_zh"]] = w
 
-    # ── Layer 3: chat history ─────────────────────────────────────────
-    chat = _rows(
-        sb.table("chat_messages").select("*").eq("deleted", False).order("created_at", desc=True).limit(MAX_CHAT_MESSAGES).execute()
-    )
+    # ── Layer 3: chat history (scoped to the active room when given) ───
+    chat_q = sb.table("chat_messages").select("*").eq("deleted", False)
+    if chatroom_id:
+        chat_q = chat_q.eq("chatroom_id", chatroom_id)
+    chat = _rows(chat_q.order("created_at", desc=True).limit(MAX_CHAT_MESSAGES).execute())
     chat = list(reversed(chat))
 
     # ── Layer 4: insights ─────────────────────────────────────────────

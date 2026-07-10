@@ -328,6 +328,7 @@ export interface ChatMessage extends SyncFields {
   role: ChatRole
   content: string
   created_at: string
+  chatroom_id: string | null         // room this message belongs to; null = legacy (pre-multiroom)
 }
 
 export interface Insight extends SyncFields {

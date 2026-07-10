@@ -54,6 +54,7 @@ class AiConfig(BaseModel):
 
 class AssistantRequest(AiConfig):
     message: str
+    chatroom_id: str = ""  # active room; "" = legacy single-room behavior
 
 
 class TranslateRequest(AiConfig):
@@ -179,13 +180,14 @@ def translate(body: TranslateRequest, authorization: str = Header(default="")) -
 @app.post("/api/assistant")
 def assistant(body: AssistantRequest, authorization: str = Header(default="")) -> dict:
     sb, user_id = _user_client(_jwt(authorization))
-    context = build_memory_context(sb, user_id)
+    room = body.chatroom_id or None
+    context = build_memory_context(sb, user_id, room)
     reply = _relay(body, f"{ASSISTANT_SYSTEM}\n\n{context}", body.message, 1500)
 
     ts = _now()
     rows = [
-        {"id": str(uuid4()), "role": "user", "content": body.message, "created_at": ts, "updated_at": ts, "deleted": False},
-        {"id": str(uuid4()), "role": "assistant", "content": reply, "created_at": ts, "updated_at": ts, "deleted": False},
+        {"id": str(uuid4()), "role": "user", "content": body.message, "chatroom_id": room, "created_at": ts, "updated_at": ts, "deleted": False},
+        {"id": str(uuid4()), "role": "assistant", "content": reply, "chatroom_id": room, "created_at": ts, "updated_at": ts, "deleted": False},
     ]
     try:
         sb.table("chat_messages").insert(rows).execute()

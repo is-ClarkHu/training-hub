@@ -84,6 +84,10 @@ export class TrainingHubDB extends Dexie {
     this.version(5).stores({
       chatrooms: 'id, sort_order, updated_at',
     })
+    // v6: messages are scoped to a room — index chatroom_id for per-room reads.
+    this.version(6).stores({
+      chat_messages: 'id, chatroom_id, created_at, updated_at',
+    })
   }
 }
 
