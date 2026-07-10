@@ -69,6 +69,9 @@
 
 /* circuit (交替/alternating) — round-major block */
 .hist-circuit {
+  width: fit-content;
+  min-width: min(100%, 300px);
+  max-width: min(100%, 620px);
   display: flex; flex-direction: column; gap: 8px;
   padding: 13px 15px;
   background: var(--bg-panel);
@@ -85,25 +88,45 @@
 .hist-circuit-split:hover { color: var(--accent); border-color: var(--accent); }
 /* no rounds: every set its own line ("name value"), stacked vertically */
 .hist-circuit-flat { display: flex; flex-direction: column; gap: 4px; padding-top: 7px; border-top: 1px solid var(--border); }
-.hist-circuit-line { display: flex; align-items: baseline; gap: 8px; }
-.hist-circuit-nm { font: 600 12px/1.4 var(--sans); color: var(--teal); min-width: 84px; }
+.hist-circuit-line { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.hist-circuit-nm { font: 600 12px/1.4 var(--sans); color: var(--teal); min-width: 84px; max-width: 180px; }
 .hist-circuit-flat .hist-set { font: 13px/1.4 var(--mono); }
 
 /* mode-2: category modules, each a row of movement cards flowing left→right */
-.hist-modules { display: flex; flex-direction: column; gap: 14px; }
-.hist-module { display: flex; flex-direction: column; gap: 8px; }
+.hist-modules { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; }
+.hist-module {
+  flex: 1 1 min(100%, 220px);
+  min-width: min(100%, 180px);
+  max-width: 100%;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.hist-module[data-count="1"] { flex-grow: 1; flex-basis: min(100%, 210px); }
+.hist-module[data-count="2"] { flex-grow: 2; flex-basis: min(100%, 400px); }
+.hist-module[data-count="3"] { flex-grow: 3; flex-basis: min(100%, 560px); }
+.hist-module[data-count="4"] { flex-grow: 4; flex-basis: 100%; }
 .hist-module-head {
   font: 700 12px/1 var(--mono); letter-spacing: 0.06em; text-transform: uppercase;
   color: var(--text-dim);
 }
-.hist-cards { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; }
+.hist-cards {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
 .hist-card {
   position: relative;
-  min-width: 160px; max-width: 260px; flex: 1 1 190px;
+  flex: 1 1 max-content;
+  min-width: 150px; max-width: none;
   display: flex; flex-direction: column; gap: 6px;
   padding: 12px 14px;
   background: var(--bg-panel); border: 1px solid var(--border); border-radius: 12px;
   transition: border-color 0.2s, background 0.15s;
+}
+.hist-modules > .hist-entries {
+  flex: 0 0 100%;
+  width: 100%;
 }
 .hist-card.clickable { cursor: pointer; }
 .hist-card.clickable:hover { border-color: var(--accent); background: var(--accent-soft); }
@@ -114,11 +137,12 @@
   display: flex; align-items: center; gap: 7px;
   padding-bottom: 7px; border-bottom: 1px solid var(--border);
 }
+.hist-card-top .hist-name { min-width: 0; overflow-wrap: anywhere; }
 .hist-card-top .hist-check { margin-left: auto; }
 .hist-card-badges:empty { display: none; }
 .hist-card-badges { display: flex; flex-wrap: wrap; gap: 5px; }
 .hist-card-sets { display: flex; flex-direction: column; gap: 3px; }
-.hist-card-sets .hist-set { font: 13px/1.5 var(--mono); }
+.hist-card-sets .hist-set { font: 13px/1.5 var(--mono); overflow-wrap: anywhere; }
 .hist-module-chip {
   position: absolute; top: 8px; right: 8px;
   width: 22px; height: 22px; padding: 0;
@@ -200,6 +224,17 @@
 .hist-badge.review { color: #2a1500; background: var(--amber); }
 .hist-badge.translate { color: #04181a; background: var(--cyan); }
 .hist-badge.injury { color: #2a0000; background: var(--danger); }
+.hist-sport-level {
+  padding: 4px 9px;
+  font: 800 11px/1 var(--mono);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #04181a;
+  background: var(--amber);
+  border: 1px solid color-mix(in srgb, var(--amber) 70%, white);
+  border-radius: 999px;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--amber) 18%, transparent);
+}
 
 .hist-intimacy-pill {
   padding: 4px 10px;

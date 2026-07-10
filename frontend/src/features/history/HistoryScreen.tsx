@@ -67,6 +67,21 @@ function partitionCircuits(items: WorkoutEntry[]): { circuits: WorkoutEntry[][];
   return { circuits, singles }
 }
 
+function setSummary(sets: ExerciseSet[], lang: 'en' | 'zh'): string {
+  const base = `${sets.length} ${lang === 'zh' ? '组' : sets.length === 1 ? 'set' : 'sets'}`
+  const extras = [
+    ['superset', sets.filter((s) => s.set_type === 'superset').length],
+    ['dropset', sets.filter((s) => s.set_type === 'dropset').length],
+  ] as const
+  const shown = extras.filter(([, n]) => n > 0)
+  if (shown.length === 0) return base
+  const suffix = shown.map(([type, n]) => {
+    if (lang === 'zh') return `${n}组${type === 'superset' ? '超级组' : '递减组'}`
+    return `${n} ${type}${n === 1 ? '' : 's'}`
+  }).join(lang === 'zh' ? '、' : ', ')
+  return lang === 'zh' ? `${base}（含${suffix}）` : `${base} (${suffix})`
+}
+
 export function HistoryScreen() {
   const { lang } = useLanguage()
   const [entries, setEntries] = useState<WorkoutEntry[]>([])
@@ -353,7 +368,7 @@ export function HistoryScreen() {
             {mode === 'grouped' ? (
               <div className="hist-modules">
                 {groupByModule(singles).map((g) => (
-                  <div key={g.key} className="hist-module">
+                  <div key={g.key} className="hist-module" data-count={Math.min(g.items.length, 4)}>
                     <div className="hist-module-head">{g.key === '__none' ? '—' : categoryLabel(g.key, lang)}</div>
                     <div className="hist-cards">
                       {g.items.map((entry) => <EntryCard {...cardProps(entry, 'card')} />)}
@@ -478,6 +493,9 @@ function SportRow({
   onToggle: () => void
   onOpen: () => void
 }) {
+  const levelField = sport?.fields?.find((f) => f.type === 'select' && ss.attributes?.[f.key])
+  const level = levelField ? attrLabel(levelField, ss.attributes[levelField.key], lang) : null
+  const detailFields = (sport?.fields ?? []).filter((f) => f.key !== levelField?.key)
   return (
     <div
       className={`hist-row hist-sport ${selected ? 'sel' : ''} ${selectMode ? '' : 'clickable'}`}
@@ -490,11 +508,12 @@ function SportRow({
         <div className="hist-row-top">
           <span className="hist-dot" style={{ background: ACTIVITY_COLORS.sport }} />
           <span className="hist-name">🏃 {sport ? sportName(sport, lang) : '(sport)'}</span>
+          {level && <span className="hist-sport-level">{level}</span>}
           {ss.injury && <span className="hist-badge injury">{lang === 'zh' ? '带伤' : 'injury'}</span>}
         </div>
         <div className="hist-sets">
           <span className="hist-set">{formatHours(ss.hours)}{formatMetrics(ss)}</span>
-          {(sport?.fields ?? []).map((f) => ss.attributes?.[f.key] && (
+          {detailFields.map((f) => ss.attributes?.[f.key] && (
             <span key={f.key} className="hist-settype">{attrLabel(f, ss.attributes[f.key], lang)}</span>
           ))}
         </div>
@@ -704,7 +723,7 @@ function EntryCard({
   )
 
   const setsBlock = discreet ? (
-    <span className="hist-set">{sets.length} {lang === 'zh' ? '组' : sets.length === 1 ? 'set' : 'sets'}</span>
+    <span className="hist-set">{setSummary(sets, lang)}</span>
   ) : (
     sets.map((s) => (
       <span key={s.id} className="hist-set">
