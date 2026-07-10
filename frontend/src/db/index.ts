@@ -60,6 +60,13 @@ export {
   reorderChatrooms,
   updateChatroomPerms,
   deleteChatroom,
+  getChatroomMemories,
+  createChatroomMemory,
+  updateChatroomMemory,
+  deleteChatroomMemory,
+  getChatroomSummary,
+  getMemoryAccess,
+  setMemoryAccess,
 } from './records'
 export type {
   NewExerciseInput,

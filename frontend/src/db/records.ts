@@ -9,6 +9,8 @@ import type {
   BodyPart,
   Chatroom,
   ChatroomPerms,
+  ChatroomMemory,
+  ChatroomSummary,
   CycleDay,
   Exercise,
   ExerciseSet,
@@ -751,6 +753,74 @@ export async function deleteChatroom(id: string): Promise<void> {
 export async function updateChatroomPerms(id: string, perms: ChatroomPerms): Promise<void> {
   const r = await db.chatrooms.get(id)
   if (r) await db.chatrooms.put({ ...r, perms, updated_at: nowIso() })
+}
+
+// ── chatroom memory units + rolling summary (P4) ─────────────
+export async function getChatroomMemories(chatroomId: string): Promise<ChatroomMemory[]> {
+  const all = await db.chatroom_memories.where('chatroom_id').equals(chatroomId).toArray()
+  return all
+    .filter((m) => !m.deleted)
+    .sort((a, b) => Number(b.pinned) - Number(a.pinned) || (a.created_at < b.created_at ? 1 : -1))
+}
+
+export async function createChatroomMemory(
+  chatroomId: string,
+  content: string,
+  shareable = false,
+): Promise<ChatroomMemory> {
+  const row: ChatroomMemory = {
+    ...syncFields(),
+    chatroom_id: chatroomId,
+    content: content.trim(),
+    shareable,
+    pinned: false,
+    created_at: nowIso(),
+  }
+  await db.chatroom_memories.add(row)
+  return row
+}
+
+export async function updateChatroomMemory(
+  id: string,
+  patch: Partial<Pick<ChatroomMemory, 'content' | 'shareable' | 'pinned'>>,
+): Promise<void> {
+  const m = await db.chatroom_memories.get(id)
+  if (m) await db.chatroom_memories.put({ ...m, ...patch, updated_at: nowIso() })
+}
+
+export async function deleteChatroomMemory(id: string): Promise<void> {
+  const m = await db.chatroom_memories.get(id)
+  if (m) await db.chatroom_memories.put({ ...m, deleted: true, updated_at: nowIso() })
+}
+
+/** The room's rolling summary (read-only in the UI; the backend maintains it). */
+export async function getChatroomSummary(chatroomId: string): Promise<ChatroomSummary | null> {
+  const all = await db.chatroom_summaries.where('chatroom_id').equals(chatroomId).toArray()
+  return all.find((s) => !s.deleted) ?? null
+}
+
+// ── cross-room memory access grants (P4) ─────────────────────
+/** Source-room ids whose shareable memories the reader room may read. */
+export async function getMemoryAccess(readerRoomId: string): Promise<string[]> {
+  const all = await db.chatroom_memory_access.where('reader_room_id').equals(readerRoomId).toArray()
+  return all.filter((a) => !a.deleted).map((a) => a.source_room_id)
+}
+
+/** Grant or revoke reader→source shared-memory access (revoke = tombstone). */
+export async function setMemoryAccess(readerRoomId: string, sourceRoomId: string, on: boolean): Promise<void> {
+  const all = await db.chatroom_memory_access.where('reader_room_id').equals(readerRoomId).toArray()
+  const existing = all.find((a) => a.source_room_id === sourceRoomId)
+  if (on) {
+    if (existing) await db.chatroom_memory_access.put({ ...existing, deleted: false, updated_at: nowIso() })
+    else
+      await db.chatroom_memory_access.add({
+        ...syncFields(),
+        reader_room_id: readerRoomId,
+        source_room_id: sourceRoomId,
+      })
+  } else if (existing && !existing.deleted) {
+    await db.chatroom_memory_access.put({ ...existing, deleted: true, updated_at: nowIso() })
+  }
 }
 
 /** Persist a new room order (array of ids in display order → sort_order 0..n). */

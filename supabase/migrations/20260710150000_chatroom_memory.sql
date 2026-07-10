@@ -9,12 +9,13 @@
 -- All soft-link chatrooms.id (no FK, so sync push order stays free).
 
 create table if not exists public.chatroom_summaries (
-  id          uuid primary key default gen_random_uuid(),
-  user_id     uuid not null default auth.uid() references auth.users (id) on delete cascade,
-  chatroom_id uuid not null,
-  content     text not null default '',
-  updated_at  timestamptz not null default now(),
-  deleted     boolean not null default false
+  id             uuid primary key default gen_random_uuid(),
+  user_id        uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  chatroom_id    uuid not null,
+  content        text not null default '',
+  covered_through timestamptz,   -- created_at of the newest message already folded in
+  updated_at     timestamptz not null default now(),
+  deleted        boolean not null default false
 );
 -- one live summary per room
 create unique index if not exists chatroom_summaries_one_per_room
@@ -47,16 +48,19 @@ create unique index if not exists chatroom_memory_access_uniq
   on public.chatroom_memory_access (user_id, reader_room_id, source_room_id) where (not deleted);
 create index if not exists chatroom_memory_access_sync_idx on public.chatroom_memory_access (user_id, updated_at);
 
--- RLS: owner-only, same policy shape as every other table.
-do $$
-declare t text;
-begin
-  foreach t in array array['chatroom_summaries','chatroom_memories','chatroom_memory_access'] loop
-    execute format('alter table public.%I enable row level security', t);
-    execute format('drop policy if exists %I on public.%I', t || '_owner', t);
-    execute format(
-      'create policy %I on public.%I for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid())',
-      t || '_owner', t
-    );
-  end loop;
-end $$;
+-- RLS: owner-only. Explicit per-table statements (not a dynamic loop) so the
+-- policy is statically visible — same shape as every other table.
+alter table public.chatroom_summaries enable row level security;
+drop policy if exists chatroom_summaries_owner on public.chatroom_summaries;
+create policy chatroom_summaries_owner on public.chatroom_summaries
+  for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+alter table public.chatroom_memories enable row level security;
+drop policy if exists chatroom_memories_owner on public.chatroom_memories;
+create policy chatroom_memories_owner on public.chatroom_memories
+  for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+alter table public.chatroom_memory_access enable row level security;
+drop policy if exists chatroom_memory_access_owner on public.chatroom_memory_access;
+create policy chatroom_memory_access_owner on public.chatroom_memory_access
+  for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());

@@ -17,6 +17,7 @@ import {
 import type { Chatroom, ChatroomPermCategory } from '../../supabase/types'
 import { useLanguage } from '../../i18n'
 import { askAssistant } from './assistantClient'
+import { MemoryPanel } from './MemoryPanel'
 import './assistant.css'
 
 interface Msg {
@@ -38,6 +39,7 @@ export function AssistantScreen() {
   const [rooms, setRooms] = useState<Chatroom[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [memoryOpen, setMemoryOpen] = useState(false)
   const [messages, setMessages] = useState<Msg[]>([])
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
@@ -178,6 +180,13 @@ export function AssistantScreen() {
             ☰
           </button>
           <span className="asst-roomhead">{activeRoom?.name ?? ''}</span>
+          <button
+            className={`asst-mem-toggle ${memoryOpen ? 'is-on' : ''}`}
+            type="button"
+            onClick={() => setMemoryOpen((o) => !o)}
+          >
+            {lang === 'zh' ? '记忆' : 'Memory'}
+          </button>
         </div>
 
         {activeRoom && (
@@ -233,6 +242,8 @@ export function AssistantScreen() {
           </button>
         </form>
       </div>
+
+      {memoryOpen && activeRoom && <MemoryPanel room={activeRoom} rooms={rooms} lang={lang} />}
     </div>
   )
 }

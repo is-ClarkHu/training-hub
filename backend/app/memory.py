@@ -15,13 +15,27 @@ category — it is hard-isolated and cannot reach the model.
 from __future__ import annotations
 
 from collections import Counter
-from datetime import date, timedelta
-from typing import Any
+from datetime import date, datetime, timedelta, timezone
+from typing import Any, Callable
 
 # How far back / how much to include (token-budget guards).
 RECENT_DAYS = 56  # ~8 weeks
-MAX_CHAT_MESSAGES = 12
+MAX_CHAT_MESSAGES = 12          # verbatim recent tail kept out of the summary
+MAX_UNFOLDED = MAX_CHAT_MESSAGES + 12  # safety cap on messages shown since the watermark
 MAX_INSIGHTS = 3
+MAX_SHARED_MEMORIES = 8  # cross-room shared memory units pulled in per answer
+
+# Rolling summary (P4): fold aged-out messages into the room summary once this many
+# have accumulated, so the fold LLM call is occasional rather than every turn.
+FOLD_TRIGGER = 6
+SUMMARY_MAX_TOKENS = 400
+SUMMARY_SYSTEM = (
+    "You maintain a concise running memory of one coaching chatroom. Merge the new "
+    "earlier messages into the existing summary. Keep only durable, useful points, "
+    "organized as: current goal, confirmed facts, decisions made, current plan, user "
+    "preferences, open questions, things to watch. Drop small talk and anything "
+    "superseded. Be terse. Reply with ONLY the updated summary."
+)
 
 BODY_PART_LABELS = {
     "chest": "Chest", "back": "Back", "shoulders": "Shoulders", "legs": "Legs",
@@ -149,12 +163,52 @@ def build_memory_context(
             lines.append("")
             sources.append("Prior AI insights")
 
-    # ── Recent conversation (always — the room's own history) ─────────
+    # ── Shared memory from other rooms (authorized only; NEVER inherits the source
+    #    room's raw data or full chat — only its flagged memory units, req §6.4) ──
+    if chatroom_id:
+        grants = _rows(
+            sb.table("chatroom_memory_access").select("source_room_id").eq("reader_room_id", chatroom_id).eq("deleted", False).execute()
+        )
+        source_ids = [g["source_room_id"] for g in grants]
+        if source_ids:
+            mems = _rows(
+                sb.table("chatroom_memories").select("*").in_("chatroom_id", source_ids).eq("shareable", True).eq("deleted", False).order("updated_at", desc=True).limit(MAX_SHARED_MEMORIES).execute()
+            )
+            if mems:
+                room_names = {
+                    r["id"]: r.get("name", "another room")
+                    for r in _rows(sb.table("chatrooms").select("id,name").in_("id", source_ids).execute())
+                }
+                lines.append("== Shared memory from other rooms ==")
+                for m in mems:
+                    src = room_names.get(m["chatroom_id"], "another room")
+                    lines.append(f"[{src}] {m['content']}")
+                lines.append("")
+                for rn in sorted({room_names.get(m["chatroom_id"], "another room") for m in mems}):
+                    sources.append(f"Memory · {rn}")
+
+    # ── Room memory + recent conversation (always — the room's own history) ──
+    summary_row = None
+    if chatroom_id:
+        srows = _rows(
+            sb.table("chatroom_summaries").select("*").eq("chatroom_id", chatroom_id).eq("deleted", False).limit(1).execute()
+        )
+        summary_row = srows[0] if srows else None
+    watermark = summary_row.get("covered_through") if summary_row else None
+
     chat_q = sb.table("chat_messages").select("*").eq("deleted", False)
     if chatroom_id:
         chat_q = chat_q.eq("chatroom_id", chatroom_id)
-    chat = _rows(chat_q.order("created_at", desc=True).limit(MAX_CHAT_MESSAGES).execute())
-    chat = list(reversed(chat))
+    if watermark:
+        # the summary already covers everything up to the watermark; show what's since
+        chat = _rows(chat_q.gt("created_at", watermark).order("created_at").limit(MAX_UNFOLDED).execute())
+    else:
+        chat = list(reversed(_rows(chat_q.order("created_at", desc=True).limit(MAX_CHAT_MESSAGES).execute())))
+
+    if summary_row and summary_row.get("content"):
+        lines.append("== Room memory (summary of earlier conversation) ==")
+        lines.append(summary_row["content"])
+        lines.append("")
     if chat:
         lines.append("== Recent conversation ==")
         for m in chat:
@@ -169,3 +223,52 @@ def build_memory_context(
         )
 
     return "\n".join(lines).strip(), sources
+
+
+def maybe_update_summary(sb, chatroom_id: str | None, summarize: Callable[[str, str], str]) -> bool:
+    """Fold aged-out messages into the room's rolling summary (P4, req §7.2).
+
+    Keeps the newest MAX_CHAT_MESSAGES verbatim; older messages past the summary's
+    watermark are folded in incrementally (never re-reading the whole history) once
+    FOLD_TRIGGER of them have accumulated. `summarize(system, user)` runs the LLM
+    (the caller supplies the room's provider/key). Best-effort — returns whether the
+    summary was updated. `sb` is RLS-scoped to the user.
+    """
+    if not chatroom_id:
+        return False
+
+    srows = _rows(
+        sb.table("chatroom_summaries").select("*").eq("chatroom_id", chatroom_id).eq("deleted", False).limit(1).execute()
+    )
+    summary_row = srows[0] if srows else None
+    watermark = summary_row.get("covered_through") if summary_row else None
+    existing = (summary_row.get("content") or "") if summary_row else ""
+
+    msgs = _rows(
+        sb.table("chat_messages").select("*").eq("chatroom_id", chatroom_id).eq("deleted", False).order("created_at").execute()
+    )
+    if len(msgs) <= MAX_CHAT_MESSAGES:
+        return False
+    older = msgs[:-MAX_CHAT_MESSAGES]  # everything except the verbatim tail
+    to_fold = [m for m in older if not watermark or m["created_at"] > watermark]
+    if len(to_fold) < FOLD_TRIGGER:
+        return False
+
+    convo = "\n".join(
+        f'{"User" if m["role"] == "user" else "Assistant"}: {m["content"]}' for m in to_fold
+    )
+    user = f"Existing summary:\n{existing or '(none yet)'}\n\nEarlier messages to fold into it:\n{convo}"
+    new_summary = summarize(SUMMARY_SYSTEM, user).strip()
+    if not new_summary:
+        return False
+
+    payload = {
+        "content": new_summary,
+        "covered_through": older[-1]["created_at"],
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if summary_row:
+        sb.table("chatroom_summaries").update(payload).eq("id", summary_row["id"]).execute()
+    else:
+        sb.table("chatroom_summaries").insert({"chatroom_id": chatroom_id, **payload}).execute()
+    return True

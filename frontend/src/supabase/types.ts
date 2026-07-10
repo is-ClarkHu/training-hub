@@ -327,6 +327,7 @@ export interface Chatroom extends SyncFields {
 export interface ChatroomSummary extends SyncFields {
   chatroom_id: string
   content: string
+  covered_through: string | null     // created_at of the newest message already folded in
 }
 
 // A concise memory unit belonging to its origin room. `shareable` units may be

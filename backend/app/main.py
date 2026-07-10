@@ -20,7 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from supabase import create_client
 
-from .memory import build_memory_context
+from .memory import SUMMARY_MAX_TOKENS, build_memory_context, maybe_update_summary
 from .providers import PROVIDERS, chat
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
@@ -202,4 +202,15 @@ def assistant(body: AssistantRequest, authorization: str = Header(default="")) -
         sb.table("chat_messages").insert(rows).execute()
     except Exception:  # noqa: BLE001
         pass
+
+    # Fold aged-out messages into the room's rolling summary (best-effort — a summary
+    # failure must never fail the answer). Reuses the request's provider/model/key.
+    if room:
+        try:
+            maybe_update_summary(
+                sb, room, lambda system, user: _relay(body, system, user, SUMMARY_MAX_TOKENS)
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
     return {"reply": reply, "sources_used": sources_used}
