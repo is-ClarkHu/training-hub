@@ -12,10 +12,12 @@ import {
   renameChatroom,
   reorderChatrooms,
   updateChatroomPerms,
+  updateChatroomAi,
   deleteChatroom,
   createChatroomMemory,
 } from '../../db'
 import type { Chatroom, ChatroomPermCategory } from '../../supabase/types'
+import { AI_PROVIDERS, aiPayload, payloadForProvider, type AiProvider } from '../../ai/config'
 import { useLanguage } from '../../i18n'
 import { askAssistant } from './assistantClient'
 import { MemoryPanel } from './MemoryPanel'
@@ -127,6 +129,13 @@ export function AssistantScreen() {
     await refreshRooms()
   }
 
+  async function onSetRoomAi(provider: string) {
+    if (!activeRoom) return
+    if (provider === '') await updateChatroomAi(activeRoom.id, null, null)
+    else await updateChatroomAi(activeRoom.id, provider, null) // model defaults per provider
+    await refreshRooms()
+  }
+
   async function onTogglePerm(cat: ChatroomPermCategory) {
     if (!activeRoom) return
     const turningOn = !activeRoom.perms[cat]
@@ -160,8 +169,11 @@ export function AssistantScreen() {
     setError(null)
     setMessages((m) => [...m, { role: 'user', content: text }])
     setBusy(true)
+    const ai = activeRoom?.provider
+      ? payloadForProvider(activeRoom.provider as AiProvider, activeRoom.model)
+      : aiPayload('assistant')
     try {
-      const { reply, sources, suggestedMemory } = await askAssistant(text, activeId)
+      const { reply, sources, suggestedMemory } = await askAssistant(text, activeId, ai)
       setMessages((m) => [...m, { role: 'assistant', content: reply, sources, suggestedMemory: suggestedMemory || undefined }])
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -208,6 +220,19 @@ export function AssistantScreen() {
             ☰
           </button>
           <span className="asst-roomhead">{activeRoom?.name ?? ''}</span>
+          {activeRoom && (
+            <select
+              className="asst-ai-select"
+              value={activeRoom.provider ?? ''}
+              onChange={(e) => onSetRoomAi(e.target.value)}
+              title={lang === 'zh' ? '本聊天室使用的 AI' : "This room's AI"}
+            >
+              <option value="">{lang === 'zh' ? '默认 AI' : 'Default AI'}</option>
+              {AI_PROVIDERS.map((p) => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+          )}
           <span className="asst-right-tabs">
             <button
               className={`asst-mem-toggle ${rightPanel === 'memory' ? 'is-on' : ''}`}

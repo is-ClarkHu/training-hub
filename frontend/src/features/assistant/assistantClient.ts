@@ -9,7 +9,11 @@ export interface AssistantReply {
   suggestedMemory: string // AI-proposed memory to save (empty = none); user confirms
 }
 
-export async function askAssistant(message: string, chatroomId?: string): Promise<AssistantReply> {
+export async function askAssistant(
+  message: string,
+  chatroomId?: string,
+  ai?: { provider: string; model: string; api_key: string },
+): Promise<AssistantReply> {
   const { data } = await supabase.auth.getSession()
   const token = data.session?.access_token
   if (!token) throw new Error('Not signed in')
@@ -17,7 +21,7 @@ export async function askAssistant(message: string, chatroomId?: string): Promis
   const res = await fetch(`${backendUrl()}/api/assistant`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ message, chatroom_id: chatroomId ?? '', ...aiPayload('assistant') }),
+    body: JSON.stringify({ message, chatroom_id: chatroomId ?? '', ...(ai ?? aiPayload('assistant')) }),
   })
   if (!res.ok) {
     const detail = await res.text().catch(() => '')

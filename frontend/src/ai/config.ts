@@ -56,6 +56,11 @@ export function aiPayload(t: AiTask): { provider: AiProvider; model: string; api
   return { provider: c.provider, model: c.model, api_key: getKey(c.provider) }
 }
 
+/** payload for an explicit provider (per-chatroom AI); model defaults per provider. */
+export function payloadForProvider(provider: AiProvider, model?: string | null): { provider: AiProvider; model: string; api_key: string } {
+  return { provider, model: model || DEFAULT_MODEL[provider], api_key: getKey(provider) }
+}
+
 export function hasKeyFor(t: AiTask): boolean {
   return !!getKey(getTaskCfg(t).provider)
 }

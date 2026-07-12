@@ -320,6 +320,8 @@ export interface Chatroom extends SyncFields {
   topic: string
   sort_order: number
   perms: ChatroomPerms                // per-category read switches; enforced backend-side
+  provider: string | null            // per-room AI provider; null = global default
+  model: string | null
   created_at: string
 }
 

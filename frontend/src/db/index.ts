@@ -59,6 +59,7 @@ export {
   renameChatroom,
   reorderChatrooms,
   updateChatroomPerms,
+  updateChatroomAi,
   deleteChatroom,
   getChatroomMemories,
   createChatroomMemory,

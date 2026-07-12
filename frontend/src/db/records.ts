@@ -686,6 +686,8 @@ export async function createChatroom(name: string, topic = ''): Promise<Chatroom
     topic: topic.trim(),
     sort_order: maxSort + 1,
     perms: {},
+    provider: null,
+    model: null,
     created_at: nowIso(),
   }
   await db.chatrooms.add(row)
@@ -829,6 +831,12 @@ export async function setMemoryAccess(readerRoomId: string, sourceRoomId: string
   } else if (existing && !existing.deleted) {
     await db.chatroom_memory_access.put({ ...existing, deleted: true, updated_at: nowIso() })
   }
+}
+
+/** Pin a room's AI provider/model (null,null = use the global assistant default). */
+export async function updateChatroomAi(id: string, provider: string | null, model: string | null): Promise<void> {
+  const r = await db.chatrooms.get(id)
+  if (r) await db.chatrooms.put({ ...r, provider, model, updated_at: nowIso() })
 }
 
 /** Persist a new room order (array of ids in display order → sort_order 0..n). */
