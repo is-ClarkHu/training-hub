@@ -4,7 +4,13 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 // Installable, offline-first PWA (SPEC §12.13, §14). Service worker precaches the
 // app shell; the data layer is already offline via Dexie.
+//
+// `BASE_PATH` is injected by CI for GitHub Pages project sites (served from a
+// subpath, e.g. /training-hub/); defaults to '/' for local dev and root hosting.
+const base = process.env.BASE_PATH || '/'
+
 export default defineConfig({
+  base,
   server: { port: 5174, strictPort: true },
   preview: { port: 5174 },
   build: {
@@ -34,10 +40,11 @@ export default defineConfig({
         theme_color: '#0c151c',
         background_color: '#0c151c',
         display: 'standalone',
-        start_url: '/',
+        start_url: base,
+        scope: base,
         icons: [
-          { src: '/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
-          { src: '/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' },
+          { src: `${base}icon.svg`, sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
+          { src: `${base}icon.svg`, sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' },
         ],
       },
       workbox: {
