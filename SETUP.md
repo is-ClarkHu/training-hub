@@ -13,16 +13,31 @@ project and (optionally) run the Phase-2 assistant. The credential/account steps
 ## 1. Supabase project 🔑
 1. Create a project at supabase.com → copy the **Project URL** and **anon key**
    (Settings → API).
-2. **Apply the schema + migrations, in order.** Easiest: Supabase dashboard → SQL
-   Editor → paste each file's contents → Run, one at a time, top to bottom:
-   1. `supabase/migrations/20260624120000_init_schema.sql` — base schema
-   2. `supabase/migrations/20260706120000_injury_v2.sql` — injuries as events (7-stage status, bilingual body area/note, laterality/type/scenario, checkpoints, attachments)
-   3. `supabase/migrations/20260706130000_rehab_library.sql` — rehab-exercise fields on `exercises`
-   4. `supabase/migrations/20260706140000_rehab_loop.sql` — per-injury rehab plan + symptom assessments
-   5. `supabase/migrations/20260706150000_injury_photos_storage.sql` — private `injury-photos` Storage bucket + RLS (needed before injury photos can upload/view)
+2. **Apply the schema + migrations, in filename order.** Easiest: Supabase
+   dashboard → SQL Editor → paste each file's contents → Run, one at a time, top
+   to bottom. (Or with the CLI: `supabase link` then `supabase db push` applies
+   them all in order automatically.) Full index: `supabase/migrations/README.md`.
 
-   (Or with the CLI: `supabase link` then `supabase db push` applies them all in
-   order automatically.)
+   **Core schema & training modules:**
+   1. `20260624120000_init_schema.sql` — base schema (+ empty Phase-2 `chat_messages`/`insights`)
+   2. `20260706120000_injury_v2.sql` — injuries as events (7-stage status, bilingual area/note, laterality/type/scenario, checkpoints, attachments)
+   3. `20260706130000_rehab_library.sql` — rehab-exercise fields on `exercises`
+   4. `20260706140000_rehab_loop.sql` — per-injury rehab plan + symptom assessments
+   5. `20260706150000_injury_photos_storage.sql` — private `injury-photos` Storage bucket + RLS (needed before injury photos can upload/view)
+   6. `20260706160000_exercise_multi_category.sql` — `body_part` → `body_parts[]`
+   7. `20260707120000_cycle_rounds.sql` — training-cycle rounds
+   8. `20260707130000_cycle_display_mode.sql` — cycle display mode
+   9. `20260709120000_entry_module_part.sql` — per-occurrence module/part override
+   10. `20260709130000_set_cardio_metrics.sql` — cardio metrics on sets
+   11. `20260709140000_sport_metrics.sql` — sport metrics
+   12. `20260710120000_entry_sort_order.sql` — entry sort order
+
+   **AI multi-chatroom, permissions & memory** (see `docs/PLAN-ai-chatrooms.md`):
+   13. `20260710130000_chatrooms.sql` — `chatrooms` + per-room `perms` matrix
+   14. `20260710140000_chat_messages_chatroom.sql` — `chat_messages.chatroom_id` + backfill default room
+   15. `20260710150000_chatroom_memory.sql` — rolling summaries, memory units, cross-room access grants
+   16. `20260710160000_profile_modules.sql` — basics, body_measurements, notes, supplements, training_env, medical_background
+   17. `20260710170000_food_and_files.sql` — food_log, public_files, chatroom_file_access + `food-photos` & `public-files` Storage buckets
 3. **Auth** (Authentication → Providers → Email): enable Email; turn **off**
    "Allow new users to sign up". Create your single account under
    Authentication → Users → Add user (email + password).
@@ -76,13 +91,20 @@ in `frontend/.env.local` (the default is already `:8000`). Open the **Assistant*
 tab and ask about your training.
 
 > Health check: `curl localhost:8000/health` → `{"ok":true,...}`.
+>
+> The Assistant is a multi-chatroom, permission-gated coach with per-room memory
+> and pre-fillable data modules (Assistant tab → left drawer for rooms, right
+> **Data**/**Memory** tabs). Food-photo recognition needs a **vision-capable
+> model** in Settings → AI (claude-* / gpt-4o* / gemini-*); text-only models
+> (e.g. deepseek-chat) will error on recognition but everything else still works.
 
 ---
 
 ## What only you can do (🔑)
 1. Create the Supabase project + paste its URL/anon key into `.env.local`.
-2. Run the migration SQL **in order** (init + the four injury-module migrations,
-   incl. the `injury-photos` Storage bucket) and create your login account.
+2. Run all 17 migration SQL files **in filename order** (init → training modules →
+   AI chatroom/memory/data modules, incl. the `injury-photos`, `food-photos` and
+   `public-files` Storage buckets) and create your login account.
 3. Deploy the `translate` Edge Function and set `ANTHROPIC_API_KEY`.
 4. Provide `ANTHROPIC_API_KEY` to the Phase-2 backend.
 

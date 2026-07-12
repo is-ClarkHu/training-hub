@@ -19,8 +19,21 @@ import type {
   CycleRound,
   OptionalTracker,
   TranslationDictionaryRow,
+  Chatroom,
+  ChatroomSummary,
+  ChatroomMemory,
+  ChatroomMemoryAccess,
   ChatMessage,
   Insight,
+  Basics,
+  BodyMeasurement,
+  Note,
+  Supplement,
+  TrainingEnv,
+  MedicalBackground,
+  FoodLog,
+  PublicFile,
+  ChatroomFileAccess,
 } from '../supabase/types'
 
 export class TrainingHubDB extends Dexie {
@@ -35,6 +48,19 @@ export class TrainingHubDB extends Dexie {
   cycle_rounds!: Table<CycleRound, string>
   optional_trackers!: Table<OptionalTracker, string>
   translation_dictionary!: Table<TranslationDictionaryRow, string>
+  chatrooms!: Table<Chatroom, string>
+  chatroom_summaries!: Table<ChatroomSummary, string>
+  chatroom_memories!: Table<ChatroomMemory, string>
+  chatroom_memory_access!: Table<ChatroomMemoryAccess, string>
+  basics!: Table<Basics, string>
+  body_measurements!: Table<BodyMeasurement, string>
+  notes!: Table<Note, string>
+  supplements!: Table<Supplement, string>
+  training_env!: Table<TrainingEnv, string>
+  medical_background!: Table<MedicalBackground, string>
+  food_log!: Table<FoodLog, string>
+  public_files!: Table<PublicFile, string>
+  chatroom_file_access!: Table<ChatroomFileAccess, string>
   chat_messages!: Table<ChatMessage, string>
   insights!: Table<Insight, string>
   // Local-only (never synced): compressed injury photos (§6A Phase 4).
@@ -77,6 +103,35 @@ export class TrainingHubDB extends Dexie {
     // v4: training-cycle rounds (§6B) — one pass through the cycle's days.
     this.version(4).stores({
       cycle_rounds: 'id, cycle_id, updated_at',
+    })
+    // v5: AI multi-chatroom (PLAN-ai-chatrooms) — rooms grouping chat by topic.
+    this.version(5).stores({
+      chatrooms: 'id, sort_order, updated_at',
+    })
+    // v6: messages are scoped to a room — index chatroom_id for per-room reads.
+    this.version(6).stores({
+      chat_messages: 'id, chatroom_id, created_at, updated_at',
+    })
+    // v7: room memory lifecycle (P4) — rolling summaries, memory units, cross-room grants.
+    this.version(7).stores({
+      chatroom_summaries: 'id, chatroom_id, updated_at',
+      chatroom_memories: 'id, chatroom_id, updated_at',
+      chatroom_memory_access: 'id, reader_room_id, source_room_id, updated_at',
+    })
+    // v8: AI pre-fillable data modules (P6).
+    this.version(8).stores({
+      basics: 'id, user_id, updated_at',
+      body_measurements: 'id, date, updated_at',
+      notes: 'id, tag, updated_at',
+      supplements: 'id, updated_at',
+      training_env: 'id, user_id, updated_at',
+      medical_background: 'id, user_id, updated_at',
+    })
+    // v9: food log + public files (P6c / P5).
+    this.version(9).stores({
+      food_log: 'id, eaten_at, updated_at',
+      public_files: 'id, updated_at',
+      chatroom_file_access: 'id, chatroom_id, file_id, updated_at',
     })
   }
 }

@@ -6,9 +6,21 @@ import { newId, nowIso, today } from './helpers'
 import { currentUserId, supabase } from '../supabase/client'
 import { FRISBEE_FIELDS } from '../supabase/types'
 import type {
+  Basics,
+  BodyMeasurement,
   BodyPart,
+  Chatroom,
+  ChatroomPerms,
+  ChatroomMemory,
+  ChatroomSummary,
   CycleDay,
   Exercise,
+  FoodLog,
+  MedicalBackground,
+  Note,
+  PublicFile,
+  Supplement,
+  TrainingEnv,
   ExerciseSet,
   Injury,
   InjuryAssessment,
@@ -660,6 +672,365 @@ export async function deleteAllTracker(tracker: TrackerType): Promise<void> {
   const all = await db.optional_trackers.toArray()
   const rows = all.filter((t) => t.tracker === tracker && !t.deleted)
   await db.optional_trackers.bulkPut(rows.map((t) => ({ ...t, deleted: true, updated_at: ts })))
+}
+
+// ── chatrooms (AI multi-chatroom; PLAN-ai-chatrooms) ─────────
+/** Create a room, appended to the end of the list. `perms` starts empty (nothing
+ *  granted — the AI reads no personal data until the user opts a category in). */
+export async function createChatroom(name: string, topic = ''): Promise<Chatroom> {
+  const rooms = await db.chatrooms.toArray()
+  const maxSort = rooms.filter((r) => !r.deleted).reduce((m, r) => Math.max(m, r.sort_order), -1)
+  const row: Chatroom = {
+    ...syncFields(),
+    name: name.trim(),
+    topic: topic.trim(),
+    sort_order: maxSort + 1,
+    perms: {},
+    created_at: nowIso(),
+  }
+  await db.chatrooms.add(row)
+  return row
+}
+
+/** Rooms, creating a default "General" room the first time the user opens chat. */
+export async function ensureDefaultChatroom(): Promise<Chatroom[]> {
+  const rooms = await getChatrooms()
+  if (rooms.length > 0) return rooms
+  const room = await createChatroom('General', 'Open chat')
+  return [room]
+}
+
+/** Live rooms, ordered by sort_order then creation time. */
+export async function getChatrooms(): Promise<Chatroom[]> {
+  const all = await db.chatrooms.toArray()
+  return all
+    .filter((r) => !r.deleted)
+    .sort((a, b) => a.sort_order - b.sort_order || (a.created_at < b.created_at ? -1 : 1))
+}
+
+/** Rename a room (and optionally its topic blurb). */
+export async function renameChatroom(id: string, name: string, topic?: string): Promise<void> {
+  const r = await db.chatrooms.get(id)
+  if (!r) return
+  const next: Chatroom = { ...r, name: name.trim(), updated_at: nowIso() }
+  if (topic !== undefined) next.topic = topic.trim()
+  await db.chatrooms.put(next)
+}
+
+/** Soft-delete a room and cascade all its chat artefacts (req §7.4): messages,
+ *  the rolling summary, memory units, and both directions of its cross-room memory
+ *  grants. Everything is tombstoned so the delete syncs across devices. Raw
+ *  training/injury/profile records are NEVER touched. */
+export async function deleteChatroom(id: string): Promise<void> {
+  const ts = nowIso()
+  await db.transaction(
+    'rw',
+    db.chatrooms,
+    db.chat_messages,
+    db.chatroom_summaries,
+    db.chatroom_memories,
+    db.chatroom_memory_access,
+    async () => {
+      const room = await db.chatrooms.get(id)
+      if (room) await db.chatrooms.put({ ...room, deleted: true, updated_at: ts })
+
+      const tombstone = <T extends { deleted: boolean; updated_at: string }>(rows: T[]) =>
+        rows.map((r) => ({ ...r, deleted: true, updated_at: ts }))
+
+      const msgs = await db.chat_messages.where('chatroom_id').equals(id).toArray()
+      await db.chat_messages.bulkPut(tombstone(msgs))
+
+      const summaries = await db.chatroom_summaries.where('chatroom_id').equals(id).toArray()
+      await db.chatroom_summaries.bulkPut(tombstone(summaries))
+
+      const memories = await db.chatroom_memories.where('chatroom_id').equals(id).toArray()
+      await db.chatroom_memories.bulkPut(tombstone(memories))
+
+      // both directions: grants where this room reads, and where it is the source
+      const asReader = await db.chatroom_memory_access.where('reader_room_id').equals(id).toArray()
+      const asSource = await db.chatroom_memory_access.where('source_room_id').equals(id).toArray()
+      const links = new Map(([...asReader, ...asSource]).map((l) => [l.id, l]))
+      await db.chatroom_memory_access.bulkPut(tombstone([...links.values()]))
+    },
+  )
+}
+
+/** Set a room's data-read permission matrix. The backend re-reads this column at
+ *  answer time (never trusts the client), so this write is what actually gates
+ *  what the AI may read for this room. */
+export async function updateChatroomPerms(id: string, perms: ChatroomPerms): Promise<void> {
+  const r = await db.chatrooms.get(id)
+  if (r) await db.chatrooms.put({ ...r, perms, updated_at: nowIso() })
+}
+
+// ── chatroom memory units + rolling summary (P4) ─────────────
+export async function getChatroomMemories(chatroomId: string): Promise<ChatroomMemory[]> {
+  const all = await db.chatroom_memories.where('chatroom_id').equals(chatroomId).toArray()
+  return all
+    .filter((m) => !m.deleted)
+    .sort((a, b) => Number(b.pinned) - Number(a.pinned) || (a.created_at < b.created_at ? 1 : -1))
+}
+
+export async function createChatroomMemory(
+  chatroomId: string,
+  content: string,
+  shareable = false,
+): Promise<ChatroomMemory> {
+  const row: ChatroomMemory = {
+    ...syncFields(),
+    chatroom_id: chatroomId,
+    content: content.trim(),
+    shareable,
+    pinned: false,
+    created_at: nowIso(),
+  }
+  await db.chatroom_memories.add(row)
+  return row
+}
+
+export async function updateChatroomMemory(
+  id: string,
+  patch: Partial<Pick<ChatroomMemory, 'content' | 'shareable' | 'pinned'>>,
+): Promise<void> {
+  const m = await db.chatroom_memories.get(id)
+  if (m) await db.chatroom_memories.put({ ...m, ...patch, updated_at: nowIso() })
+}
+
+export async function deleteChatroomMemory(id: string): Promise<void> {
+  const m = await db.chatroom_memories.get(id)
+  if (m) await db.chatroom_memories.put({ ...m, deleted: true, updated_at: nowIso() })
+}
+
+/** The room's rolling summary (read-only in the UI; the backend maintains it). */
+export async function getChatroomSummary(chatroomId: string): Promise<ChatroomSummary | null> {
+  const all = await db.chatroom_summaries.where('chatroom_id').equals(chatroomId).toArray()
+  return all.find((s) => !s.deleted) ?? null
+}
+
+// ── cross-room memory access grants (P4) ─────────────────────
+/** Source-room ids whose shareable memories the reader room may read. */
+export async function getMemoryAccess(readerRoomId: string): Promise<string[]> {
+  const all = await db.chatroom_memory_access.where('reader_room_id').equals(readerRoomId).toArray()
+  return all.filter((a) => !a.deleted).map((a) => a.source_room_id)
+}
+
+/** Grant or revoke reader→source shared-memory access (revoke = tombstone). */
+export async function setMemoryAccess(readerRoomId: string, sourceRoomId: string, on: boolean): Promise<void> {
+  const all = await db.chatroom_memory_access.where('reader_room_id').equals(readerRoomId).toArray()
+  const existing = all.find((a) => a.source_room_id === sourceRoomId)
+  if (on) {
+    if (existing) await db.chatroom_memory_access.put({ ...existing, deleted: false, updated_at: nowIso() })
+    else
+      await db.chatroom_memory_access.add({
+        ...syncFields(),
+        reader_room_id: readerRoomId,
+        source_room_id: sourceRoomId,
+      })
+  } else if (existing && !existing.deleted) {
+    await db.chatroom_memory_access.put({ ...existing, deleted: true, updated_at: nowIso() })
+  }
+}
+
+/** Persist a new room order (array of ids in display order → sort_order 0..n). */
+export async function reorderChatrooms(orderedIds: string[]): Promise<void> {
+  const ts = nowIso()
+  for (let i = 0; i < orderedIds.length; i++) {
+    const r = await db.chatrooms.get(orderedIds[i])
+    if (r && r.sort_order !== i) await db.chatrooms.put({ ...r, sort_order: i, updated_at: ts })
+  }
+}
+
+// ── AI pre-fillable data modules (P6) ────────────────────────
+// Single-row modules: one row per user, upserted.
+export async function getBasics(): Promise<Basics | null> {
+  return (await db.basics.toArray()).find((r) => !r.deleted) ?? null
+}
+export async function saveBasics(patch: Partial<Basics>): Promise<Basics> {
+  const existing = await getBasics()
+  const base: Basics = existing ?? {
+    ...syncFields(),
+    age: null, sex: null, biological_sex: null, height_cm: null,
+    training_years: null, training_level: null, work_type: null,
+    sleep_hours: null, resting_hr: null, max_hr: null,
+  }
+  const row: Basics = { ...base, ...patch, updated_at: nowIso() }
+  await db.basics.put(row)
+  return row
+}
+
+export async function getTrainingEnv(): Promise<TrainingEnv | null> {
+  return (await db.training_env.toArray()).find((r) => !r.deleted) ?? null
+}
+export async function saveTrainingEnv(patch: Partial<TrainingEnv>): Promise<TrainingEnv> {
+  const existing = await getTrainingEnv()
+  const base: TrainingEnv = existing ?? { ...syncFields(), gym: null, equipment: null, home_equipment: null }
+  const row: TrainingEnv = { ...base, ...patch, updated_at: nowIso() }
+  await db.training_env.put(row)
+  return row
+}
+
+export async function getMedicalBackground(): Promise<MedicalBackground | null> {
+  return (await db.medical_background.toArray()).find((r) => !r.deleted) ?? null
+}
+export async function saveMedicalBackground(patch: Partial<MedicalBackground>): Promise<MedicalBackground> {
+  const existing = await getMedicalBackground()
+  const base: MedicalBackground = existing ?? {
+    ...syncFields(),
+    conditions: null, surgeries: null, restrictions: null,
+    allergies: null, family_history: null, recent_labs: null,
+  }
+  const row: MedicalBackground = { ...base, ...patch, updated_at: nowIso() }
+  await db.medical_background.put(row)
+  return row
+}
+
+// List modules: many rows per user.
+export async function getBodyMeasurements(): Promise<BodyMeasurement[]> {
+  const all = await db.body_measurements.toArray()
+  return all.filter((m) => !m.deleted).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+}
+export async function addBodyMeasurement(m: Omit<BodyMeasurement, keyof ReturnType<typeof syncFields>>): Promise<BodyMeasurement> {
+  const row: BodyMeasurement = { ...syncFields(), ...m }
+  await db.body_measurements.add(row)
+  return row
+}
+export async function deleteBodyMeasurement(id: string): Promise<void> {
+  const m = await db.body_measurements.get(id)
+  if (m) await db.body_measurements.put({ ...m, deleted: true, updated_at: nowIso() })
+}
+
+export async function getNotes(): Promise<Note[]> {
+  const all = await db.notes.toArray()
+  return all.filter((n) => !n.deleted).sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+}
+export async function createNote(content: string, tag: Note['tag'] = null): Promise<Note> {
+  const row: Note = { ...syncFields(), content: content.trim(), tag, created_at: nowIso() }
+  await db.notes.add(row)
+  return row
+}
+export async function updateNote(id: string, patch: Partial<Pick<Note, 'content' | 'tag'>>): Promise<void> {
+  const n = await db.notes.get(id)
+  if (n) await db.notes.put({ ...n, ...patch, updated_at: nowIso() })
+}
+export async function deleteNote(id: string): Promise<void> {
+  const n = await db.notes.get(id)
+  if (n) await db.notes.put({ ...n, deleted: true, updated_at: nowIso() })
+}
+
+export async function getSupplements(): Promise<Supplement[]> {
+  const all = await db.supplements.toArray()
+  return all.filter((s) => !s.deleted).sort((a, b) => Number(b.still_using) - Number(a.still_using))
+}
+export async function createSupplement(s: Pick<Supplement, 'name' | 'brand' | 'dose' | 'timing' | 'frequency'>): Promise<Supplement> {
+  const row: Supplement = { ...syncFields(), still_using: true, ...s }
+  await db.supplements.add(row)
+  return row
+}
+export async function updateSupplement(id: string, patch: Partial<Omit<Supplement, keyof ReturnType<typeof syncFields>>>): Promise<void> {
+  const s = await db.supplements.get(id)
+  if (s) await db.supplements.put({ ...s, ...patch, updated_at: nowIso() })
+}
+export async function deleteSupplement(id: string): Promise<void> {
+  const s = await db.supplements.get(id)
+  if (s) await db.supplements.put({ ...s, deleted: true, updated_at: nowIso() })
+}
+
+// ── food log (P6c) ───────────────────────────────────────────
+const FOOD_BUCKET = 'food-photos'
+const FILE_BUCKET = 'public-files'
+
+export async function getFoodLog(): Promise<FoodLog[]> {
+  const all = await db.food_log.toArray()
+  return all.filter((f) => !f.deleted).sort((a, b) => (a.eaten_at < b.eaten_at ? 1 : -1))
+}
+export async function createFoodLog(
+  description: string,
+  eatenAt: string,
+  photoDataUrl?: string,
+  aiDescription?: string | null,
+): Promise<FoodLog> {
+  const base = syncFields()
+  let photo_path: string | null = null
+  if (photoDataUrl && currentUserId()) {
+    const path = `${currentUserId()}/${base.id}.jpg`
+    const { error } = await supabase.storage.from(FOOD_BUCKET).upload(path, dataUrlToBlob(photoDataUrl), {
+      upsert: true,
+      contentType: 'image/jpeg',
+    })
+    if (!error) photo_path = path
+  }
+  const row: FoodLog = {
+    ...base,
+    description: description.trim(),
+    ai_description: aiDescription?.trim() || null,
+    photo_path,
+    eaten_at: eatenAt,
+  }
+  await db.food_log.add(row)
+  return row
+}
+export async function getFoodPhotoUrl(path: string): Promise<string | null> {
+  const { data, error } = await supabase.storage.from(FOOD_BUCKET).createSignedUrl(path, 3600)
+  return error || !data ? null : data.signedUrl
+}
+export async function deleteFoodLog(id: string): Promise<void> {
+  const f = await db.food_log.get(id)
+  if (f) {
+    if (f.photo_path) await supabase.storage.from(FOOD_BUCKET).remove([f.photo_path])
+    await db.food_log.put({ ...f, deleted: true, updated_at: nowIso() })
+  }
+}
+
+// ── public files (P5) ────────────────────────────────────────
+export async function getPublicFiles(): Promise<PublicFile[]> {
+  const all = await db.public_files.toArray()
+  return all.filter((f) => !f.deleted).sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+}
+/** Upload a file: text is extracted into `content` (for the assistant); the raw
+ *  file is also stored in the private bucket. */
+export async function createPublicFile(file: File): Promise<PublicFile> {
+  const base = syncFields()
+  let storage_path: string | null = null
+  let content: string | null = null
+  if (currentUserId()) {
+    const path = `${currentUserId()}/${base.id}-${file.name}`
+    const { error } = await supabase.storage.from(FILE_BUCKET).upload(path, file, { upsert: true })
+    if (!error) storage_path = path
+  }
+  if (file.type.startsWith('text/') || /\.(txt|md|csv|json)$/i.test(file.name)) {
+    content = (await file.text()).slice(0, 20000)
+  }
+  const row: PublicFile = { ...base, name: file.name, storage_path, content, summary: null, created_at: nowIso() }
+  await db.public_files.add(row)
+  return row
+}
+/** Store an LLM summary for a file (generated after upload). */
+export async function setPublicFileSummary(id: string, summary: string): Promise<void> {
+  const f = await db.public_files.get(id)
+  if (f) await db.public_files.put({ ...f, summary: summary.trim() || null, updated_at: nowIso() })
+}
+export async function deletePublicFile(id: string): Promise<void> {
+  const f = await db.public_files.get(id)
+  if (f) {
+    if (f.storage_path) await supabase.storage.from(FILE_BUCKET).remove([f.storage_path])
+    await db.public_files.put({ ...f, deleted: true, updated_at: nowIso() })
+  }
+}
+
+/** File ids the given room may read. */
+export async function getFileAccess(chatroomId: string): Promise<string[]> {
+  const all = await db.chatroom_file_access.where('chatroom_id').equals(chatroomId).toArray()
+  return all.filter((a) => !a.deleted).map((a) => a.file_id)
+}
+export async function setFileAccess(chatroomId: string, fileId: string, on: boolean): Promise<void> {
+  const all = await db.chatroom_file_access.where('chatroom_id').equals(chatroomId).toArray()
+  const existing = all.find((a) => a.file_id === fileId)
+  if (on) {
+    if (existing) await db.chatroom_file_access.put({ ...existing, deleted: false, updated_at: nowIso() })
+    else await db.chatroom_file_access.add({ ...syncFields(), chatroom_id: chatroomId, file_id: fileId })
+  } else if (existing && !existing.deleted) {
+    await db.chatroom_file_access.put({ ...existing, deleted: true, updated_at: nowIso() })
+  }
 }
 
 // ── History reads / edits (§7.2) ─────────────────────────────

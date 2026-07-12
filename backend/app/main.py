@@ -20,8 +20,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from supabase import create_client
 
-from .memory import build_memory_context
-from .providers import PROVIDERS, chat
+from .memory import SUMMARY_MAX_TOKENS, build_memory_context, maybe_update_summary
+from .providers import PROVIDERS, chat, describe_image
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")  # anon key (RLS-scoped via JWT)
@@ -34,8 +34,14 @@ ASSISTANT_SYSTEM = (
     "You are a knowledgeable, supportive strength-and-conditioning coach embedded "
     "in the user's training-log app. Answer using the user's own data below. Be "
     "concrete and concise; cite specific numbers and dates. Respect active injuries. "
-    "Reply in the user's language (match their question)."
+    "Reply in the user's language (match their question). "
+    "If the exchange produces a durable fact, decision, or preference worth "
+    "remembering for THIS chatroom long-term, end your reply with one line exactly "
+    "like [[MEMORY: <concise one-line memory>]]. Only when genuinely useful; "
+    "otherwise omit it entirely."
 )
+
+MEMORY_TAG = re.compile(r"\[\[MEMORY:\s*(.+?)\]\]", re.S)
 
 app = FastAPI(title="training-hub backend")
 app.add_middleware(
@@ -54,12 +60,21 @@ class AiConfig(BaseModel):
 
 class AssistantRequest(AiConfig):
     message: str
+    chatroom_id: str = ""  # active room; "" = legacy single-room behavior
 
 
 class TranslateRequest(AiConfig):
     domain: str
     text: str
     target: str = "en"
+
+
+class DescribeFoodRequest(AiConfig):
+    image: str  # data URL of the meal photo
+
+
+class SummarizeFileRequest(AiConfig):
+    text: str
 
 
 def _now() -> str:
@@ -175,20 +190,93 @@ def translate(body: TranslateRequest, authorization: str = Header(default="")) -
     return {"text": translation, "suggested_body_part": bp, "suggested_measure_type": mt, "source": "ai", "row": row}
 
 
+# ── food photo recognition (P6c) ─────────────────────────────
+FOOD_VISION_PROMPT = (
+    "Identify this meal from the photo. In one or two short sentences, describe the "
+    "foods and rough portions factually. Reply in the user's likely language "
+    "(Chinese if the dish looks Chinese). No preamble, just the description."
+)
+
+
+@app.post("/api/describe-food")
+def describe_food(body: DescribeFoodRequest, authorization: str = Header(default="")) -> dict:
+    _user_client(_jwt(authorization))  # require a valid session
+    if body.provider not in PROVIDERS:
+        raise HTTPException(400, f"Unknown provider '{body.provider}'")
+    try:
+        desc = describe_image(body.provider, body.model, body.api_key, body.image, FOOD_VISION_PROMPT, 300)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:  # noqa: BLE001 — upstream/vision error
+        raise HTTPException(502, f"{body.provider} error: {e}")
+    return {"description": desc}
+
+
+# ── file summary (P5 / §5.4) ─────────────────────────────────
+FILE_SUMMARY_SYSTEM = (
+    "Summarize this reference document for a strength-and-conditioning assistant. "
+    "Capture the key facts, instructions, numbers, and constraints compactly (a few "
+    "sentences or short bullets). Reply with ONLY the summary, in the document's language."
+)
+
+
+@app.post("/api/summarize-file")
+def summarize_file(body: SummarizeFileRequest, authorization: str = Header(default="")) -> dict:
+    _user_client(_jwt(authorization))  # require a valid session
+    if body.provider not in PROVIDERS:
+        raise HTTPException(400, f"Unknown provider '{body.provider}'")
+    text = body.text.strip()
+    if not text:
+        return {"summary": ""}
+    try:
+        summary = chat(body.provider, body.model, body.api_key, FILE_SUMMARY_SYSTEM, text[:12000], 400)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:  # noqa: BLE001 — upstream error
+        raise HTTPException(502, f"{body.provider} error: {e}")
+    return {"summary": summary}
+
+
 # ── assistant (§9) ───────────────────────────────────────────
 @app.post("/api/assistant")
 def assistant(body: AssistantRequest, authorization: str = Header(default="")) -> dict:
     sb, user_id = _user_client(_jwt(authorization))
-    context = build_memory_context(sb, user_id)
-    reply = _relay(body, f"{ASSISTANT_SYSTEM}\n\n{context}", body.message, 1500)
+    room = body.chatroom_id or None
+
+    # Read the room's permission matrix from the DB (RLS-scoped) — never trust the
+    # client's toggles; enforcement happens here, at data-read time (req §14.4).
+    perms: dict = {}
+    if room:
+        pr = sb.table("chatrooms").select("perms").eq("id", room).limit(1).execute()
+        if pr.data:
+            perms = pr.data[0].get("perms") or {}
+
+    context, sources_used = build_memory_context(sb, user_id, room, perms, body.message)
+    raw = _relay(body, f"{ASSISTANT_SYSTEM}\n\n{context}", body.message, 1500)
+
+    # Split off the optional [[MEMORY: ...]] suggestion; it never appears in chat.
+    m = MEMORY_TAG.search(raw)
+    suggested_memory = m.group(1).strip() if m else ""
+    reply = MEMORY_TAG.sub("", raw).strip()
 
     ts = _now()
     rows = [
-        {"id": str(uuid4()), "role": "user", "content": body.message, "created_at": ts, "updated_at": ts, "deleted": False},
-        {"id": str(uuid4()), "role": "assistant", "content": reply, "created_at": ts, "updated_at": ts, "deleted": False},
+        {"id": str(uuid4()), "role": "user", "content": body.message, "chatroom_id": room, "created_at": ts, "updated_at": ts, "deleted": False},
+        {"id": str(uuid4()), "role": "assistant", "content": reply, "chatroom_id": room, "created_at": ts, "updated_at": ts, "deleted": False},
     ]
     try:
         sb.table("chat_messages").insert(rows).execute()
     except Exception:  # noqa: BLE001
         pass
-    return {"reply": reply}
+
+    # Fold aged-out messages into the room's rolling summary (best-effort — a summary
+    # failure must never fail the answer). Reuses the request's provider/model/key.
+    if room:
+        try:
+            maybe_update_summary(
+                sb, room, lambda system, user: _relay(body, system, user, SUMMARY_MAX_TOKENS)
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
+    return {"reply": reply, "sources_used": sources_used, "suggested_memory": suggested_memory}

@@ -78,3 +78,68 @@ def chat(provider: str, model: str, api_key: str, system: str, user: str, max_to
         return r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
 
     raise ValueError(f"Unknown provider '{provider}'")
+
+
+def _parse_data_url(data_url: str) -> tuple[str, str]:
+    """'data:image/jpeg;base64,XXXX' -> ('image/jpeg', 'XXXX')."""
+    header, _, b64 = data_url.partition(",")
+    media_type = "image/jpeg"
+    if header.startswith("data:") and ";" in header:
+        media_type = header[5:].split(";")[0] or "image/jpeg"
+    return media_type, b64
+
+
+def describe_image(provider: str, model: str, api_key: str, image_data_url: str, prompt: str, max_tokens: int = 300) -> str:
+    """Vision one-shot: image + prompt -> text. Requires a vision-capable model
+    (e.g. claude-*, gpt-4o*, gemini-*); text-only models will error upstream."""
+    if not api_key:
+        raise ValueError(f"No API key configured for provider '{provider}'")
+    model = model or DEFAULT_MODEL.get(provider, "")
+    media_type, b64 = _parse_data_url(image_data_url)
+
+    if provider == "anthropic":
+        client = Anthropic(api_key=api_key)
+        resp = client.messages.create(
+            model=model or "claude-opus-4-8",
+            max_tokens=max_tokens,
+            messages=[{"role": "user", "content": [
+                {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": b64}},
+                {"type": "text", "text": prompt},
+            ]}],
+        )
+        return "".join(b.text for b in resp.content if b.type == "text").strip()
+
+    if provider in OPENAI_COMPAT:
+        r = httpx.post(
+            f"{OPENAI_COMPAT[provider]}/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}"},
+            json={
+                "model": model,
+                "max_tokens": max_tokens,
+                "messages": [{"role": "user", "content": [
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": image_data_url}},
+                ]}],
+            },
+            timeout=60,
+        )
+        r.raise_for_status()
+        return r.json()["choices"][0]["message"]["content"].strip()
+
+    if provider == "gemini":
+        r = httpx.post(
+            f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+            params={"key": api_key},
+            json={
+                "contents": [{"parts": [
+                    {"inline_data": {"mime_type": media_type, "data": b64}},
+                    {"text": prompt},
+                ]}],
+                "generationConfig": {"maxOutputTokens": max_tokens},
+            },
+            timeout=60,
+        )
+        r.raise_for_status()
+        return r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+
+    raise ValueError(f"Unknown provider '{provider}'")
