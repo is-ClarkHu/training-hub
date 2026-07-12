@@ -121,9 +121,67 @@
 .asst-mem-access { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .asst-mem-access label { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); cursor: pointer; }
 
-/* Data tab */
-.asst-data details { border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; }
-.asst-data summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--text); }
+/* Data tab — public files box (Claude Projects style, always visible) */
+.asst-files { border: 1px solid var(--border); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.asst-files-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.asst-files-title { font-size: 13px; font-weight: 600; color: var(--text); }
+.asst-files-add { width: auto; padding: 5px 12px; font-size: 12px; cursor: pointer; }
+.asst-files-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.asst-file-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.asst-file-card:hover { border-color: var(--teal); }
+.asst-file-icon { font-size: 18px; flex-shrink: 0; }
+.asst-file-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.asst-file-name { font-size: 13px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.asst-file-sub { font-size: 11px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.asst-file-ext { font-size: 10px; color: var(--text-dim); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; flex-shrink: 0; }
+.asst-file-del { background: none; border: none; color: var(--text-dim); cursor: pointer; flex-shrink: 0; }
+.asst-file-content { font-size: 12px; color: var(--text); white-space: pre-wrap; word-break: break-word; max-height: 40svh; overflow-y: auto; margin: 0; font-family: var(--mono); background: rgba(0,0,0,0.15); padding: 8px; border-radius: 6px; }
+
+/* Data tab — module tiles */
+.asst-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.asst-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 8px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+}
+.asst-tile:hover { border-color: var(--teal); }
+.asst-tile.high { border-style: dashed; border-color: #c65; }
+.asst-tile-icon { font-size: 20px; line-height: 1; }
+
+/* Data module modal */
+.asst-modal-backdrop { position: fixed; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(4, 10, 14, 0.7); z-index: 60; }
+.asst-modal {
+  width: 100%;
+  max-width: 480px;
+  max-height: 88svh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.asst-modal-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+.asst-modal-head h3 { margin: 0; font-size: 15px; font-weight: 600; color: var(--text); }
+.asst-modal-x { background: none; border: none; color: var(--text-dim); font-size: 22px; line-height: 1; cursor: pointer; padding: 0 4px; }
+.asst-modal-body { padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
 .asst-data-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 8px 0; }
 .asst-data-grid label,
 .asst-data-full { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--text-dim); }
@@ -202,6 +260,7 @@
 .asst-msg.assistant .asst-bubble { background: var(--bg-panel); border: 1px solid var(--border); color: var(--text); border-bottom-left-radius: 3px; }
 .asst-typing { color: var(--text-dim); letter-spacing: 2px; }
 
+.asst-disclaimer { font-size: 10px; color: var(--text-dim); text-align: center; margin: 6px 0 0; opacity: 0.75; }
 .asst-form { display: flex; gap: 8px; }
 .asst-form .th-input { flex: 1; }
 .asst-send { width: auto; padding: 10px 18px; }

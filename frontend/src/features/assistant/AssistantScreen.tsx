@@ -287,6 +287,11 @@ export function AssistantScreen() {
             {lang === 'zh' ? '发送' : 'Send'}
           </button>
         </form>
+        <p className="asst-disclaimer">
+          {lang === 'zh'
+            ? 'AI 可能出错,仅供参考。重要的健康、伤病或医疗决定请咨询专业人士。'
+            : 'AI can make mistakes — for reference only. Consult a professional for important health, injury or medical decisions.'}
+        </p>
       </div>
 
       {rightPanel === 'memory' && activeRoom && <MemoryPanel room={activeRoom} rooms={rooms} lang={lang} />}
