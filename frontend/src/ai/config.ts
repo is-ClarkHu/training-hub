@@ -66,5 +66,6 @@ export function hasKeyFor(t: AiTask): boolean {
 }
 
 export function backendUrl(): string {
-  return import.meta.env.VITE_ASSISTANT_API_URL ?? 'http://localhost:8000'
+  // `||` (not `??`) so an empty VITE_ASSISTANT_API_URL="" falls back to the default.
+  return import.meta.env.VITE_ASSISTANT_API_URL || 'http://localhost:8000'
 }

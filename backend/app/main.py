@@ -15,6 +15,7 @@ import re
 from datetime import datetime, timezone
 from uuid import uuid4
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -22,6 +23,8 @@ from supabase import create_client
 
 from .memory import SUMMARY_MAX_TOKENS, build_memory_context, maybe_update_summary
 from .providers import PROVIDERS, chat, describe_image
+
+load_dotenv()  # load backend/.env (SUPABASE_URL/KEY, FRONTEND_ORIGIN) if present
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")  # anon key (RLS-scoped via JWT)
