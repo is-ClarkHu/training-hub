@@ -1,4 +1,4 @@
-# migration — legacy CSV → new schema (build task, SPEC §10)
+# migration — legacy CSV → new schema (build task)
 
 The legacy `../raw_data/workout_log.csv` is converted into the new per-set schema
 by a migration script produced during the build (not delivered with the spec).

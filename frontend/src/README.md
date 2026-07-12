@@ -20,6 +20,6 @@ Dexie/IndexedDB is the instant source of truth; SyncEngine reconciles with Supab
 | `features/injuries` | injury log + rehab timeline | §6A |
 | `features/cycle` | training loop editor, today/next, per-muscle recovery spacing | §6B |
 | `features/settings` | language toggle, profile, translation manager, trackers (intimacy) | §7.8, §6C |
-| `features/assistant` | Phase 2 chat UI | §9 |
+| `features/assistant` | multi-chatroom AI coach: room drawer, per-room permission chips + "sources used", right-pane **Memory** (rolling summary, memory units, cross-room sharing) and **Data** (basics/measurements+chart, food+vision, supplements, training_env, notes, medical, public files) | §9, `docs/PLAN-ai-chatrooms.md` |
 
 Build order: see SPEC §12.
