@@ -58,6 +58,18 @@ export function EditExerciseDialog({
   const exName = (e: Exercise) => (lang === 'zh' ? e.name_zh : e.name_en) || e.name_zh || e.name_en
 
   async function onSave() {
+    // Block renaming onto a name another live exercise already uses (the DB enforces
+    // one live name_zh per user). Point the user at "Merge into" instead.
+    const zh = nameZh.trim()
+    const clash = zh && allExercises.find((e) => e.id !== exercise.id && !e.deleted && e.name_zh === zh)
+    if (clash) {
+      alert(
+        lang === 'zh'
+          ? `已存在同名动作「${zh}」。换个名字,或用下面的「合并到」把两者合并成一个。`
+          : `An exercise named “${zh}” already exists. Use a different name, or use “Merge into” below to combine them.`,
+      )
+      return
+    }
     setBusy(true)
     const { undo } = await withUndo(['exercises'], () => updateExercise(exercise.id, {
       name_zh: nameZh.trim(),

@@ -90,9 +90,21 @@ async function pushTable(uid: string, table: TableName): Promise<number> {
       if (r[k] == null) r[k] = k in COLUMN_DEFAULTS ? COLUMN_DEFAULTS[k] : null
     }
   }
-  for (let i = 0; i < payload.length; i += 500) {
-    const { error } = await supabase.from(table).upsert(payload.slice(i, i + 500), { onConflict: 'id' })
-    if (error) throw error
+  // Push tombstones BEFORE live rows: renaming/replacing a name-unique row (e.g. an
+  // exercise) yields a deleted old row + a live new row with the SAME name. Applying
+  // the delete first avoids a transient collision on a partial unique index
+  // (…_name_zh_uniq WHERE not deleted) when both land in one upsert statement.
+  // Within each group apply oldest edit first: a "rename A→D then C→A" chain must
+  // free the name before it is reused. Edit order (updated_at) is a valid order
+  // because the rename guard forbids ever holding two live rows with one name.
+  const byTime = (a: Row, b: Row) => (a.updated_at < b.updated_at ? -1 : a.updated_at > b.updated_at ? 1 : 0)
+  const dels = payload.filter((r) => r.deleted === true).sort(byTime)
+  const lives = payload.filter((r) => r.deleted !== true).sort(byTime)
+  for (const group of [dels, lives]) {
+    for (let i = 0; i < group.length; i += 500) {
+      const { error } = await supabase.from(table).upsert(group.slice(i, i + 500), { onConflict: 'id' })
+      if (error) throw error
+    }
   }
   setWm(uid, table, 'push', rows.reduce((m, r) => (r.updated_at > m ? r.updated_at : m), since))
   return rows.length
