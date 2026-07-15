@@ -15,6 +15,7 @@ export {
   updateEntry,
   patchEntry,
   moveDayEntries,
+  setDayCycleLabel,
   entrySortKey,
   reorderEntries,
   createSport,

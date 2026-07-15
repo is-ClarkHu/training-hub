@@ -30,9 +30,13 @@ export function RehabTimeline({
     ? daysBetween(injury.started_on, injury.resolved_on)
     : daysSince(injury.started_on)
 
-  // Latest date the injury entered each stage (from checkpoints).
+  // Latest date + note the injury entered each stage (from checkpoints).
   const stageDate: Partial<Record<InjuryStatus, string>> = {}
-  for (const cp of injury.checkpoints) stageDate[cp.status] = cp.date
+  const stageNote: Partial<Record<InjuryStatus, string>> = {}
+  for (const cp of injury.checkpoints) {
+    stageDate[cp.status] = cp.date
+    if (cp.note) stageNote[cp.status] = cp.note
+  }
 
   return (
     <div className={`inj-timeline ${relapsed ? 'relapsed' : ''}`}>
@@ -47,6 +51,7 @@ export function RehabTimeline({
             <span className="inj-stage-dot" />
             <span className="inj-stage-label">{INJURY_STATUS_LABELS[s][lang]}</span>
             {stageDate[s] && <span className="inj-stage-date">{stageDate[s]}</span>}
+            {stageNote[s] && <span className="inj-stage-cpnote">{stageNote[s]}</span>}
           </div>
         ))}
       </div>

@@ -66,6 +66,15 @@
   opacity: 0.55;
 }
 .hist-movedate:hover { opacity: 1; }
+.hist-daylabel {
+  font: 11px/1 var(--mono);
+  color: var(--text-dim);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 6px;
+  cursor: pointer;
+}
 /* loop badge: which split day(s) + round for this date */
 .hist-loop { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .hist-loop-day { font: 12px/1 var(--mono); color: var(--text-dim); }
@@ -105,6 +114,12 @@
   background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 6px;
 }
 .hist-circuit-split:hover { color: var(--accent); border-color: var(--accent); }
+/* list/bar mode: full width, movements as a header row + their sets below */
+.hist-circuit.wide { width: 100%; max-width: 100%; min-width: 0; }
+.hist-circuit-grid { display: grid; gap: 5px 14px; padding-top: 7px; border-top: 1px solid var(--border); }
+.hist-circuit-col-head { font: 700 12px/1.3 var(--sans); color: var(--teal); overflow-wrap: anywhere; }
+.hist-circuit-col-sets { display: flex; flex-direction: column; gap: 2px; }
+.hist-circuit-col-sets .hist-set { font: 13px/1.4 var(--mono); }
 /* no rounds: every set its own line ("name value"), stacked vertically */
 .hist-circuit-flat { display: flex; flex-direction: column; gap: 4px; padding-top: 7px; border-top: 1px solid var(--border); }
 .hist-circuit-line { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }

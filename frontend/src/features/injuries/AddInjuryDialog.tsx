@@ -17,6 +17,7 @@ import type {
   BodyPart,
   Injury,
   InjuryAttachmentRef,
+  InjuryCheckpoint,
   InjuryLaterality,
   InjuryScenario,
   InjuryStatus,
@@ -59,6 +60,9 @@ export function AddInjuryDialog({
   const [scenario, setScenario] = useState<InjuryScenario | ''>(injury?.scenario ?? '')
   const [startedOn, setStartedOn] = useState(injury?.started_on ?? today())
   const [status, setStatus] = useState<InjuryStatus>(injury?.status ?? 'newly_occurred')
+  const [checkpoints, setCheckpoints] = useState<InjuryCheckpoint[]>(injury?.checkpoints ?? [])
+  const setCp = (i: number, patch: Partial<InjuryCheckpoint>) =>
+    setCheckpoints((cs) => cs.map((c, idx) => (idx === i ? { ...c, ...patch } : c)))
   const [severity, setSeverity] = useState<number | ''>(injury?.severity ?? '')
   const [noteZh, setNoteZh] = useState(injury?.note_zh ?? '')
   const [noteEn, setNoteEn] = useState(injury?.note_en ?? '')
@@ -166,6 +170,7 @@ export function AddInjuryDialog({
       note_zh: noteZh.trim(),
       note_en: noteEn.trim(),
       attachments: [...linkRefs, ...photoRefs],
+      checkpoints: checkpoints.map((c) => ({ ...c, note: c.note?.trim() || undefined })),
     }
     let saved: Injury
     if (injury) {
@@ -289,12 +294,33 @@ export function AddInjuryDialog({
               {translatingNote ? '…' : (lang === 'zh' ? '翻译' : 'Translate')}
             </button>
           </div>
-          <input className="th-input" value={noteZh} onChange={(e) => setNoteZh(e.target.value)}
+          <textarea className="th-input inj-note-area" rows={4} value={noteZh} onChange={(e) => setNoteZh(e.target.value)}
             placeholder={lang === 'zh' ? '中文记录' : 'Chinese note'} />
-          <input className="th-input" value={noteEn} onChange={(e) => setNoteEn(e.target.value)}
+          <textarea className="th-input inj-note-area" rows={4} value={noteEn} onChange={(e) => setNoteEn(e.target.value)}
             placeholder={lang === 'zh' ? '英文记录' : 'English note'} />
           {hint && <p className="inj-hint">{hint}</p>}
         </div>
+
+        {checkpoints.length > 0 && (
+          <div className="inj-field">
+            <label className="th-label">{lang === 'zh' ? '阶段记录 (日期 + 说明)' : 'Stages (date + note)'}</label>
+            <div className="inj-stages-edit">
+              {checkpoints.map((cp, i) => (
+                <div key={i} className="inj-stage-edit">
+                  <span className="inj-stage-edit-label">{INJURY_STATUS_LABELS[cp.status][lang]}</span>
+                  <input className="th-input inj-stage-date" type="date" value={cp.date} onChange={(e) => setCp(i, { date: e.target.value })} />
+                  <textarea
+                    className="th-input inj-stage-note"
+                    rows={2}
+                    value={cp.note ?? ''}
+                    onChange={(e) => setCp(i, { note: e.target.value })}
+                    placeholder={lang === 'zh' ? '这一阶段的说明…' : 'note for this stage…'}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="inj-field">
           <div className="inj-note-head">

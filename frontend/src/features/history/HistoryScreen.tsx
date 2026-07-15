@@ -16,6 +16,7 @@ import {
   newId,
   patchEntry,
   moveDayEntries,
+  setDayCycleLabel,
   reorderEntries,
   entrySortKey,
   softDeleteEntry,
@@ -163,6 +164,15 @@ export function HistoryScreen() {
       await reload()
     },
     [lang, reload],
+  )
+
+  // Set/correct which split day (A/B/C/…) a training day belongs to.
+  const setSplitDay = useCallback(
+    async (date: string, label: string) => {
+      await setDayCycleLabel(date, label || null)
+      await reload()
+    },
+    [reload],
   )
 
   const entriesById = useMemo(() => Object.fromEntries(entries.map((e) => [e.id, e])), [entries])
@@ -427,6 +437,19 @@ export function HistoryScreen() {
                   📅
                 </button>
               )}
+              {!selectMode && s.items.length > 0 && activeCycle && activeCycle.days.length > 0 && (
+                <select
+                  className="hist-daylabel"
+                  value={s.items.find((e) => e.cycle_day_label)?.cycle_day_label ?? ''}
+                  onChange={(e) => setSplitDay(s.date, e.target.value)}
+                  title={lang === 'zh' ? '这天属于哪个分化日' : "This day's split"}
+                >
+                  <option value="">{lang === 'zh' ? '分化…' : 'split…'}</option>
+                  {activeCycle.days.map((d) => (
+                    <option key={d.label} value={d.label}>{d.label} · {cycleDayTitle(d, lang)}</option>
+                  ))}
+                </select>
+              )}
               {loop && (
                 <span className="hist-loop">
                   {loop.labels.map((l) => (
@@ -448,6 +471,7 @@ export function HistoryScreen() {
                 lang={lang}
                 discreet={discreet}
                 onUnmerge={() => unmergeCircuit(members)}
+                variant="row"
               />
             ))}
 
@@ -735,6 +759,7 @@ function CircuitCard({
   lang,
   discreet,
   onUnmerge,
+  variant = 'card',
 }: {
   members: WorkoutEntry[]
   exById: Record<string, Exercise>
@@ -742,6 +767,7 @@ function CircuitCard({
   lang: 'en' | 'zh'
   discreet: boolean
   onUnmerge: () => void
+  variant?: 'row' | 'card'
 }) {
   const cols = members.map((e) => ({ ex: exById[e.exercise_id], sets: setMap[e.id] ?? [] }))
   const maxRounds = Math.max(0, ...cols.map((c) => c.sets.length))
@@ -764,7 +790,7 @@ function CircuitCard({
     }
   }
   return (
-    <div className="hist-circuit">
+    <div className={`hist-circuit ${variant === 'row' ? 'wide' : ''}`}>
       <div className="hist-circuit-top">
         <span className="hist-dot" style={{ background: ACTIVITY_COLORS.bodyweight }} />
         <span className="hist-name">{lang === 'zh' ? '循环 · 交替' : 'Circuit'}</span>
@@ -777,8 +803,37 @@ function CircuitCard({
         )}
         <button type="button" className="hist-circuit-split" onClick={onUnmerge}>{lang === 'zh' ? '拆开' : 'split'}</button>
       </div>
-      {discreet ? (
-        <div className="hist-circuit-flat"><span className="hist-set">{lines.length} {lang === 'zh' ? '组' : 'sets'}</span></div>
+      {variant === 'row' ? (
+        // List/bar mode: full-width 2-row table — headers = movements, row below = what
+        // was done (each set stacked under its movement; just set counts when discreet).
+        <div className="hist-circuit-grid" style={{ gridTemplateColumns: `repeat(${cols.length}, minmax(0, 1fr))` }}>
+          {cols.map((c, i) => (
+            <div key={`h${i}`} className="hist-circuit-col-head">{c.ex ? exerciseName(c.ex, lang) : '–'}</div>
+          ))}
+          {cols.map((c, i) => (
+            <div key={`v${i}`} className="hist-circuit-col-sets">
+              {discreet ? (
+                <span className="hist-set">{c.sets.length} {lang === 'zh' ? '组' : 'sets'}</span>
+              ) : (
+                c.sets.map((s) => (
+                  <span key={s.id} className="hist-set">{c.ex ? formatSetLine(s, c.ex.measure_type, lang, c.ex.duration_hm) : '–'}</span>
+                ))
+              )}
+            </div>
+          ))}
+        </div>
+      ) : discreet ? (
+        // Grouped/card compact: which movements + how many sets each, no reps/weights.
+        <div className="hist-circuit-flat">
+          {cols.map((c, i) =>
+            c.ex ? (
+              <div key={i} className="hist-circuit-line">
+                <span className="hist-circuit-nm">{exerciseName(c.ex, lang)}</span>
+                <span className="hist-set">{c.sets.length} {lang === 'zh' ? '组' : 'sets'}</span>
+              </div>
+            ) : null,
+          )}
+        </div>
       ) : (
         <div className="hist-circuit-flat">
           {lines.map((ln, i) => (

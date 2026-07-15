@@ -408,7 +408,7 @@ export async function getInjuries(): Promise<Injury[]> {
 
 export async function updateInjury(
   id: string,
-  patch: Partial<Pick<Injury, 'body_area_zh' | 'body_area_en' | 'body_part' | 'laterality' | 'injury_type' | 'scenario' | 'started_on' | 'status' | 'resolved_on' | 'severity' | 'note_raw' | 'note_zh' | 'note_en' | 'attachments' | 'rehab_plan_exercise_ids' | 'assessments'>>,
+  patch: Partial<Pick<Injury, 'body_area_zh' | 'body_area_en' | 'body_part' | 'laterality' | 'injury_type' | 'scenario' | 'started_on' | 'status' | 'resolved_on' | 'severity' | 'note_raw' | 'note_zh' | 'note_en' | 'attachments' | 'rehab_plan_exercise_ids' | 'assessments' | 'checkpoints'>>,
 ): Promise<void> {
   const stored = await db.injuries.get(id)
   if (!stored) return
@@ -1096,6 +1096,15 @@ export async function moveDayEntries(fromDate: string, toDate: string): Promise<
   const ts = nowIso()
   const rows = (await db.workout_entries.where('date').equals(fromDate).toArray()).filter((e) => !e.deleted)
   await db.workout_entries.bulkPut(rows.map((e) => ({ ...e, date: toDate, updated_at: ts })))
+  return rows.length
+}
+
+/** Set (or clear, with null) the cycle split-day label for every workout entry on
+ *  `date` — fixes a mis-labeled or un-labeled training day. Returns rows changed. */
+export async function setDayCycleLabel(date: string, label: string | null): Promise<number> {
+  const ts = nowIso()
+  const rows = (await db.workout_entries.where('date').equals(date).toArray()).filter((e) => !e.deleted)
+  await db.workout_entries.bulkPut(rows.map((e) => ({ ...e, cycle_day_label: label, updated_at: ts })))
   return rows.length
 }
 
