@@ -87,8 +87,18 @@
   border: 1px solid color-mix(in srgb, var(--teal) 35%, var(--border));
   border-radius: 12px;
 }
-.hist-circuit-top { display: flex; align-items: center; gap: 8px; }
+.hist-circuit-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .hist-circuit-top .hist-name { font: 700 14px/1.2 var(--sans); color: var(--text-bright); }
+/* body-part chips: horizontal, wrap, never a vertical stack */
+.hist-circuit-bp { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.hist-bpchip {
+  font: 600 10px/1 var(--mono);
+  color: var(--text-dim);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 3px 6px;
+}
 .hist-circuit-split {
   margin-left: auto; padding: 3px 9px;
   font: 600 11px/1 var(--mono); color: var(--text-dim); cursor: pointer;
@@ -103,6 +113,15 @@
 
 /* mode-2: category modules, each a row of movement cards flowing left→right */
 .hist-modules { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; }
+/* a circuit inside the grouped view packs like a module (same sizing → ~4 per row) */
+.hist-modules > .hist-circuit {
+  flex: 1 1 min(100%, 210px);
+  width: auto;
+  min-width: min(100%, 150px);
+  max-width: 100%;
+}
+/* let long movement names wrap inside a narrow packed circuit instead of overflowing */
+.hist-modules > .hist-circuit .hist-circuit-nm { max-width: 100%; overflow-wrap: anywhere; }
 .hist-module {
   flex: 1 1 min(100%, 220px);
   min-width: min(100%, 180px);

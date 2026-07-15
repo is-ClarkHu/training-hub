@@ -437,7 +437,9 @@ export function HistoryScreen() {
               )}
             </div>
 
-            {circuits.map((members) => (
+            {/* List mode: circuits stack above the entries. Grouped mode: they flow
+                inside .hist-modules so narrow ones pack onto a row with the modules. */}
+            {mode === 'list' && circuits.map((members) => (
               <CircuitCard
                 key={members[0].superset_group ?? members[0].id}
                 members={members}
@@ -451,6 +453,17 @@ export function HistoryScreen() {
 
             {mode === 'grouped' ? (
               <div className="hist-modules">
+                {circuits.map((members) => (
+                  <CircuitCard
+                    key={members[0].superset_group ?? members[0].id}
+                    members={members}
+                    exById={exById}
+                    setMap={setMap}
+                    lang={lang}
+                    discreet={discreet}
+                    onUnmerge={() => unmergeCircuit(members)}
+                  />
+                ))}
                 {groupByModule(singles).map((g) => {
                   const ids = g.items.map((e) => e.id)
                   return (
@@ -732,6 +745,15 @@ function CircuitCard({
 }) {
   const cols = members.map((e) => ({ ex: exById[e.exercise_id], sets: setMap[e.id] ?? [] }))
   const maxRounds = Math.max(0, ...cols.map((c) => c.sets.length))
+  // Body parts this circuit trains = the displayed part of each member (its chosen
+  // module_part, else the exercise's primary category), deduped.
+  const parts = [
+    ...new Set(
+      members
+        .map((e) => e.module_part ?? (exById[e.exercise_id] ? primaryCategory(exById[e.exercise_id]) : null))
+        .filter((p): p is string => !!p),
+    ),
+  ]
   // Flatten to one line per set, in the order performed (set 1 of each movement,
   // then set 2, …). Uneven set counts just contribute fewer lines.
   const lines: { name: string; set: ExerciseSet; ex: Exercise }[] = []
@@ -746,6 +768,13 @@ function CircuitCard({
       <div className="hist-circuit-top">
         <span className="hist-dot" style={{ background: ACTIVITY_COLORS.bodyweight }} />
         <span className="hist-name">{lang === 'zh' ? '循环 · 交替' : 'Circuit'}</span>
+        {parts.length > 0 && (
+          <span className="hist-circuit-bp">
+            {parts.map((p) => (
+              <span key={p} className="hist-bpchip">{categoryLabel(p, lang)}</span>
+            ))}
+          </span>
+        )}
         <button type="button" className="hist-circuit-split" onClick={onUnmerge}>{lang === 'zh' ? '拆开' : 'split'}</button>
       </div>
       {discreet ? (
