@@ -1,0 +1,25 @@
+# Render blueprint for the assistant backend (Phase 2 FastAPI relay).
+# Deploy: Render dashboard → New → Blueprint → connect this repo → set the two
+# `sync: false` secrets (SUPABASE_URL, SUPABASE_KEY = anon key) in the dashboard.
+# Gives an HTTPS URL like https://training-hub-backend.onrender.com — put that in the
+# GitHub Actions secret VITE_ASSISTANT_API_URL and re-run the Pages deploy.
+#
+# Note: the free plan sleeps after ~15 min idle, so the first request after a nap
+# has a cold start (~30-60s). Fine for personal use.
+services:
+  - type: web
+    name: training-hub-backend
+    runtime: python
+    rootDir: backend
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: FRONTEND_ORIGIN            # the Pages origin allowed by CORS (not a secret)
+        value: https://is-clarkhu.github.io
+      - key: SUPABASE_URL              # set in the Render dashboard
+        sync: false
+      - key: SUPABASE_KEY              # anon key — set in the Render dashboard
+        sync: false

@@ -98,6 +98,30 @@ tab and ask about your training.
 > model** in Settings → AI (claude-* / gpt-4o* / gemini-*); text-only models
 > (e.g. deepseek-chat) will error on recognition but everything else still works.
 
+### 5b. Host the backend (so the assistant works on mobile)
+
+Running the backend locally only gives you the assistant on that PC. To use it from
+your phone, deploy the backend to any Python host. A [Render](https://render.com)
+blueprint is included (`render.yaml`, free plan):
+
+1. Render → **New → Blueprint** → connect this repo. It reads `render.yaml`.
+2. Set the two `sync: false` env vars in the Render dashboard: `SUPABASE_URL` and
+   `SUPABASE_KEY` (anon). `FRONTEND_ORIGIN` is preset to the Pages origin (edit it if
+   your frontend lives elsewhere). Deploy → you get an HTTPS URL like
+   `https://training-hub-backend.onrender.com`.
+3. Point the frontend at it: add a GitHub Actions **secret** `VITE_ASSISTANT_API_URL`
+   = that URL, then re-run the "Deploy frontend to GitHub Pages" workflow.
+
+The backend stores **no** LLM keys (the browser sends them per request) and holds only
+the browser-safe anon key + your Supabase URL. One backend can serve many accounts on
+the same Supabase (RLS isolates them). The free plan sleeps when idle, so the first
+request after a nap is slow (~30–60s cold start).
+
+> **Self-hosting / multi-user:** each deployment (its own Supabase project) needs its
+> own backend, since the backend is bound to one Supabase project. Friends using *your*
+> Supabase can share *your* backend. Alternatively the backend is optional — everything
+> except the assistant (incl. AI translation, which is browser-direct) works without it.
+
 ---
 
 ## What only you can do (🔑)
