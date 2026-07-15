@@ -57,6 +57,15 @@
   letter-spacing: 1px;
   color: var(--text-dim);
 }
+.hist-movedate {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 2px;
+  opacity: 0.55;
+}
+.hist-movedate:hover { opacity: 1; }
 /* loop badge: which split day(s) + round for this date */
 .hist-loop { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .hist-loop-day { font: 12px/1 var(--mono); color: var(--text-dim); }

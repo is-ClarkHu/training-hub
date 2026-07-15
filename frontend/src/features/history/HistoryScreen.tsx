@@ -15,6 +15,7 @@ import {
   getTrackerEntries,
   newId,
   patchEntry,
+  moveDayEntries,
   reorderEntries,
   entrySortKey,
   softDeleteEntry,
@@ -145,6 +146,24 @@ export function HistoryScreen() {
   useEffect(() => {
     void reload()
   }, [reload])
+
+  // Move a whole mis-dated day's workouts to the correct date.
+  const moveDay = useCallback(
+    async (date: string) => {
+      const to = window.prompt(
+        lang === 'zh' ? `把 ${date} 的训练移到哪天?(YYYY-MM-DD)` : `Move ${date}'s workouts to (YYYY-MM-DD):`,
+        date,
+      )?.trim()
+      if (!to || to === date) return
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+        alert(lang === 'zh' ? '日期格式应为 YYYY-MM-DD' : 'Date must be YYYY-MM-DD')
+        return
+      }
+      await moveDayEntries(date, to)
+      await reload()
+    },
+    [lang, reload],
+  )
 
   const entriesById = useMemo(() => Object.fromEntries(entries.map((e) => [e.id, e])), [entries])
   const allExercises = useMemo(() => Object.values(exById), [exById])
@@ -398,6 +417,16 @@ export function HistoryScreen() {
           <section key={s.date} className="hist-session">
             <div className="hist-date-row">
               <h3 className="hist-date">{s.date}</h3>
+              {!selectMode && s.items.length > 0 && (
+                <button
+                  className="hist-movedate"
+                  type="button"
+                  title={lang === 'zh' ? '移动这天的训练到别的日期' : "Move this day's workouts to another date"}
+                  onClick={() => moveDay(s.date)}
+                >
+                  📅
+                </button>
+              )}
               {loop && (
                 <span className="hist-loop">
                   {loop.labels.map((l) => (

@@ -30,6 +30,7 @@ export function EditEntryDialog({
   )
   const [note, setNote] = useState(entry.note_raw)
   const [swapId, setSwapId] = useState(entry.exercise_id)
+  const [date, setDate] = useState(entry.date)
   const [busy, setBusy] = useState(false)
   const name = exerciseName(exercise, lang)
 
@@ -41,7 +42,7 @@ export function EditEntryDialog({
     const inputs = draftsToSetInputs(drafts, target.measure_type, parsed, target.duration_hm)
     await updateEntry(
       entry.id,
-      { exercise_id: target.id, note_raw: note, note_tags: parsed.tagKeys, is_superset: inputs.some((s) => s.set_type === 'superset') },
+      { date, exercise_id: target.id, note_raw: note, note_tags: parsed.tagKeys, is_superset: inputs.some((s) => s.set_type === 'superset') },
       inputs,
     )
     setBusy(false)
@@ -61,6 +62,10 @@ export function EditEntryDialog({
     <div className="log-dialog-backdrop" onClick={() => !busy && onClose()}>
       <div className="log-dialog" onClick={(e) => e.stopPropagation()}>
         <h3>{name}</h3>
+        <div className="log-field">
+          <label className="th-label">{lang === 'zh' ? '日期(写错可改)' : 'Date (fix if wrong)'}</label>
+          <input className="th-input" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        </div>
         <div className="log-field">
           <label className="th-label">{lang === 'zh' ? '动作(可改成其他)' : 'Exercise (swap)'}</label>
           <select className="th-input" value={swapId} onChange={(e) => setSwapId(e.target.value)}>

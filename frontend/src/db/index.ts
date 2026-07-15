@@ -14,6 +14,7 @@ export {
   softDeleteEntry,
   updateEntry,
   patchEntry,
+  moveDayEntries,
   entrySortKey,
   reorderEntries,
   createSport,

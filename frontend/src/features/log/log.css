@@ -281,6 +281,8 @@
 .log-dialog {
   width: 100%;
   max-width: 440px;
+  max-height: 90svh;              /* many sets → scroll instead of overflowing offscreen */
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -292,7 +294,17 @@
 .log-dialog h3 { margin: 0; font: 600 16px/1 var(--mono); }
 .log-hint { margin: 6px 0 0; font: 12px/1.4 var(--mono); color: var(--amber); }
 .log-usage { font: 11px/1 var(--mono); color: var(--text-dim); }
-.log-dialog-actions { display: flex; gap: 10px; }
+/* Sticky so Save/Delete stay reachable no matter how long the set list gets. */
+.log-dialog-actions {
+  display: flex;
+  gap: 10px;
+  position: sticky;
+  bottom: -22px;                 /* cancel the dialog's bottom padding */
+  margin: 0 -22px -22px;
+  padding: 14px 22px;
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border);
+}
 .log-dialog-actions .th-btn, .log-dialog-actions .th-btn-ghost { flex: 1; }
 
 @media (max-width: 520px) {

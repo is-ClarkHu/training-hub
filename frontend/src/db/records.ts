@@ -1079,7 +1079,7 @@ export async function softDeleteEntry(entryId: string): Promise<void> {
 /** Field-only patch of an entry (does NOT touch its sets). Used by the History
  *  review flow ("确认无误" clears the flags) and the mode-2 module chooser. */
 export type EntryPatch = Partial<
-  Pick<WorkoutEntry, 'exercise_id' | 'note_raw' | 'note_tags' | 'is_superset' | 'needs_review' | 'needs_translation' | 'injury_modified' | 'injury_id' | 'module_part' | 'superset_group'>
+  Pick<WorkoutEntry, 'date' | 'exercise_id' | 'note_raw' | 'note_tags' | 'is_superset' | 'needs_review' | 'needs_translation' | 'injury_modified' | 'injury_id' | 'module_part' | 'superset_group'>
 >
 
 export async function patchEntry(entryId: string, patch: EntryPatch): Promise<void> {
@@ -1087,6 +1087,16 @@ export async function patchEntry(entryId: string, patch: EntryPatch): Promise<vo
   const e = await db.workout_entries.get(entryId)
   if (!e) return
   await db.workout_entries.put({ ...e, ...patch, updated_at: ts })
+}
+
+/** Move every workout entry logged on `fromDate` to `toDate` (fix a mis-dated day).
+ *  Returns how many entries moved. Sport sessions/trackers are untouched. */
+export async function moveDayEntries(fromDate: string, toDate: string): Promise<number> {
+  if (fromDate === toDate) return 0
+  const ts = nowIso()
+  const rows = (await db.workout_entries.where('date').equals(fromDate).toArray()).filter((e) => !e.deleted)
+  await db.workout_entries.bulkPut(rows.map((e) => ({ ...e, date: toDate, updated_at: ts })))
+  return rows.length
 }
 
 /** Order key for sorting entries within a day (performed order). Falls back to the
