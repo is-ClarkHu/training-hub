@@ -383,3 +383,29 @@
   border: 1px solid var(--border); border-radius: 50%;
 }
 .hist-cyclepick-day.done { color: #04181a; background: var(--teal); border-color: var(--teal); }
+
+/* ── long-image export ─────────────────────────────────────── */
+.hx-opts { display: flex; flex-wrap: wrap; gap: 14px; margin: 4px 0; }
+.hx-opts label { display: inline-flex; align-items: center; gap: 6px; font: 13px/1 var(--mono); color: var(--text); cursor: pointer; }
+.hx-seg { align-self: flex-start; }
+.hx-count { margin: 0; font: 11px/1 var(--mono); color: var(--text-dim); }
+/* off-screen sheet that html-to-image snapshots */
+.hx-holder { position: fixed; left: -10000px; top: 0; pointer-events: none; opacity: 1; z-index: -1; }
+.hx-sheet {
+  width: 720px; box-sizing: border-box; padding: 26px;
+  background: var(--bg); color: var(--text);
+  font-family: var(--sans, system-ui);
+}
+.hx-title { display: flex; align-items: baseline; justify-content: space-between; padding-bottom: 12px; margin-bottom: 14px; border-bottom: 2px solid var(--teal); }
+.hx-title strong { font: 700 20px/1 var(--display, var(--mono)); color: var(--text-bright); letter-spacing: 1px; }
+.hx-title span { font: 13px/1 var(--mono); color: var(--text-dim); }
+.hx-day { margin-bottom: 18px; }
+.hx-daydate { font: 700 16px/1 var(--display, var(--mono)); color: var(--teal); margin-bottom: 8px; }
+.hx-modules { display: flex; flex-wrap: wrap; gap: 10px; }
+.hx-module { flex: 1 1 min(100%, 210px); min-width: 180px; padding: 10px 12px; background: var(--bg-panel); border: 1px solid var(--border); border-radius: 10px; }
+.hx-modhead { font: 700 11px/1 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 6px; }
+.hx-listwrap { display: flex; flex-direction: column; gap: 5px; }
+.hx-entry { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 3px 0; }
+.hx-ex { font: 600 13px/1.4 var(--sans); color: var(--text-bright); }
+.hx-sets { font: 13px/1.4 var(--mono); color: var(--text); text-align: right; overflow-wrap: anywhere; }
+.hx-sport .hx-ex, .hx-intim .hx-ex { color: var(--text); font-weight: 500; }

@@ -50,6 +50,7 @@ import {
   primaryCategory,
 } from '../log/util'
 import { EditEntryDialog } from './EditEntryDialog'
+import { ExportDialog } from './ExportDialog'
 import { ReviewFlow } from './ReviewFlow'
 import './history.css'
 
@@ -129,6 +130,7 @@ export function HistoryScreen() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [discreet, setDiscreet] = useState(false)
   const [reviewOnly, setReviewOnly] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const [mode, setMode] = useState<HistMode>(() => (localStorage.getItem(MODE_KEY) === 'grouped' ? 'grouped' : 'list'))
 
   useEffect(() => { localStorage.setItem(MODE_KEY, mode) }, [mode])
@@ -372,6 +374,9 @@ export function HistoryScreen() {
         <button className={`th-pill ${discreet ? 'on' : ''}`} type="button" onClick={() => setDiscreet((v) => !v)}>
           {discreet ? '🙈' : '👁'} {lang === 'zh' ? '数值' : 'values'}
         </button>
+        <button className="th-pill" type="button" onClick={() => setExporting(true)}>
+          🖼 {lang === 'zh' ? '导出' : 'Export'}
+        </button>
         <button className={`th-pill ${selectMode ? 'on' : ''}`} type="button" onClick={() => { setSelectMode((v) => !v); setSelected(new Set()) }}>
           {selectMode ? (lang === 'zh' ? '取消' : 'cancel') : (lang === 'zh' ? '选择' : 'select')}
         </button>
@@ -560,6 +565,19 @@ export function HistoryScreen() {
           lang={lang}
           onChanged={reload}
           onClose={() => setModuleEditing(null)}
+        />
+      )}
+
+      {exporting && (
+        <ExportDialog
+          entries={entries}
+          setMap={setMap}
+          exById={exById}
+          sportById={sportById}
+          sportSessions={sportSessions}
+          intimacyRows={intimacyRows}
+          lang={lang}
+          onClose={() => setExporting(false)}
         />
       )}
 
