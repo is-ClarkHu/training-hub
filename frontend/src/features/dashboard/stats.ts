@@ -47,17 +47,18 @@ export function muscleRecovery(entries: WorkoutEntry[], exById: Record<string, E
   })
 }
 
-/** Entry counts across the 7 body parts (BODY_PARTS order). */
+/** Entry counts across body parts — each entry counts ONCE, toward its assigned
+ *  module (module_part) or the exercise's primary category, so a multi-category
+ *  movement (e.g. deadlift = back+legs) doesn't inflate two slices. */
 export function bodyPartCounts(entries: WorkoutEntry[], exById: Record<string, Exercise>): number[] {
   const keys = categoryKeys()
   const counts = keys.map(() => 0)
   for (const e of entries) {
     const ex = exById[e.exercise_id]
     if (!ex) continue
-    for (const bp of ex.body_parts) {
-      const i = keys.indexOf(bp)
-      if (i >= 0) counts[i] += 1
-    }
+    const part = e.module_part ?? ex.body_parts[0]
+    const i = part ? keys.indexOf(part) : -1
+    if (i >= 0) counts[i] += 1
   }
   return counts
 }
@@ -160,7 +161,7 @@ export function bodyweightVolume(
   for (const e of entries) {
     const ex = exById[e.exercise_id]
     if (!ex || ex.measure_type !== 'reps_only') continue
-    const reps = (setsByEntry[e.id] ?? []).reduce((sum, s) => sum + (s.reps ?? 0), 0)
+    const reps = (setsByEntry[e.id] ?? []).filter((s) => s.set_type !== 'warmup').reduce((sum, s) => sum + (s.reps ?? 0), 0)
     byDate[e.date] = (byDate[e.date] ?? 0) + reps
   }
   const labels = Object.keys(byDate).sort()
@@ -170,5 +171,5 @@ export function bodyweightVolume(
 /** Total reps across all reps_only sets (bodyweight volume KPI, e.g. push-ups). */
 export function totalBodyweightReps(sets: ExerciseSet[], entries: WorkoutEntry[], exById: Record<string, Exercise>): number {
   const repsOnly = new Set(entries.filter((e) => exById[e.exercise_id]?.measure_type === 'reps_only').map((e) => e.id))
-  return sets.filter((s) => repsOnly.has(s.entry_id)).reduce((sum, s) => sum + (s.reps ?? 0), 0)
+  return sets.filter((s) => repsOnly.has(s.entry_id) && s.set_type !== 'warmup').reduce((sum, s) => sum + (s.reps ?? 0), 0)
 }

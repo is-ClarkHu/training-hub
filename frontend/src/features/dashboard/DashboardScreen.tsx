@@ -386,9 +386,9 @@ export function DashboardScreen() {
               />
               <span className="rr-sub">{lang === 'zh' ? '点击查看人体图' : 'tap for body map'}</span>
             </div>
-            {roundData.list.length > 1 && (
+            {roundData.list.length > 0 && (
               <div className="dash-round-history">
-                <span className="dash-round-hist-label">{lang === 'zh' ? '历史轮次' : 'Past rounds'}</span>
+                <span className="dash-round-hist-label">{lang === 'zh' ? '轮次列表' : 'Rounds'}</span>
                 <div className="dash-round-hist-scroll">
                   {roundData.list.map(({ round, chains }) => (
                     <RoundRings
@@ -644,7 +644,7 @@ function monthLabel(iso: string, lang: 'en' | 'zh'): string {
 function Heatmap({ cols, lang, detail, injuryDates }: { cols: HeatCell[][]; lang: 'en' | 'zh'; detail: Record<string, string>; injuryDates: Set<string> }) {
   const wd = lang === 'zh' ? ['一', '二', '三', '四', '五', '六', '日'] : ['M', 'T', 'W', 'T', 'F', 'S', 'S']
   const [tip, setTip] = useState<{ x: number; y: number; cell: HeatCell } | null>(null)
-  const LVL = lang === 'zh' ? ['无', '恢复', '常规', '高强', '比赛/双练'] : ['rest', 'recovery', 'normal', 'high', 'comp/double']
+  const LVL = lang === 'zh' ? ['无', '轻', '中', '高', '最高'] : ['rest', 'light', 'moderate', 'high', 'max']
 
   return (
     <div className="dash-heat" onMouseLeave={() => setTip(null)}>

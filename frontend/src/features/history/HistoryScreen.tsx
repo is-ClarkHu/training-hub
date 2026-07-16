@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import {
   getActiveCycle,
+  getCycles,
   getCycleRounds,
   getEntries,
   getExercises,
@@ -33,7 +34,7 @@ import { useLanguage } from '../../i18n'
 import type { CycleRound, Exercise, ExerciseSet, IntimacyCategory, OptionalTracker, Sport, SportSession, TrainingCycle, WorkoutEntry } from '../../supabase/types'
 import type { BodyPart } from '../../supabase/types'
 import { cycleDayTitle } from '../cycle/day'
-import { liveCompletedLabels, roundMetrics, roundRegionActivity } from '../cycle/rounds'
+import { liveCompletedLabels, roundMetrics, roundRegionActivity, openRound } from '../cycle/rounds'
 import { BodyModel, type RegionView } from '../cycle/BodyModel'
 import { RoundRings, type RingChain } from '../dashboard/RoundRings'
 import { sportName, attrLabel, SportSessionDialog } from '../sports'
@@ -114,6 +115,9 @@ export function HistoryScreen() {
   const [intimacyRows, setIntimacyRows] = useState<OptionalTracker[]>([])
   const [activeCycle, setActiveCycle] = useState<TrainingCycle | null>(null)
   const [rounds, setRounds] = useState<CycleRound[]>([])
+  const [allCycles, setAllCycles] = useState<TrainingCycle[]>([])
+  const [roundsByCycle, setRoundsByCycle] = useState<Record<string, CycleRound[]>>({})
+  const [assignCycle, setAssignCycle] = useState<TrainingCycle | null>(null)
   const [showIntimacy, setShowIntimacy] = useState(false)
   const [loading, setLoading] = useState(true)
   const [sportEditing, setSportEditing] = useState<SportSession | null>(null)
@@ -150,6 +154,11 @@ export function HistoryScreen() {
     const cyc = await getActiveCycle()
     setActiveCycle(cyc)
     setRounds(cyc ? await getCycleRounds(cyc.id) : [])
+    // All cycles + their rounds — the assign flow lets you file a day into ANY split.
+    const cs = await getCycles()
+    setAllCycles(cs)
+    const pairs = await Promise.all(cs.map(async (c) => [c.id, await getCycleRounds(c.id)] as const))
+    setRoundsByCycle(Object.fromEntries(pairs))
     setLoading(false)
   }, [])
 
@@ -214,7 +223,11 @@ export function HistoryScreen() {
       labels.push({ label: e.cycle_day_label, title: cycleDayTitle(day, lang) })
     }
     if (labels.length === 0) return null
-    const round = rounds.find((r) => r.started_on <= date && (r.ended_on ?? '9999-12-31') >= date)
+    // Prefer the round the day's entries are actually assigned to (cycle_round_id);
+    // fall back to date-range matching only for legacy entries without an assignment.
+    const roundId = items.find((e) => e.cycle_round_id && (!e.cycle_id || e.cycle_id === activeCycle.id))?.cycle_round_id
+    const round = (roundId ? rounds.find((r) => r.id === roundId) : undefined)
+      ?? rounds.find((r) => r.started_on <= date && (r.ended_on ?? '9999-12-31') >= date)
     return { labels, round: round?.index ?? null }
   }, [activeCycle, rounds, lang])
 
@@ -399,7 +412,7 @@ export function HistoryScreen() {
             <span className="hist-rounds-cyc">{activeCycle.name}</span>
           </div>
           <ul className="hist-rounds-list">
-            {[...rounds].reverse().map((r) => {
+            {[...rounds].filter((r) => !r.skipped).reverse().map((r) => {
               const done = liveCompletedLabels(activeCycle, r, entries)
               const allDone = done.length === activeCycle.days.length
               return (
@@ -550,18 +563,30 @@ export function HistoryScreen() {
         />
       )}
 
-      {cycleAssigning && activeCycle && (
+      {cycleAssigning && !assignCycle && (
+        <CyclePickerDialog
+          cycles={allCycles}
+          roundsByCycle={roundsByCycle}
+          entries={entries}
+          exById={exById}
+          setMap={setMap}
+          lang={lang}
+          onPick={(c) => setAssignCycle(c)}
+          onClose={() => setCycleAssigning(null)}
+        />
+      )}
+      {cycleAssigning && assignCycle && (
         <CycleAssignDialog
           date={cycleAssigning.date}
           items={cycleAssigning.items}
-          cycle={activeCycle}
-          rounds={rounds}
+          cycle={assignCycle}
+          rounds={roundsByCycle[assignCycle.id] ?? []}
           allEntries={entries}
           exById={exById}
           setMap={setMap}
           lang={lang}
-          onSaved={() => { setCycleAssigning(null); void reload() }}
-          onClose={() => setCycleAssigning(null)}
+          onSaved={() => { setAssignCycle(null); setCycleAssigning(null); void reload() }}
+          onClose={() => setAssignCycle(null)}
         />
       )}
 
@@ -625,6 +650,84 @@ function ModuleChooser({
   )
 }
 
+// Step 1 of assigning a day: pick which split (a day can span several). Each split
+// shows its latest round as a body map (body mode) or a day-loop (circle mode).
+function CyclePickerDialog({
+  cycles,
+  roundsByCycle,
+  entries,
+  exById,
+  setMap,
+  lang,
+  onPick,
+  onClose,
+}: {
+  cycles: TrainingCycle[]
+  roundsByCycle: Record<string, CycleRound[]>
+  entries: WorkoutEntry[]
+  exById: Record<string, Exercise>
+  setMap: Record<string, ExerciseSet[]>
+  lang: 'en' | 'zh'
+  onPick: (cycle: TrainingCycle) => void
+  onClose: () => void
+}) {
+  const countSets = (id: string) => setCountOf(setMap, id)
+  return (
+    <div className="log-dialog-backdrop" onClick={onClose}>
+      <div className="log-dialog hist-cyclepick" onClick={(e) => e.stopPropagation()}>
+        <h3>{lang === 'zh' ? '归到哪个分化?' : 'Assign to which split?'}</h3>
+        <p className="hist-cyclepick-hint">
+          {lang === 'zh' ? '一天可以跨多个分化 — 先选一个,存完可以再选另一个归类剩下的。' : 'A day can span splits — pick one, save, then pick another for the rest.'}
+        </p>
+        {cycles.length === 0 ? (
+          <p className="hist-empty">{lang === 'zh' ? '还没有分化框架(去 Cycle 页新建)。' : 'No splits yet (create one in Cycle).'}</p>
+        ) : (
+          <div className="hist-cyclepick-grid">
+            {cycles.map((c) => {
+              const rs = roundsByCycle[c.id] ?? []
+              const round = openRound(rs) ?? [...rs].sort((a, b) => b.index - a.index)[0] ?? null
+              const mode = c.display_mode ?? 'circle'
+              const activity: Record<string, RegionView> = {}
+              if (round && mode === 'body') {
+                const ra = roundRegionActivity(c, round, entries, countSets)
+                for (const [region, a] of Object.entries(ra)) {
+                  const byEx = new Map<string, { name: string; sets: number; day: string; date: string | null }>()
+                  for (const it of a.items) {
+                    const ex = exById[it.exId]
+                    const cur = byEx.get(it.exId) ?? { name: ex ? exerciseName(ex, lang) : '?', sets: 0, day: it.day, date: null as string | null }
+                    cur.sets += it.sets
+                    if (it.date && (!cur.date || it.date > cur.date)) cur.date = it.date
+                    byEx.set(it.exId, cur)
+                  }
+                  activity[region] = { sets: a.sets, items: [...byEx.values()] }
+                }
+              }
+              const done = round ? new Set(liveCompletedLabels(c, round, entries)) : new Set<string>()
+              return (
+                <div key={c.id} role="button" tabIndex={0} className="hist-cyclepick-card" onClick={() => onPick(c)}>
+                  <span className="hist-cyclepick-name">{c.name}{round ? ` · R${round.index}` : ''}</span>
+                  {mode === 'body' ? (
+                    <div className="hist-cyclepick-body"><BodyModel activity={activity} lang={lang} showBack={false} compact /></div>
+                  ) : (
+                    <span className="hist-cyclepick-loop">
+                      {c.days.map((d) => (
+                        <span key={d.label} className={`hist-cyclepick-day ${done.has(d.label) ? 'done' : ''}`}>{d.label}</span>
+                      ))}
+                    </span>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+        <div className="log-dialog-actions">
+          <button className="th-btn-ghost" type="button" onClick={onClose}>{lang === 'zh' ? '取消' : 'Cancel'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function CycleAssignDialog({
   date,
   items,
@@ -648,7 +751,11 @@ function CycleAssignDialog({
   onSaved: () => void
   onClose: () => void
 }) {
-  const existingRound = items.find((e) => e.cycle_round_id)?.cycle_round_id ?? rounds.find((r) => !r.ended_on)?.id ?? rounds[rounds.length - 1]?.id ?? null
+  // Default to the day's existing assignment, else the LATEST not-yet-full round
+  // (highest-index, still open, not skipped) — the round you're currently filling;
+  // else null = start a new round.
+  const latestOpen = [...rounds].sort((a, b) => b.index - a.index).find((r) => !r.ended_on && !r.skipped)
+  const existingRound = items.find((e) => e.cycle_round_id)?.cycle_round_id ?? latestOpen?.id ?? null
   const [roundId, setRoundId] = useState<string | null>(existingRound)
   const [dayLabel, setDayLabel] = useState(items.find((e) => e.cycle_day_label)?.cycle_day_label ?? cycle.days[0]?.label ?? '')
   const [selected, setSelected] = useState<Set<string>>(() => new Set(items.map((e) => e.id)))

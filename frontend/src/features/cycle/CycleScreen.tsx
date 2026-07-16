@@ -127,7 +127,11 @@ export function CycleScreen() {
     const perRegion = new Map<RegionId, Map<string, { name: string; sets: number; day: string; date: string | null }>>()
     for (const e of entries) {
       if (e.cycle_id && e.cycle_id !== c.id) continue
-      if (e.date < open.started_on || !e.cycle_day_label) continue
+      if (!e.cycle_day_label) continue
+      // Which entries count this round: prefer the explicit assignment (cycle_round_id),
+      // fall back to the round's date span for legacy entries. (Matches roundRegionActivity.)
+      const inRound = e.cycle_round_id ? e.cycle_round_id === open.id : e.date >= open.started_on && (!open.ended_on || e.date <= open.ended_on)
+      if (!inRound) continue
       const regions = dayRegions.get(e.cycle_day_label)
       if (!regions || regions.length === 0) continue
       const n = setCounts[e.id] ?? 0
@@ -256,6 +260,7 @@ export function CycleScreen() {
             adult={showIntimacy}
             primary
             onSkip={(c, rv) => void skipRoundFor(c, rv)}
+            onEdit={(c) => setDialog({ mode: 'edit', cycle: c })}
           />
           {sideCycles.length > 0 && (
             <div className="cyc-loop-side">
@@ -272,6 +277,7 @@ export function CycleScreen() {
                     adult={showIntimacy}
                     onHoverChange={(hovered) => setHoveredSideCycleId(hovered ? c.id : null)}
                     onSkip={(cyc, r) => void skipRoundFor(cyc, r)}
+                    onEdit={(c) => setDialog({ mode: 'edit', cycle: c })}
                   />
                 )
               })}
@@ -533,6 +539,7 @@ function CycleVisualCard({
   primary = false,
   onHoverChange,
   onSkip,
+  onEdit,
 }: {
   cycle: TrainingCycle
   round: ReturnType<typeof currentRound>
@@ -543,6 +550,7 @@ function CycleVisualCard({
   primary?: boolean
   onHoverChange?: (hovered: boolean) => void
   onSkip?: (cycle: TrainingCycle, round: ReturnType<typeof currentRound>) => void
+  onEdit?: (cycle: TrainingCycle) => void
 }) {
   const mode = cycle.display_mode ?? 'circle'
   return (
@@ -568,6 +576,11 @@ function CycleVisualCard({
       <div className="cyc-visual-foot">
         <span>{round.open ? (lang === 'zh' ? '进行中' : 'open') : (lang === 'zh' ? '待开始' : 'pending')}</span>
         <span>{lang === 'zh' ? '剩余' : 'remaining'} {round.remaining.join('/') || '—'}</span>
+        {onEdit && (
+          <button className="hist-link cyc-visual-edit" type="button" onClick={() => onEdit(cycle)}>
+            {lang === 'zh' ? '编辑框架' : 'Edit'}
+          </button>
+        )}
         {round.open && onSkip && (
           <button className="hist-link danger cyc-visual-skip" type="button" onClick={() => onSkip(cycle, round)}>
             {lang === 'zh' ? '跳过本轮' : 'Skip round'}

@@ -363,3 +363,23 @@
 .hist-link.danger { color: var(--danger); }
 .hist-link.on { color: var(--lime); }
 .hist-link:disabled { opacity: 0.5; }
+
+/* cycle picker (assign step 1) */
+.hist-cyclepick { max-width: 560px; }
+.hist-cyclepick-hint { margin: 0; font: 12px/1.4 var(--mono); color: var(--text-dim); }
+.hist-cyclepick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.hist-cyclepick-card {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 10px; cursor: pointer; text-align: center;
+  background: var(--bg-panel); border: 1px solid var(--border); border-radius: 10px;
+}
+.hist-cyclepick-card:hover { border-color: var(--accent); }
+.hist-cyclepick-name { font: 600 12px/1.3 var(--mono); color: var(--text-bright); }
+.hist-cyclepick-body { width: 100%; pointer-events: none; }
+.hist-cyclepick-loop { display: inline-flex; flex-wrap: wrap; gap: 4px; justify-content: center; }
+.hist-cyclepick-day {
+  width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center;
+  font: 700 12px/1 var(--mono); color: var(--text-dim);
+  border: 1px solid var(--border); border-radius: 50%;
+}
+.hist-cyclepick-day.done { color: #04181a; background: var(--teal); border-color: var(--teal); }
