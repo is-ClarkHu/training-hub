@@ -1,4 +1,4 @@
-// Rehab loop (§6A Phase 3), mounted at the top of the Cycle tab. For each active
+// Rehab loop (§6A Phase 3), mounted on the Injuries tab. For each active
 // injury it closes the loop: assess symptoms → execute the rehab plan → observe
 // training response → advance the stage. Recovered injuries drop out (archived).
 import { useCallback, useEffect, useMemo, useState } from 'react'

@@ -50,6 +50,8 @@ export {
   getOpenRound,
   recordCycleDay,
   skipCycleRound,
+  reopenCycleRound,
+  deleteCycleRound,
   logTracker,
   getTrackerEntries,
   deleteTrackerEntry,

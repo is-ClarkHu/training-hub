@@ -15,6 +15,8 @@ import {
   getTrackerEntries,
   setActiveCycle,
   skipCycleRound,
+  reopenCycleRound,
+  deleteCycleRound,
   softDeleteCycle,
   updateCycle,
   withUndo,
@@ -37,7 +39,6 @@ import { muscleRecovery } from '../dashboard/stats'
 import { daysSince } from '../injuries/util'
 import { sportName } from '../sports'
 import { ExerciseManager } from '../log'
-import { RehabLoop } from '../injuries'
 import { CategoryManager } from './CategoryManager'
 import { currentRound, liveCompletedLabels } from './rounds'
 import { BodyModel, type RegionView } from './BodyModel'
@@ -231,10 +232,18 @@ export function CycleScreen() {
     push(lang === 'zh' ? `已结束「${c.name}」第 ${idx} 轮` : `Ended ${c.name} round ${idx}`, async () => { await undo(); await reload() })
   }
 
+  async function reopenRound(id: string) {
+    await reopenCycleRound(id)
+    await reload()
+  }
+  async function deleteRound(id: string) {
+    if (!confirm(lang === 'zh' ? '删除这一轮的记录?(不影响训练记录本身)' : 'Delete this round record? (your workouts are untouched)')) return
+    await deleteCycleRound(id)
+    await reload()
+  }
+
   return (
     <div className="cyc-screen">
-      <RehabLoop lang={lang} />
-
       {mainCycle && (
         <section className={`cyc-loop-board ${sideCycles.length ? 'has-side' : ''}`}>
           <CycleVisualCard
@@ -297,6 +306,12 @@ export function CycleScreen() {
                     : allDone ? <span className="cyc-round-badge done">{lang === 'zh' ? '完成' : 'done'}</span>
                     : !r.ended_on ? <span className="cyc-round-badge open">{lang === 'zh' ? '进行中' : 'open'}</span>
                     : null}
+                  <span className="cyc-round-actions">
+                    {r.ended_on && (
+                      <button type="button" title={lang === 'zh' ? '重开这一轮(撤销跳过/结束)' : 'Reopen (undo skip/close)'} onClick={() => void reopenRound(r.id)}>↩</button>
+                    )}
+                    <button type="button" title={lang === 'zh' ? '删除这一轮' : 'Delete round'} onClick={() => void deleteRound(r.id)}>🗑</button>
+                  </span>
                 </li>
               )
             })}

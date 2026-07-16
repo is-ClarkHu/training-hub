@@ -74,7 +74,12 @@
   border-radius: 6px;
   padding: 3px 6px;
   cursor: pointer;
+  /* unobtrusive: hidden at rest, revealed on hovering the date row (or when focused) */
+  opacity: 0;
+  transition: opacity 0.15s;
 }
+.hist-date-row:hover .hist-daylabel,
+.hist-daylabel:focus { opacity: 0.9; }
 /* loop badge: which split day(s) + round for this date */
 .hist-loop { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .hist-loop-day { font: 12px/1 var(--mono); color: var(--text-dim); }

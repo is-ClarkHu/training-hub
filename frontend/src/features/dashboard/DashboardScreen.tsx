@@ -161,7 +161,7 @@ export function DashboardScreen() {
     return { gym, bodyweight: bw, sport: sessions.length }
   }, [entries, exById, sessions])
   const weekly = useMemo(() => weeklyEntryVolume(entries), [entries])
-  const heat = useMemo(() => intensityHeatmap(entries, sessions, showIntimacy ? intimacyRows : []), [entries, sessions, intimacyRows, showIntimacy])
+  const heat = useMemo(() => intensityHeatmap(entries, sessions, setCount, showIntimacy ? intimacyRows : []), [entries, sessions, setCount, intimacyRows, showIntimacy])
   // per-date detail for the heatmap tooltip
   const heatDetail = useMemo(() => {
     const m: Record<string, string[]> = {}
@@ -425,7 +425,7 @@ export function DashboardScreen() {
       )}
 
       <section className="dash-heat-sec">
-        <div className="th-sectitle">{lang === 'zh' ? '每日强度' : 'Daily intensity'} <small className="dash-sub">0 {lang === 'zh' ? '无' : 'rest'} · 4 {lang === 'zh' ? '比赛/双练' : 'comp/double'}{showIntimacy ? (lang === 'zh' ? ' · 粉点=私密' : ' · pink = wellness') : ''}</small></div>
+        <div className="th-sectitle">{lang === 'zh' ? '每日强度' : 'Daily intensity'} <small className="dash-sub">0 {lang === 'zh' ? '无' : 'rest'} · 4 {lang === 'zh' ? '最高(可叠加)' : 'max (additive)'}{showIntimacy ? (lang === 'zh' ? ' · 粉点=私密' : ' · pink = wellness') : ''}</small></div>
         <Heatmap cols={heat} lang={lang} detail={heatDetail} injuryDates={injuryDates} />
       </section>
 

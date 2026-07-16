@@ -619,7 +619,12 @@ export async function recordCycleDay(cycle: TrainingCycle, label: string, date: 
   if (open.completed_labels.includes(label)) return
   const completed = [...open.completed_labels, label]
   const done = labels.every((l) => completed.includes(l))
-  await db.cycle_rounds.put({ ...open, completed_labels: completed, ended_on: done ? date : null, updated_at: nowIso() })
+  // Days can be logged out of chronological order (back-dated entries), so clamp the
+  // round span: start = earliest date seen, end (when done) = the later of start/date.
+  // Prevents a reversed "2026-07-09 → 2026-06-15" range.
+  const started = date < open.started_on ? date : open.started_on
+  const ended = done ? (date > started ? date : started) : null
+  await db.cycle_rounds.put({ ...open, started_on: started, completed_labels: completed, ended_on: ended, updated_at: nowIso() })
 }
 
 /** End the open round early (skip). Returns false when nothing is open. */
@@ -628,6 +633,18 @@ export async function skipCycleRound(cycleId: string): Promise<boolean> {
   if (!open) return false
   await db.cycle_rounds.put({ ...open, ended_on: today(), skipped: true, updated_at: nowIso() })
   return true
+}
+
+/** Re-open a closed/skipped round (undo an accidental skip or early close). */
+export async function reopenCycleRound(id: string): Promise<void> {
+  const r = await db.cycle_rounds.get(id)
+  if (r) await db.cycle_rounds.put({ ...r, skipped: false, ended_on: null, updated_at: nowIso() })
+}
+
+/** Soft-delete a round entirely (e.g. a bogus round from bad dates). */
+export async function deleteCycleRound(id: string): Promise<void> {
+  const r = await db.cycle_rounds.get(id)
+  if (r) await db.cycle_rounds.put({ ...r, deleted: true, updated_at: nowIso() })
 }
 
 // ── optional trackers (§4.10, §6C) ───────────────────────────

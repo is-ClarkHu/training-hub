@@ -19,6 +19,7 @@ import {
 } from '../../supabase/types'
 import { AddInjuryDialog } from './AddInjuryDialog'
 import { ActiveInjuryBanner } from './ActiveInjuryBanner'
+import { RehabLoop } from './RehabLoop'
 import { RehabTimeline } from './RehabTimeline'
 import { RehabLibrary } from './RehabLibrary'
 import {
@@ -73,6 +74,7 @@ export function InjuriesScreen() {
   return (
     <div className="inj-screen">
       <ActiveInjuryBanner injuries={injuries} lang={lang} />
+      <RehabLoop lang={lang} />
 
       <div className="inj-head">
         <span className="th-label">Injury log</span>

@@ -244,6 +244,9 @@
 .cyc-round-badge.done { color: #04181a; background: var(--teal); }
 .cyc-round-badge.skip { color: var(--text-dim); border: 1px solid var(--border); }
 .cyc-round-badge.open { color: #04181a; background: var(--amber, #f5b544); }
+.cyc-round-actions { display: inline-flex; gap: 4px; }
+.cyc-round-actions button { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 12px; padding: 0 2px; opacity: 0.6; }
+.cyc-round-actions button:hover { opacity: 1; color: var(--accent); }
 .cyc-tmpl-btn { align-self: flex-start; }
 
 .cyc-tn {

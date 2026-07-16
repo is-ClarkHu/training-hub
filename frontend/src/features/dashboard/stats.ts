@@ -91,30 +91,27 @@ export function e1RM(weight: number, reps: number): number {
 }
 
 // ── intensity heatmap (§8 signature) ─────────────────────────
-const RECOVERY_TAGS = new Set(['rehab', 'activation', 'skipped_stretch', 'warmup'])
+type DaySession = { attributes?: Record<string, string>; hours?: number }
 
-/** Daily TRAINING intensity 0–4: 0 rest · 1 recovery · 2 normal · 3 high · 4
- *  competition/double. Intimacy is NOT training and does not count here — the
- *  heatmap marks it separately (see HeatCell.intimacy). Sport intensity comes
- *  from duration (hours), not a tier. */
-export function dayIntensity(
-  entries: WorkoutEntry[],
-  sessions: { hours: number }[],
-): number {
-  if (entries.length === 0 && sessions.length === 0) return 0
-  let lvl = 0
-  if (entries.length > 0) lvl = 2
-  if (sessions.length > 0) {
-    const maxH = Math.max(...sessions.map((s) => s.hours ?? 0))
-    lvl = Math.max(lvl, maxH >= 3 ? 4 : maxH >= 2 ? 3 : 2)
-  }
-  if (entries.length > 0 && sessions.length > 0) lvl = 4 // double session
-  if (entries.length >= 6) lvl = Math.max(lvl, 3)
-  if (entries.length > 0 && sessions.length === 0) {
-    const allRecovery = entries.every((e) => (e.note_tags ?? []).some((t) => RECOVERY_TAGS.has(t)))
-    if (allRecovery) lvl = 1
-  }
-  return lvl
+// Sport intensity from its level (frisbee: toss/casual/club/major); sports without a
+// level field fall back to a rough duration estimate.
+const LEVEL_INTENSITY: Record<string, number> = { toss: 1, casual: 2, club: 3, major: 4 }
+function sportIntensity(s: DaySession): number {
+  const lvl = s.attributes?.level
+  if (lvl && lvl in LEVEL_INTENSITY) return LEVEL_INTENSITY[lvl]
+  const h = s.hours ?? 0
+  return h >= 3 ? 4 : h >= 1.5 ? 2 : 1
+}
+
+/** Daily intensity 0–4, ADDITIVE and capped at 4: training from set count
+ *  (<6 → 1 · 6–16 → 2 · >16 → 3) PLUS the day's hardest sport (toss→1 … major→4).
+ *  So a casual frisbee (2) + a light bodyweight session (<6 sets → 1) = 3. Intimacy
+ *  is NOT training and is marked separately (HeatCell.intimacy). */
+export function dayIntensity(daySets: number, sessions: DaySession[]): number {
+  if (daySets === 0 && sessions.length === 0) return 0
+  const training = daySets === 0 ? 0 : daySets < 6 ? 1 : daySets <= 16 ? 2 : 3
+  const sport = sessions.length ? Math.max(...sessions.map(sportIntensity)) : 0
+  return Math.min(4, training + sport)
 }
 
 export interface HeatCell { date: string; level: number; intimacy?: number } // total intimacy count that day (undefined = none)
@@ -122,13 +119,14 @@ export interface HeatCell { date: string; level: number; intimacy?: number } // 
 /** Weekday(row) × week(col) grid of daily intensity, most recent `weeks` weeks. */
 export function intensityHeatmap(
   entries: WorkoutEntry[],
-  sessions: { date: string; hours: number }[],
+  sessions: (DaySession & { date: string })[],
+  setCountOf: (entryId: string) => number,
   intimacy: OptionalTracker[] = [],
   weeks = 18,
 ): HeatCell[][] {
   const eByDate: Record<string, WorkoutEntry[]> = {}
   for (const e of entries) (eByDate[e.date] ??= []).push(e)
-  const sByDate: Record<string, { hours: number }[]> = {}
+  const sByDate: Record<string, DaySession[]> = {}
   for (const s of sessions) (sByDate[s.date] ??= []).push(s)
   const iByDate: Record<string, OptionalTracker[]> = {}
   for (const r of intimacy) (iByDate[r.date] ??= []).push(r)
@@ -144,7 +142,8 @@ export function intensityHeatmap(
       day.setDate(monday.getDate() + d)
       const iso = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`
       const intimCount = (iByDate[iso] ?? []).reduce((s, r) => s + (r.count ?? 0), 0)
-      col.push({ date: iso, level: dayIntensity(eByDate[iso] ?? [], sByDate[iso] ?? []), intimacy: intimCount || undefined })
+      const daySets = (eByDate[iso] ?? []).reduce((sum, e) => sum + setCountOf(e.id), 0)
+      col.push({ date: iso, level: dayIntensity(daySets, sByDate[iso] ?? []), intimacy: intimCount || undefined })
     }
     cols.push(col)
   }
