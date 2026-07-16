@@ -176,6 +176,7 @@ export interface WorkoutEntry extends SyncFields {
   note_tags: string[]                // canonical tag keys parsed from the note (§5.3)
   cycle_day_label: string | null     // A/B/C/D within cycle_id's split (§6B)
   cycle_id?: string | null           // which cycle the day label belongs to (multiple cycles/day)
+  cycle_round_id?: string | null     // explicit round assignment; avoids date-range guessing
   module_part?: BodyPart | null      // History mode-2: user override of which category module
                                      // this occurrence files under (null = exercise's primary)
   sort_order?: number                // performed order within the day (set at log time =

@@ -647,6 +647,152 @@ export async function deleteCycleRound(id: string): Promise<void> {
   if (r) await db.cycle_rounds.put({ ...r, deleted: true, updated_at: nowIso() })
 }
 
+async function refreshCycleRoundFromAssignments(cycle: TrainingCycle, roundId: string): Promise<void> {
+  const round = await db.cycle_rounds.get(roundId)
+  if (!round || round.deleted) return
+  const labels = cycle.days.map((d) => d.label)
+  const rows = (await db.workout_entries.toArray())
+    .filter((e) => !e.deleted && e.cycle_round_id === roundId && e.cycle_day_label && labels.includes(e.cycle_day_label))
+  const dates = rows.map((e) => e.date).sort()
+  const completed = labels.filter((l) => rows.some((e) => e.cycle_day_label === l))
+  const allDone = completed.length === labels.length && labels.length > 0
+  await db.cycle_rounds.put({
+    ...round,
+    started_on: dates[0] ?? round.started_on,
+    ended_on: allDone ? (dates[dates.length - 1] ?? round.ended_on ?? round.started_on) : null,
+    completed_labels: completed,
+    skipped: false,
+    updated_at: nowIso(),
+  })
+}
+
+export async function refreshCycleRoundsForAssignments(cycle: TrainingCycle): Promise<void> {
+  const ids = new Set(
+    (await db.workout_entries.toArray())
+      .filter((e) => !e.deleted && e.cycle_id === cycle.id && e.cycle_round_id)
+      .map((e) => e.cycle_round_id as string),
+  )
+  for (const id of ids) await refreshCycleRoundFromAssignments(cycle, id)
+}
+
+export interface CycleEntryAssignment {
+  entryId: string
+  modulePart?: BodyPart | null
+}
+
+export async function assignEntriesToCycleRound(
+  cycle: TrainingCycle,
+  input: {
+    date: string
+    dayLabel: string
+    roundId: string | null
+    entries: CycleEntryAssignment[]
+  },
+): Promise<CycleRound | null> {
+  if (input.entries.length === 0 || !cycle.days.some((d) => d.label === input.dayLabel)) return null
+  let round = input.roundId ? await db.cycle_rounds.get(input.roundId) : null
+  await db.transaction('rw', db.workout_entries, db.cycle_rounds, async () => {
+    if (!round || round.deleted || round.cycle_id !== cycle.id) {
+      const rounds = await getCycleRounds(cycle.id)
+      const maxIdx = rounds.reduce((m, r) => Math.max(m, r.index), 0)
+      round = {
+        ...syncFields(),
+        cycle_id: cycle.id,
+        index: maxIdx + 1,
+        started_on: input.date,
+        ended_on: null,
+        completed_labels: [],
+        skipped: false,
+      }
+      await db.cycle_rounds.add(round)
+    }
+    const ts = nowIso()
+    for (const a of input.entries) {
+      const e = await db.workout_entries.get(a.entryId)
+      if (!e || e.deleted) continue
+      await db.workout_entries.put({
+        ...e,
+        cycle_id: cycle.id,
+        cycle_round_id: round.id,
+        cycle_day_label: input.dayLabel,
+        module_part: a.modulePart === undefined ? e.module_part : a.modulePart,
+        updated_at: ts,
+      })
+    }
+  })
+  if (round) await refreshCycleRoundFromAssignments(cycle, round.id)
+  return round ?? null
+}
+
+/** Rebuild a cycle's rounds from dated entry labels. This is used after History
+ *  relabels older days, where there may be no open round to append to. */
+export async function rebuildCycleRounds(cycle: TrainingCycle): Promise<void> {
+  const labels = cycle.days.map((d) => d.label)
+  const labelSet = new Set(labels)
+  const ts = nowIso()
+  const entries = (await db.workout_entries.toArray())
+    .filter((e) => !e.deleted && e.cycle_day_label && labelSet.has(e.cycle_day_label) && (!e.cycle_id || e.cycle_id === cycle.id))
+
+  const byDate = new Map<string, Set<string>>()
+  for (const e of entries) {
+    const set = byDate.get(e.date) ?? new Set<string>()
+    set.add(e.cycle_day_label as string)
+    byDate.set(e.date, set)
+  }
+
+  const nextRounds: CycleRound[] = []
+  let current: { started_on: string; last_on: string; completed: string[] } | null = null
+  for (const date of [...byDate.keys()].sort()) {
+    const dateLabels = labels.filter((l) => byDate.get(date)?.has(l))
+    for (const label of dateLabels) {
+      if (!current) current = { started_on: date, last_on: date, completed: [] }
+      if (current.completed.includes(label)) {
+        nextRounds.push({
+          ...syncFields(),
+          cycle_id: cycle.id,
+          index: nextRounds.length + 1,
+          started_on: current.started_on,
+          ended_on: current.last_on,
+          completed_labels: current.completed,
+          skipped: true,
+        })
+        current = { started_on: date, last_on: date, completed: [] }
+      }
+      current.completed.push(label)
+      current.last_on = date
+      if (labels.every((l) => current!.completed.includes(l))) {
+        nextRounds.push({
+          ...syncFields(),
+          cycle_id: cycle.id,
+          index: nextRounds.length + 1,
+          started_on: current.started_on,
+          ended_on: date,
+          completed_labels: current.completed,
+          skipped: false,
+        })
+        current = null
+      }
+    }
+  }
+  if (current) {
+    nextRounds.push({
+      ...syncFields(),
+      cycle_id: cycle.id,
+      index: nextRounds.length + 1,
+      started_on: current.started_on,
+      ended_on: null,
+      completed_labels: current.completed,
+      skipped: false,
+    })
+  }
+
+  await db.transaction('rw', db.cycle_rounds, async () => {
+    const existing = await db.cycle_rounds.where('cycle_id').equals(cycle.id).toArray()
+    await db.cycle_rounds.bulkPut(existing.filter((r) => !r.deleted).map((r) => ({ ...r, deleted: true, updated_at: ts })))
+    if (nextRounds.length > 0) await db.cycle_rounds.bulkAdd(nextRounds)
+  })
+}
+
 // ── optional trackers (§4.10, §6C) ───────────────────────────
 export async function logTracker(
   tracker: TrackerType,
@@ -1096,7 +1242,7 @@ export async function softDeleteEntry(entryId: string): Promise<void> {
 /** Field-only patch of an entry (does NOT touch its sets). Used by the History
  *  review flow ("确认无误" clears the flags) and the mode-2 module chooser. */
 export type EntryPatch = Partial<
-  Pick<WorkoutEntry, 'date' | 'exercise_id' | 'note_raw' | 'note_tags' | 'is_superset' | 'needs_review' | 'needs_translation' | 'injury_modified' | 'injury_id' | 'module_part' | 'superset_group'>
+  Pick<WorkoutEntry, 'date' | 'exercise_id' | 'note_raw' | 'note_tags' | 'is_superset' | 'needs_review' | 'needs_translation' | 'injury_modified' | 'injury_id' | 'cycle_id' | 'cycle_round_id' | 'cycle_day_label' | 'module_part' | 'superset_group'>
 >
 
 export async function patchEntry(entryId: string, patch: EntryPatch): Promise<void> {
@@ -1118,10 +1264,10 @@ export async function moveDayEntries(fromDate: string, toDate: string): Promise<
 
 /** Set (or clear, with null) the cycle split-day label for every workout entry on
  *  `date` — fixes a mis-labeled or un-labeled training day. Returns rows changed. */
-export async function setDayCycleLabel(date: string, label: string | null): Promise<number> {
+export async function setDayCycleLabel(date: string, label: string | null, cycleId: string | null = null): Promise<number> {
   const ts = nowIso()
   const rows = (await db.workout_entries.where('date').equals(date).toArray()).filter((e) => !e.deleted)
-  await db.workout_entries.bulkPut(rows.map((e) => ({ ...e, cycle_day_label: label, updated_at: ts })))
+  await db.workout_entries.bulkPut(rows.map((e) => ({ ...e, cycle_day_label: label, cycle_id: label ? cycleId : null, updated_at: ts })))
   return rows.length
 }
 

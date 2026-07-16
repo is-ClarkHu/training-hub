@@ -96,13 +96,13 @@ export function CycleScreen() {
 
   const rounds = active ? roundsByCycle[active.id] ?? [] : []
 
-  function daySummary(day: CycleDay): CycleDaySummary {
+  function daySummary(cycle: TrainingCycle, day: CycleDay): CycleDaySummary {
     const exerciseNames = (day.exercise_ids ?? [])
       .map((id) => exById[id])
       .filter((ex): ex is Exercise => !!ex)
       .map((ex) => exerciseName(ex, lang))
     const loggedEntries = entries
-      .filter((e) => e.cycle_day_label === day.label)
+      .filter((e) => e.cycle_day_label === day.label && (!e.cycle_id || e.cycle_id === cycle.id))
       .sort((a, b) => (a.date < b.date ? 1 : -1))
     const loggedNames = loggedEntries
       .map((e) => exById[e.exercise_id])
@@ -126,6 +126,7 @@ export function CycleScreen() {
     const dayRegions = new Map(c.days.map((d) => [d.label, (d.regions ?? []) as RegionId[]]))
     const perRegion = new Map<RegionId, Map<string, { name: string; sets: number; day: string; date: string | null }>>()
     for (const e of entries) {
+      if (e.cycle_id && e.cycle_id !== c.id) continue
       if (e.date < open.started_on || !e.cycle_day_label) continue
       const regions = dayRegions.get(e.cycle_day_label)
       if (!regions || regions.length === 0) continue
@@ -433,7 +434,7 @@ function CyclePlanMatrix({
   cycles: TrainingCycle[]
   roundsByCycle: Record<string, CycleRound[]>
   entries: WorkoutEntry[]
-  getDaySummary: (day: CycleDay) => CycleDaySummary
+  getDaySummary: (cycle: TrainingCycle, day: CycleDay) => CycleDaySummary
   sideCycleId: string | null
   lang: 'en' | 'zh'
 }) {
@@ -476,13 +477,13 @@ function PlanCycleCard({
 }: {
   cycle: TrainingCycle
   round: ReturnType<typeof currentRound>
-  getDaySummary: (day: CycleDay) => CycleDaySummary
+  getDaySummary: (cycle: TrainingCycle, day: CycleDay) => CycleDaySummary
   lang: 'en' | 'zh'
   primary?: boolean
 }) {
   const done = new Set(round.completed)
   const [hovered, setHovered] = useState<CycleDay | null>(null)
-  const hoverSummary = hovered ? getDaySummary(hovered) : null
+  const hoverSummary = hovered ? getDaySummary(cycle, hovered) : null
   return (
     <article className={`cyc-plan-card ${cycle.active ? 'active' : ''} ${primary ? 'primary' : 'side'}`}>
       <div className="cyc-plan-title">
@@ -491,7 +492,7 @@ function PlanCycleCard({
       </div>
       <div className="cyc-plan-table">
         {cycle.days.map((day) => {
-          const summary = getDaySummary(day)
+          const summary = getDaySummary(cycle, day)
           const isDone = done.has(day.label)
           return (
             <div
@@ -536,7 +537,7 @@ function CycleVisualCard({
   cycle: TrainingCycle
   round: ReturnType<typeof currentRound>
   activity: Record<string, RegionView>
-  getDaySummary: (day: CycleDay) => CycleDaySummary
+  getDaySummary: (cycle: TrainingCycle, day: CycleDay) => CycleDaySummary
   lang: 'en' | 'zh'
   adult?: boolean
   primary?: boolean
@@ -604,7 +605,7 @@ function CircleLoop({
 }: {
   cycle: TrainingCycle
   round: ReturnType<typeof currentRound>
-  getDaySummary: (day: CycleDay) => CycleDaySummary
+  getDaySummary: (cycle: TrainingCycle, day: CycleDay) => CycleDaySummary
   lang: 'en' | 'zh'
   compact?: boolean
 }) {
@@ -651,10 +652,10 @@ function CircleLoop({
       </svg>
       {hovered && (
         <div className="cyc-pie-tip">
-          <strong>{hovered.label} · {getDaySummary(hovered).title}</strong>
+          <strong>{hovered.label} · {getDaySummary(cycle, hovered).title}</strong>
           <span>{completed.has(hovered.label) ? (lang === 'zh' ? '本轮已完成' : 'done this round') : (lang === 'zh' ? '本轮未完成' : 'not done this round')}</span>
-          <span>{lang === 'zh' ? '时间' : 'time'}: {shortDate(getDaySummary(hovered).lastDate)}</span>
-          <em>{getDaySummary(hovered).exercises.length ? getDaySummary(hovered).exercises.join(' · ') : (lang === 'zh' ? '未绑定动作' : 'No exercises linked')}</em>
+          <span>{lang === 'zh' ? '时间' : 'time'}: {shortDate(getDaySummary(cycle, hovered).lastDate)}</span>
+          <em>{getDaySummary(cycle, hovered).exercises.length ? getDaySummary(cycle, hovered).exercises.join(' · ') : (lang === 'zh' ? '未绑定动作' : 'No exercises linked')}</em>
         </div>
       )}
     </div>

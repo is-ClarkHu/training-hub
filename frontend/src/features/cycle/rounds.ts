@@ -22,7 +22,10 @@ export function openRound(rounds: CycleRound[]): CycleRound | null {
 export function liveCompletedLabels(cycle: TrainingCycle, round: CycleRound, entries: WorkoutEntry[]): string[] {
   const out = new Set<string>()
   for (const e of entries) {
-    if (!e.cycle_day_label || e.date < round.started_on || (round.ended_on && e.date > round.ended_on)) continue
+    if (e.cycle_id && e.cycle_id !== cycle.id) continue
+    if (!e.cycle_day_label) continue
+    const inRound = e.cycle_round_id ? e.cycle_round_id === round.id : e.date >= round.started_on && (!round.ended_on || e.date <= round.ended_on)
+    if (!inRound) continue
     out.add(e.cycle_day_label)
   }
   return cycle.days.map((d) => d.label).filter((l) => out.has(l)) // in day order
@@ -48,7 +51,10 @@ export function roundRegionActivity(
   if (!round) return out
   const dayRegions = new Map(cycle.days.map((d) => [d.label, d.regions ?? []]))
   for (const e of entries) {
-    if (e.date < round.started_on || (round.ended_on && e.date > round.ended_on) || !e.cycle_day_label) continue
+    if (e.cycle_id && e.cycle_id !== cycle.id) continue
+    if (!e.cycle_day_label) continue
+    const inRound = e.cycle_round_id ? e.cycle_round_id === round.id : e.date >= round.started_on && (!round.ended_on || e.date <= round.ended_on)
+    if (!inRound) continue
     const regions = dayRegions.get(e.cycle_day_label)
     if (!regions || regions.length === 0) continue
     const n = setCount(e.id)
@@ -78,7 +84,11 @@ export function roundMetrics(
 ): RoundMetrics {
   const labels = new Set(cycle.days.map((d) => d.label))
   const inRound = entries.filter(
-    (e) => e.date >= round.started_on && (!round.ended_on || e.date <= round.ended_on) && e.cycle_day_label && labels.has(e.cycle_day_label),
+    (e) => {
+      if (e.cycle_id && e.cycle_id !== cycle.id) return false
+      if (!e.cycle_day_label || !labels.has(e.cycle_day_label)) return false
+      return e.cycle_round_id ? e.cycle_round_id === round.id : e.date >= round.started_on && (!round.ended_on || e.date <= round.ended_on)
+    },
   )
   // Derive completed days from LIVE entries (not the stored completed_labels) so
   // deleting a day's last entry rolls the count back. A label counts as done only
