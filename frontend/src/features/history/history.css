@@ -32,6 +32,7 @@
 .hist-rounds-head { display: flex; align-items: baseline; gap: 10px; }
 .hist-rounds-cyc { font: 600 12px/1 var(--mono); color: var(--teal); }
 .hist-rounds-list { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.hist-rounds-left { margin: 6px 0 0; font: 11px/1.4 var(--mono); color: var(--text-dim); }
 .hist-round-row {
   display: flex; align-items: center; gap: 10px;
   padding: 7px 10px; font: 12px/1 var(--mono); color: var(--text);

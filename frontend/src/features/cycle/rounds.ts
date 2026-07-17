@@ -79,17 +79,34 @@ export function chainSums(activity: Record<string, RoundRegionActivity>): Record
   return out
 }
 
+/** Sets in one chain that count it as fully covered for a round. Tunable. */
+export const CHAIN_TARGET = 12
+
 /**
- * How evenly a round's volume spreads across push/pull/legs, 0–100.
- * min/max, so an untouched chain floors it at 0 and three equal chains hit 100.
- * Orthogonal to day-completion and volume: you can finish every day at full
- * volume and still score badly by skewing the split.
+ * Chains this cycle actually intends to train, from its days' region bindings.
+ * A push/pull-only split shouldn't be marked down forever for never training
+ * legs — but a split that HAS a legs day and skips it should be.
  */
-export function balancePct(sums: Record<ChainId, number>): number {
-  const vals = MUSCLE_CHAINS.map((c) => sums[c.id])
-  const max = Math.max(...vals)
-  if (max <= 0) return 0
-  return Math.round((Math.min(...vals) / max) * 100)
+export function plannedChains(cycle: TrainingCycle): ChainId[] {
+  const regions = new Set<string>()
+  for (const d of cycle.days) for (const r of d.regions ?? []) regions.add(r)
+  return MUSCLE_CHAINS.filter((c) => c.regions.some((r) => regions.has(r))).map((c) => c.id)
+}
+
+/**
+ * Chain coverage across the round, 0–100: each planned chain contributes its own
+ * progress toward CHAIN_TARGET, capped at 1, averaged.
+ *
+ * NOT min/max evenness (the first attempt): that read 0 whenever any one chain
+ * was untouched, i.e. for most of a round's life and permanently for anyone who
+ * skips a day — a ring that sits at 0 then jumps to full teaches nothing. This
+ * version accumulates as days land, and the cap means hammering push can never
+ * paper over a skipped legs day: skip one chain of three and it stops at 67%.
+ */
+export function balancePct(sums: Record<ChainId, number>, planned: ChainId[]): number {
+  const chains = planned.length > 0 ? planned : MUSCLE_CHAINS.map((c) => c.id)
+  const covered = chains.reduce((s, id) => s + Math.min(1, sums[id] / CHAIN_TARGET), 0)
+  return Math.round((covered / chains.length) * 100)
 }
 
 export interface RoundMetrics {
@@ -97,7 +114,7 @@ export interface RoundMetrics {
   totalDays: number
   sets: number
   sessions: number   // distinct training dates in the round
-  balance: number    // 0–100, evenness across push/pull/legs
+  balance: number    // 0–100, chain coverage across the planned push/pull/legs
   chains: Record<ChainId, number>
 }
 
@@ -126,7 +143,7 @@ export function roundMetrics(
     totalDays: cycle.days.length,
     sets: inRound.reduce((s, e) => s + setCount(e.id), 0),
     sessions: new Set(inRound.map((e) => e.date)).size,
-    balance: balancePct(sums),
+    balance: balancePct(sums, plannedChains(cycle)),
     chains: sums,
   }
 }

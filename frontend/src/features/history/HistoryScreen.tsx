@@ -172,6 +172,16 @@ export function HistoryScreen() {
     return [...map.values()].sort((a, b) => (a.date < b.date ? 1 : -1))
   }, [entries, sportSessions, intimacyRows, reviewOnly, showIntimacy, flagged])
 
+  // The open round of the active cycle + which of its day labels are still to do.
+  const currentRoundView = useMemo(() => {
+    if (!activeCycle) return null
+    const round = openRound(rounds)
+    if (!round || round.skipped) return null
+    const done = liveCompletedLabels(activeCycle, round, entries)
+    const remaining = activeCycle.days.map((d) => d.label).filter((l) => !done.includes(l))
+    return { round, done, remaining }
+  }, [activeCycle, rounds, entries])
+
   // Which split day(s) + round a date belongs to (active cycle only).
   const loopInfo = useCallback((date: string, items: WorkoutEntry[]): LoopInfo | null => {
     if (!activeCycle) return null
@@ -358,29 +368,29 @@ export function HistoryScreen() {
         </button>
       </div>
 
-      {activeCycle && rounds.length > 0 && !reviewOnly && (
+      {/* Only the round in progress. This used to list every round ever run, which
+          buried the one fact the header is for: where you are right now. Finished
+          rounds stay reachable from the round picker + the Cycle screen. */}
+      {activeCycle && currentRoundView && !reviewOnly && (
         <section className="hist-rounds">
           <div className="hist-rounds-head">
-            <span className="th-label">{lang === 'zh' ? '循环轮次' : 'Cycle rounds'}</span>
+            <span className="th-label">{lang === 'zh' ? '当前轮次' : 'Current round'}</span>
             <span className="hist-rounds-cyc">{activeCycle.name}</span>
           </div>
           <ul className="hist-rounds-list">
-            {[...rounds].filter((r) => !r.skipped).reverse().map((r) => {
-              const done = liveCompletedLabels(activeCycle, r, entries)
-              const allDone = done.length === activeCycle.days.length
-              return (
-                <li key={r.id} className="hist-round-row">
-                  <span className="hist-round-idx">R{r.index}</span>
-                  <span className="hist-round-dates">{r.started_on} → {r.ended_on ?? '…'}</span>
-                  <span className="hist-round-days">{done.join('') || '—'}</span>
-                  {r.skipped ? <span className="hist-round-badge skip">{lang === 'zh' ? '跳过' : 'skipped'}</span>
-                    : allDone ? <span className="hist-round-badge done">{lang === 'zh' ? '完成' : 'done'}</span>
-                    : !r.ended_on ? <span className="hist-round-badge open">{lang === 'zh' ? '进行中' : 'open'}</span>
-                    : null}
-                </li>
-              )
-            })}
+            <li className="hist-round-row">
+              <span className="hist-round-idx">R{currentRoundView.round.index}</span>
+              <span className="hist-round-dates">{currentRoundView.round.started_on} → …</span>
+              <span className="hist-round-days">{currentRoundView.done.join('') || '—'}</span>
+              <span className="hist-round-badge open">{lang === 'zh' ? '进行中' : 'open'}</span>
+            </li>
           </ul>
+          {currentRoundView.remaining.length > 0 && (
+            <p className="hist-rounds-left">
+              {lang === 'zh' ? '还差 ' : 'Left: '}
+              {currentRoundView.remaining.join(' · ')}
+            </p>
+          )}
         </section>
       )}
 
