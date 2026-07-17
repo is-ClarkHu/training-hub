@@ -15,8 +15,11 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
+      # Pinned to the version the deps in requirements.txt were verified against.
+      # Do NOT rely on Render's default — it tracks the newest Python and changes
+      # for services created after a given date, which would silently move under us.
       - key: PYTHON_VERSION
-        value: "3.11.9"
+        value: "3.12.13"
       - key: FRONTEND_ORIGIN            # the Pages origin allowed by CORS (not a secret)
         value: https://is-clarkhu.github.io
       - key: SUPABASE_URL              # set in the Render dashboard

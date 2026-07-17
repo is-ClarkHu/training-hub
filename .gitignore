@@ -64,6 +64,10 @@ jspm_packages/
 .venv/
 venv/
 
+# Python bytecode (backend/)
+__pycache__/
+*.py[cod]
+
 # Snowpack dependency directory (https://snowpack.dev/)
 web_modules/
 
