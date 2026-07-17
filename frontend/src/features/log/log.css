@@ -31,7 +31,7 @@
 
 .log-intimacy {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 14px;
   padding: 14px;
@@ -49,9 +49,48 @@
   text-transform: uppercase;
   color: var(--intimacy-accent);
 }
-.log-intimacy-controls { display: flex; align-items: center; gap: 8px; flex: 1; }
-.log-intimacy-count { max-width: 72px; text-align: center; }
-.log-intimacy-save { width: auto; padding: 10px 16px; background: #f472b6; color: #180711; border-color: #f472b6; }
+/* Two stacked rows (type chips, then count+note+log). The old single row put a
+   width:100% note input next to the type control and squeezed it to nothing. */
+.log-intimacy-controls { display: flex; flex-direction: column; gap: 8px; flex: 1; min-width: 0; }
+.log-intimacy-types { display: flex; flex-wrap: wrap; gap: 6px; }
+.log-intimacy-type {
+  padding: 7px 12px;
+  font: 600 12px/1 var(--mono);
+  color: var(--text-dim);
+  background: var(--panelhi);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+}
+.log-intimacy-type:hover { color: var(--text); border-color: var(--faint); }
+.log-intimacy-type.on {
+  color: #180711;
+  background: var(--intimacy-accent);
+  border-color: var(--intimacy-accent);
+}
+.log-intimacy-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+/* Labelled stepper — replaces a bare unlabelled number box nobody could read. */
+.log-intimacy-stepper {
+  display: inline-flex; align-items: center; gap: 6px; flex: none;
+  padding: 4px 8px;
+  background: var(--panelhi);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+}
+.log-intimacy-steplabel { font: 600 11px/1 var(--mono); color: var(--text-dim); }
+.log-intimacy-stepper button {
+  width: 24px; height: 24px; flex: none;
+  display: grid; place-items: center;
+  font: 700 15px/1 var(--mono);
+  color: var(--text); background: none;
+  border: 1px solid var(--border); border-radius: 6px;
+  cursor: pointer;
+}
+.log-intimacy-stepper button:hover { border-color: var(--intimacy-accent); color: var(--intimacy-ink); }
+.log-intimacy-stepper b { min-width: 16px; text-align: center; font: 700 13px/1 var(--mono); color: var(--text-bright); }
+.log-intimacy-note { flex: 1; min-width: 0; }
+.log-intimacy-save { width: auto; flex: none; padding: 10px 16px; background: #f472b6; color: #180711; border-color: #f472b6; }
 
 /* picker */
 .log-picker { display: flex; flex-direction: column; gap: 12px; }
@@ -313,6 +352,7 @@
   .log-entry-backdrop { padding: 56px 10px 16px; }
   .log-entry-modal { max-height: calc(100vh - 72px); }
   .log-intimacy { align-items: stretch; flex-direction: column; }
-  .log-intimacy-controls { flex-wrap: wrap; }
-  .log-intimacy-controls .th-input:first-child { flex-basis: 100%; }
+  /* Narrow: the note needs its own line or it squeezes the stepper + Log button. */
+  .log-intimacy-row { flex-wrap: wrap; }
+  .log-intimacy-note { flex-basis: 100%; order: -1; }
 }

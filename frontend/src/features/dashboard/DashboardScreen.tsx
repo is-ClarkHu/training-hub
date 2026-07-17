@@ -176,7 +176,7 @@ export function DashboardScreen() {
     const out: Record<string, string> = {}
     for (const [d, list] of Object.entries(m)) out[d] = [...new Set(list)].slice(0, 8).join(', ')
     // Intimacy is listed separately (not training — see the heart marker), with the
-    // per-category counts for that day: e.g. "💗 性交×2 · 自慰×1".
+    // per-category counts for that day: e.g. "💗 插入×2 · 单人×1".
     if (showIntimacy) {
       const byDate: Record<string, Partial<Record<string, number>>> = {}
       for (const r of intimacyRows) { const c = intimacyCategory(r); (byDate[r.date] ??= {}); byDate[r.date][c] = (byDate[r.date][c] ?? 0) + r.count }

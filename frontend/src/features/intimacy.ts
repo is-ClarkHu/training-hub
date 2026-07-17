@@ -5,10 +5,13 @@ export const INTIMACY_VISIBLE_KEY = 'th.tracker.intimacy.enabled'
 
 export const INTIMACY_CATEGORIES: IntimacyCategory[] = ['solo', 'partner_low', 'partner_active']
 
+// Clinical/research phrasing rather than colloquial — the rows show up in History
+// and in exported images, where a glance from someone else shouldn't be loud.
+// Meaning is preserved; only the register changes.
 export const INTIMACY_LABEL: Record<IntimacyCategory, { zh: string; en: string; shortZh: string; shortEn: string }> = {
-  solo: { zh: '自慰', en: 'Masturbation', shortZh: '自慰', shortEn: 'Solo' },
-  partner_low: { zh: '前戏 / 口交', en: 'Foreplay / Oral', shortZh: '前戏', shortEn: 'Foreplay' },
-  partner_active: { zh: '性交', en: 'Sex', shortZh: '性交', shortEn: 'Sex' },
+  solo: { zh: '单人活动', en: 'Solitary', shortZh: '单人', shortEn: 'Solo' },
+  partner_low: { zh: '双人 · 非插入', en: 'Partnered · non-penetrative', shortZh: '非插入', shortEn: 'Non-pen.' },
+  partner_active: { zh: '双人 · 插入', en: 'Partnered · penetrative', shortZh: '插入', shortEn: 'Penetrative' },
 }
 
 export const INTIMACY_COLORS: Record<IntimacyCategory, string> = {

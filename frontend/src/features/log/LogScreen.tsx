@@ -86,7 +86,7 @@ export function LogScreen() {
   const [sportBpm, setSportBpm] = useState('')
   const [showIntimacy, setShowIntimacy] = useState(false)
   const [intimacyCat, setIntimacyCat] = useState<IntimacyCategory>('partner_active')
-  const [intimacyCount, setIntimacyCount] = useState('1')
+  const [intimacyCount, setIntimacyCount] = useState(1)
   const [intimacyNote, setIntimacyNote] = useState('')
   // shared
   const [note, setNote] = useState('')
@@ -283,13 +283,15 @@ export function LogScreen() {
     })
   }
 
+  const bumpCount = (d: number) => setIntimacyCount((n) => Math.min(20, Math.max(1, n + d)))
+
   async function saveIntimacy() {
-    const n = parseInt(intimacyCount, 10)
+    const n = intimacyCount
     if (!Number.isFinite(n) || n <= 0 || saving) return
     setSaving(true)
     const { undo } = await withUndo(['optional_trackers'], () => logTracker('intimacy', date, n, intimacyCat, intimacyNote))
     const name = lang === 'zh' ? '成人亲密健康' : 'Adult wellness'
-    setIntimacyCount('1')
+    setIntimacyCount(1)
     setIntimacyNote('')
     setSaving(false)
     void loadToday()
@@ -400,18 +402,37 @@ export function LogScreen() {
             <strong>{lang === 'zh' ? '成人亲密健康' : 'Adult wellness'}</strong>
           </div>
           <div className="log-intimacy-controls">
-            <select className="th-input" value={intimacyCat} onChange={(e) => setIntimacyCat(e.target.value as IntimacyCategory)}>
+            {/* Chips, not a <select>: the select shared a flex row with the
+                full-width note input and collapsed to a bare arrow, so the type
+                was unpickable and every record silently defaulted to one value. */}
+            <div className="log-intimacy-types" role="radiogroup" aria-label={lang === 'zh' ? '类型' : 'Type'}>
               {INTIMACY_CATEGORIES.map((c) => (
-                <option key={c} value={c}>{intimacyLabel(c, lang)}</option>
+                <button
+                  key={c}
+                  type="button"
+                  role="radio"
+                  aria-checked={intimacyCat === c}
+                  className={`log-intimacy-type ${intimacyCat === c ? 'on' : ''}`}
+                  onClick={() => setIntimacyCat(c)}
+                >
+                  {intimacyLabel(c, lang)}
+                </button>
               ))}
-            </select>
-            <input className="th-input log-intimacy-count" inputMode="numeric" value={intimacyCount} onChange={(e) => setIntimacyCount(e.target.value)} aria-label="count" />
-            <button className="th-btn log-intimacy-save" type="button" onClick={saveIntimacy} disabled={saving}>
-              {lang === 'zh' ? '记录' : 'Log'}
-            </button>
+            </div>
+            <div className="log-intimacy-row">
+              <div className="log-intimacy-stepper">
+                <span className="log-intimacy-steplabel">{lang === 'zh' ? '次数' : 'Count'}</span>
+                <button type="button" onClick={() => bumpCount(-1)} aria-label={lang === 'zh' ? '减少' : 'decrease'}>−</button>
+                <b>{intimacyCount}</b>
+                <button type="button" onClick={() => bumpCount(1)} aria-label={lang === 'zh' ? '增加' : 'increase'}>+</button>
+              </div>
+              <input className="th-input log-intimacy-note" value={intimacyNote} onChange={(e) => setIntimacyNote(e.target.value)}
+                placeholder={lang === 'zh' ? '备注(可选)' : 'note (optional)'} />
+              <button className="th-btn log-intimacy-save" type="button" onClick={saveIntimacy} disabled={saving}>
+                {lang === 'zh' ? '记录' : 'Log'}
+              </button>
+            </div>
           </div>
-          <input className="th-input log-intimacy-note" value={intimacyNote} onChange={(e) => setIntimacyNote(e.target.value)}
-            placeholder={lang === 'zh' ? '备注(可选)' : 'note (optional)'} />
         </section>
       )}
 

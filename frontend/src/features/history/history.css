@@ -399,13 +399,16 @@
 .hx-title { display: flex; align-items: baseline; justify-content: space-between; padding-bottom: 12px; margin-bottom: 14px; border-bottom: 2px solid var(--teal); }
 .hx-title strong { font: 700 20px/1 var(--display, var(--mono)); color: var(--text-bright); letter-spacing: 1px; }
 .hx-title span { font: 13px/1 var(--mono); color: var(--text-dim); }
-.hx-day { margin-bottom: 18px; }
-.hx-daydate { font: 700 16px/1 var(--display, var(--mono)); color: var(--teal); margin-bottom: 8px; }
-.hx-modules { display: flex; flex-wrap: wrap; gap: 10px; }
-.hx-module { flex: 1 1 min(100%, 210px); min-width: 180px; padding: 10px 12px; background: var(--bg-panel); border: 1px solid var(--border); border-radius: 10px; }
-.hx-modhead { font: 700 11px/1 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 6px; }
-.hx-listwrap { display: flex; flex-direction: column; gap: 5px; }
-.hx-entry { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 3px 0; }
-.hx-ex { font: 600 13px/1.4 var(--sans); color: var(--text-bright); }
-.hx-sets { font: 13px/1.4 var(--mono); color: var(--text); text-align: right; overflow-wrap: anywhere; }
-.hx-sport .hx-ex, .hx-intim .hx-ex { color: var(--text); font-weight: 500; }
+/* The sheet renders History's own rows (./rows), so it inherits every .hist-*
+   style and stays in sync by construction. Only two things differ from the live
+   screen: interactive chrome has no meaning in a PNG, and the sheet is a fixed
+   width rather than the viewport. */
+.hx-sheet .hist-circuit-split,
+.hx-sheet .hist-module-chip,
+.hx-sheet .hist-check,
+.hx-sheet .hist-drag,
+.hx-sheet .hist-movedate,
+.hx-sheet .hist-daylabel { display: none; }
+/* Hover/active affordances would otherwise bake a pointer-state look into the image. */
+.hx-sheet .hist-card, .hx-sheet .hist-row { cursor: default; }
+.hx-sheet .hist-session:last-child { margin-bottom: 0; }

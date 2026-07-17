@@ -1,13 +1,23 @@
 // Export a date range of History as one long PNG (share-friendly). A dialog picks
-// the range, whether to show set values + intimacy, and grid vs list layout; the
-// records render into an off-screen sheet that html-to-image snapshots.
+// the range, whether to show set values + intimacy, and grouped vs list layout;
+// the records render into an off-screen sheet that html-to-image snapshots.
+//
+// The sheet reuses History's own row components (./rows) in History's own
+// structure, so the image matches what the user is looking at. It previously had a
+// parallel simplified re-implementation, which drifted: circuits vanished, sports
+// lost their level/detail fields, intimacy rows looked nothing like History's, and
+// the module blocks were ad-hoc. Anything visual belongs in ./rows, not here.
 import { useMemo, useRef, useState } from 'react'
 import { toPng } from 'html-to-image'
-import type { Exercise, ExerciseSet, OptionalTracker, Sport, SportSession, WorkoutEntry } from '../../supabase/types'
+import type {
+  CycleRound, Exercise, ExerciseSet, OptionalTracker, Sport, SportSession, TrainingCycle, WorkoutEntry,
+} from '../../supabase/types'
+import { entrySortKey } from '../../db'
 import { categoryLabel } from '../../categories'
-import { exerciseName, formatSetLine, primaryCategory } from '../log/util'
-import { sportName } from '../sports'
-import { intimacyCategory, intimacyLabel } from '../intimacy'
+import { cycleDayTitle } from '../cycle/day'
+import {
+  CircuitCard, EntryCard, IntimacyRow, SportRow, groupByModule, partitionCircuits, type LoopInfo,
+} from './rows'
 import './history.css'
 
 interface DayGroup { date: string; items: WorkoutEntry[]; sports: SportSession[]; intimacy: OptionalTracker[] }
@@ -16,18 +26,24 @@ export function ExportDialog({
   entries,
   setMap,
   exById,
+  allExercises,
   sportById,
   sportSessions,
   intimacyRows,
+  activeCycle,
+  rounds,
   lang,
   onClose,
 }: {
   entries: WorkoutEntry[]
   setMap: Record<string, ExerciseSet[]>
   exById: Record<string, Exercise>
+  allExercises: Exercise[]
   sportById: Record<string, Sport>
   sportSessions: SportSession[]
   intimacyRows: OptionalTracker[]
+  activeCycle: TrainingCycle | null
+  rounds: CycleRound[]
   lang: 'en' | 'zh'
   onClose: () => void
 }) {
@@ -39,9 +55,14 @@ export function ExportDialog({
   const [to, setTo] = useState(allDates[allDates.length - 1] ?? '')
   const [showValues, setShowValues] = useState(true)
   const [showIntimacy, setShowIntimacy] = useState(false)
-  const [layout, setLayout] = useState<'grid' | 'list'>('grid')
+  const [layout, setLayout] = useState<'grouped' | 'list'>('grouped')
   const [busy, setBusy] = useState(false)
   const sheetRef = useRef<HTMLDivElement>(null)
+
+  // "Show values" off === History's discreet mode. The row components already
+  // implement it (set counts instead of weights; intimacy shows only that a
+  // record exists, never the category or count), so it stays consistent.
+  const discreet = !showValues
 
   const days = useMemo<DayGroup[]>(() => {
     const map = new Map<string, DayGroup>()
@@ -53,27 +74,30 @@ export function ExportDialog({
     for (const e of entries) if (e.date >= from && e.date <= to) get(e.date).items.push(e)
     for (const s of sportSessions) if (s.date >= from && s.date <= to) get(s.date).sports.push(s)
     if (showIntimacy) for (const r of intimacyRows) if (r.date >= from && r.date <= to) get(r.date).intimacy.push(r)
-    return [...map.values()].sort((a, b) => (a.date < b.date ? 1 : -1)) // newest first
+    // Same ordering as History: performed order within a day, newest day first.
+    for (const g of map.values()) g.items.sort((a, b) => entrySortKey(a) - entrySortKey(b))
+    return [...map.values()].sort((a, b) => (a.date < b.date ? 1 : -1))
   }, [entries, sportSessions, intimacyRows, from, to, showIntimacy])
 
-  const setText = (e: WorkoutEntry): string => {
-    const ex = exById[e.exercise_id]
-    const sets = (setMap[e.id] ?? []).filter((s) => s.set_type !== 'warmup')
-    if (!showValues) return `${sets.length} ${lang === 'zh' ? '组' : 'sets'}`
-    if (!ex) return `${sets.length}`
-    return sets.map((s) => formatSetLine(s, ex.measure_type, lang, ex.duration_hm)).join(' · ')
-  }
-
-  const modulesOf = (its: WorkoutEntry[]) => {
-    const groups = new Map<string, WorkoutEntry[]>()
-    for (const e of its) {
-      const ex = exById[e.exercise_id]
-      const key = e.module_part ?? (ex ? primaryCategory(ex) : null) ?? '__none'
-      let arr = groups.get(key)
-      if (!arr) { arr = []; groups.set(key, arr) }
-      arr.push(e)
+  // Mirrors HistoryScreen.loopInfo so exported days carry the same split/round badges.
+  const loopInfo = (date: string, items: WorkoutEntry[]): LoopInfo | null => {
+    if (!activeCycle) return null
+    const dayByLabel = new Map(activeCycle.days.map((d) => [d.label, d]))
+    const seen = new Set<string>()
+    const labels: { label: string; title: string }[] = []
+    for (const e of items) {
+      if (!e.cycle_day_label || seen.has(e.cycle_day_label)) continue
+      if (e.cycle_id && e.cycle_id !== activeCycle.id) continue
+      const day = dayByLabel.get(e.cycle_day_label)
+      if (!day) continue
+      seen.add(e.cycle_day_label)
+      labels.push({ label: e.cycle_day_label, title: cycleDayTitle(day, lang) })
     }
-    return [...groups.entries()]
+    if (labels.length === 0) return null
+    const roundId = items.find((e) => e.cycle_round_id && (!e.cycle_id || e.cycle_id === activeCycle.id))?.cycle_round_id
+    const round = (roundId ? rounds.find((r) => r.id === roundId) : undefined)
+      ?? rounds.find((r) => r.started_on <= date && (r.ended_on ?? '9999-12-31') >= date)
+    return { labels, round: round?.index ?? null }
   }
 
   async function generate() {
@@ -92,15 +116,22 @@ export function ExportDialog({
     }
   }
 
-  const entryRow = (e: WorkoutEntry) => {
-    const ex = exById[e.exercise_id]
-    return (
-      <div key={e.id} className="hx-entry">
-        <span className="hx-ex">{ex ? exerciseName(ex, lang) : '—'}</span>
-        <span className="hx-sets">{setText(e)}</span>
-      </div>
-    )
-  }
+  // Static stand-ins for the interactive props; the sheet is a snapshot.
+  const noop = () => {}
+  const cardProps = (entry: WorkoutEntry, variant: 'row' | 'card') => ({
+    entry,
+    exercise: exById[entry.exercise_id],
+    allExercises,
+    sets: setMap[entry.id] ?? [],
+    lang,
+    onChanged: noop,
+    selectMode: false,
+    selected: false,
+    onToggleSelect: noop,
+    discreet,
+    variant,
+    onChooseModule: noop,
+  })
 
   return (
     <div className="log-dialog-backdrop" onClick={() => !busy && onClose()}>
@@ -121,7 +152,7 @@ export function ExportDialog({
           <label><input type="checkbox" checked={showIntimacy} onChange={(e) => setShowIntimacy(e.target.checked)} /> {lang === 'zh' ? '含私密' : 'Include intimacy'}</label>
         </div>
         <div className="cyc-seg hx-seg">
-          <button type="button" className={layout === 'grid' ? 'on' : ''} onClick={() => setLayout('grid')}>{lang === 'zh' ? '网格' : 'Grid'}</button>
+          <button type="button" className={layout === 'grouped' ? 'on' : ''} onClick={() => setLayout('grouped')}>{lang === 'zh' ? '网格' : 'Grid'}</button>
           <button type="button" className={layout === 'list' ? 'on' : ''} onClick={() => setLayout('list')}>{lang === 'zh' ? '条形' : 'List'}</button>
         </div>
         <p className="hx-count">{days.length} {lang === 'zh' ? '天' : 'days'}</p>
@@ -133,44 +164,93 @@ export function ExportDialog({
         </div>
       </div>
 
-      {/* off-screen sheet that gets snapshotted */}
+      {/* Off-screen sheet that gets snapshotted — same structure as HistoryScreen. */}
       <div className="hx-holder" aria-hidden="true">
         <div ref={sheetRef} className="hx-sheet">
           <div className="hx-title">
             <strong>training·hub</strong>
             <span>{from} — {to}</span>
           </div>
-          {days.map((day) => (
-            <section key={day.date} className="hx-day">
-              <div className="hx-daydate">{day.date}</div>
-              {day.items.length > 0 && (
-                layout === 'grid' ? (
-                  <div className="hx-modules">
-                    {modulesOf(day.items).map(([key, its]) => (
-                      <div key={key} className="hx-module">
-                        <div className="hx-modhead">{key === '__none' ? '—' : categoryLabel(key, lang)}</div>
-                        {its.map(entryRow)}
+          {days.map((day) => {
+            const { circuits, singles } = partitionCircuits(day.items)
+            const loop = loopInfo(day.date, day.items)
+            return (
+              <section key={day.date} className="hist-session">
+                <div className="hist-date-row">
+                  <h3 className="hist-date">{day.date}</h3>
+                  {loop && (
+                    <span className="hist-loop">
+                      {loop.labels.map((l) => (
+                        <span key={l.label} className="hist-loop-day"><b>{l.label}</b> {l.title}</span>
+                      ))}
+                      {loop.round != null && <span className="hist-loop-round">R{loop.round}</span>}
+                    </span>
+                  )}
+                </div>
+
+                {layout === 'list' && circuits.map((members) => (
+                  <CircuitCard
+                    key={members[0].superset_group ?? members[0].id}
+                    members={members}
+                    exById={exById}
+                    setMap={setMap}
+                    lang={lang}
+                    discreet={discreet}
+                    onUnmerge={noop}
+                    variant="row"
+                  />
+                ))}
+
+                {layout === 'grouped' ? (
+                  <div className="hist-modules">
+                    {circuits.map((members) => (
+                      <CircuitCard
+                        key={members[0].superset_group ?? members[0].id}
+                        members={members}
+                        exById={exById}
+                        setMap={setMap}
+                        lang={lang}
+                        discreet={discreet}
+                        onUnmerge={noop}
+                      />
+                    ))}
+                    {groupByModule(singles, exById).map((g) => (
+                      <div key={g.key} className="hist-module" data-count={Math.min(g.items.length, 4)}>
+                        <div className="hist-module-head">{g.key === '__none' ? '—' : categoryLabel(g.key, lang)}</div>
+                        <div className="hist-cards">
+                          {g.items.map((entry) => <EntryCard key={entry.id} {...cardProps(entry, 'card')} />)}
+                        </div>
                       </div>
                     ))}
+                    {(day.sports.length > 0 || (showIntimacy && day.intimacy.length > 0)) && (
+                      <div className="hist-entries">
+                        {day.sports.map((ss) => (
+                          <SportRow key={ss.id} ss={ss} sport={sportById[ss.sport_id]} lang={lang}
+                            selectMode={false} selected={false} onToggle={noop} onOpen={noop} />
+                        ))}
+                        {showIntimacy && day.intimacy.map((r) => (
+                          <IntimacyRow key={r.id} r={r} lang={lang} discreet={discreet}
+                            selectMode={false} selected={false} onToggle={noop} onOpen={noop} />
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ) : (
-                  <div className="hx-listwrap">{day.items.map(entryRow)}</div>
-                )
-              )}
-              {day.sports.map((s) => (
-                <div key={s.id} className="hx-entry hx-sport">
-                  <span className="hx-ex">🏃 {sportById[s.sport_id] ? sportName(sportById[s.sport_id], lang) : (lang === 'zh' ? '运动' : 'sport')}</span>
-                  <span className="hx-sets">{s.hours}h</span>
-                </div>
-              ))}
-              {showIntimacy && day.intimacy.map((r) => (
-                <div key={r.id} className="hx-entry hx-intim">
-                  <span className="hx-ex">💗 {intimacyLabel(intimacyCategory(r), lang, true)}</span>
-                  <span className="hx-sets">×{r.count}</span>
-                </div>
-              ))}
-            </section>
-          ))}
+                  <div className="hist-entries">
+                    {singles.map((entry) => <EntryCard key={entry.id} {...cardProps(entry, 'row')} />)}
+                    {day.sports.map((ss) => (
+                      <SportRow key={ss.id} ss={ss} sport={sportById[ss.sport_id]} lang={lang}
+                        selectMode={false} selected={false} onToggle={noop} onOpen={noop} />
+                    ))}
+                    {showIntimacy && day.intimacy.map((r) => (
+                      <IntimacyRow key={r.id} r={r} lang={lang} discreet={discreet}
+                        selectMode={false} selected={false} onToggle={noop} onOpen={noop} />
+                    ))}
+                  </div>
+                )}
+              </section>
+            )
+          })}
         </div>
       </div>
     </div>
