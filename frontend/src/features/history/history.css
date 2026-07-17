@@ -387,14 +387,56 @@
 /* ── long-image export ─────────────────────────────────────── */
 .hx-opts { display: flex; flex-wrap: wrap; gap: 14px; margin: 4px 0; }
 .hx-opts label { display: inline-flex; align-items: center; gap: 6px; font: 13px/1 var(--mono); color: var(--text); cursor: pointer; }
-.hx-seg { align-self: flex-start; }
+/* Self-contained segmented control. It used to borrow `.cyc-seg` from cycle.css,
+   which is only loaded once the lazy Cycle screen mounts — so opening Export
+   without ever visiting Cycle rendered bare unstyled buttons and clicking a
+   layout gave no feedback at all. */
+.hx-seg {
+  align-self: flex-start;
+  display: inline-flex; gap: 4px; padding: 4px;
+  background: var(--bg-input, var(--panelhi)); border: 1px solid var(--border); border-radius: 8px;
+}
+.hx-seg button {
+  padding: 7px 14px;
+  font: 700 12px/1 var(--mono);
+  color: var(--text-dim); background: none; border: none; border-radius: 6px;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+.hx-seg button:hover { color: var(--text); }
+.hx-seg button.on { color: var(--on-accent); background: var(--accent); }
 .hx-count { margin: 0; font: 11px/1 var(--mono); color: var(--text-dim); }
+/* Live preview of the sheet — the layout choice is otherwise invisible until
+   after the PNG downloads. Scaled down; the real sheet stays 1080 wide. */
+.hx-preview {
+  margin: 2px 0 0;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--bg); overflow: hidden;
+  height: 190px;
+  /* The preview is a fixed-height window onto a taller sheet; fade the cut edge
+     so a clipped card reads as "more below" rather than as a rendering bug. */
+  mask-image: linear-gradient(to bottom, #000 78%, transparent 100%);
+}
+.hx-preview-inner { transform-origin: top left; pointer-events: none; }
+.hx-preview-cap { margin: 6px 0 0; font: 10px/1 var(--mono); color: var(--text-dim); text-align: center; }
 /* off-screen sheet that html-to-image snapshots */
 .hx-holder { position: fixed; left: -10000px; top: 0; pointer-events: none; opacity: 1; z-index: -1; }
+/* 1080, not 720: module flex-basis grows with the exercise count (up to 100%), so
+   on a narrow sheet any part with 3+ movements claimed the whole row and the
+   parts stacked into one column instead of gridding like the browser does. */
 .hx-sheet {
-  width: 720px; box-sizing: border-box; padding: 26px;
+  width: 1080px; box-sizing: border-box; padding: 26px;
   background: var(--bg); color: var(--text);
   font-family: var(--sans, system-ui);
+}
+/* Uniform columns inside a module. The live screen's `flex: 1 1 max-content`
+   lets a leftover card grow to fill its row alone — a 5th movement became one
+   giant full-width card. A grid keeps every card the same size and leaves the
+   orphan at column width. */
+.hx-sheet .hist-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  align-items: start;
 }
 .hx-title { display: flex; align-items: baseline; justify-content: space-between; padding-bottom: 12px; margin-bottom: 14px; border-bottom: 2px solid var(--teal); }
 .hx-title strong { font: 700 20px/1 var(--display, var(--mono)); color: var(--text-bright); letter-spacing: 1px; }

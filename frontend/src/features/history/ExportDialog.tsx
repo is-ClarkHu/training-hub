@@ -22,6 +22,10 @@ import './history.css'
 
 interface DayGroup { date: string; items: WorkoutEntry[]; sports: SportSession[]; intimacy: OptionalTracker[] }
 
+// Keep in sync with .hx-sheet's width in history.css.
+const SHEET_W = 1080
+const PREVIEW_SCALE = 0.34
+
 export function ExportDialog({
   entries,
   setMap,
@@ -151,10 +155,23 @@ export function ExportDialog({
           <label><input type="checkbox" checked={showValues} onChange={(e) => setShowValues(e.target.checked)} /> {lang === 'zh' ? '显示数值' : 'Show values'}</label>
           <label><input type="checkbox" checked={showIntimacy} onChange={(e) => setShowIntimacy(e.target.checked)} /> {lang === 'zh' ? '含私密' : 'Include intimacy'}</label>
         </div>
-        <div className="cyc-seg hx-seg">
+        <div className="hx-seg">
           <button type="button" className={layout === 'grouped' ? 'on' : ''} onClick={() => setLayout('grouped')}>{lang === 'zh' ? '网格' : 'Grid'}</button>
           <button type="button" className={layout === 'list' ? 'on' : ''} onClick={() => setLayout('list')}>{lang === 'zh' ? '条形' : 'List'}</button>
         </div>
+        {/* Scaled preview of the first day, so picking a layout visibly does something. */}
+        {days.length > 0 && (
+          <>
+            <div className="hx-preview">
+              <div className="hx-preview-inner" style={{ width: SHEET_W, transform: `scale(${PREVIEW_SCALE})` }}>
+                <div className="hx-sheet" style={{ padding: 20 }}>{renderDay(days[0])}</div>
+              </div>
+            </div>
+            <p className="hx-preview-cap">
+              {lang === 'zh' ? `预览 · ${days[0].date}` : `Preview · ${days[0].date}`}
+            </p>
+          </>
+        )}
         <p className="hx-count">{days.length} {lang === 'zh' ? '天' : 'days'}</p>
         <div className="log-dialog-actions">
           <button className="th-btn-ghost" type="button" onClick={onClose} disabled={busy}>{lang === 'zh' ? '取消' : 'Cancel'}</button>
@@ -171,88 +188,90 @@ export function ExportDialog({
             <strong>training·hub</strong>
             <span>{from} — {to}</span>
           </div>
-          {days.map((day) => {
-            const { circuits, singles } = partitionCircuits(day.items)
-            const loop = loopInfo(day.date, day.items)
-            return (
-              <section key={day.date} className="hist-session">
-                <div className="hist-date-row">
-                  <h3 className="hist-date">{day.date}</h3>
-                  {loop && (
-                    <span className="hist-loop">
-                      {loop.labels.map((l) => (
-                        <span key={l.label} className="hist-loop-day"><b>{l.label}</b> {l.title}</span>
-                      ))}
-                      {loop.round != null && <span className="hist-loop-round">R{loop.round}</span>}
-                    </span>
-                  )}
-                </div>
-
-                {layout === 'list' && circuits.map((members) => (
-                  <CircuitCard
-                    key={members[0].superset_group ?? members[0].id}
-                    members={members}
-                    exById={exById}
-                    setMap={setMap}
-                    lang={lang}
-                    discreet={discreet}
-                    onUnmerge={noop}
-                    variant="row"
-                  />
-                ))}
-
-                {layout === 'grouped' ? (
-                  <div className="hist-modules">
-                    {circuits.map((members) => (
-                      <CircuitCard
-                        key={members[0].superset_group ?? members[0].id}
-                        members={members}
-                        exById={exById}
-                        setMap={setMap}
-                        lang={lang}
-                        discreet={discreet}
-                        onUnmerge={noop}
-                      />
-                    ))}
-                    {groupByModule(singles, exById).map((g) => (
-                      <div key={g.key} className="hist-module" data-count={Math.min(g.items.length, 4)}>
-                        <div className="hist-module-head">{g.key === '__none' ? '—' : categoryLabel(g.key, lang)}</div>
-                        <div className="hist-cards">
-                          {g.items.map((entry) => <EntryCard key={entry.id} {...cardProps(entry, 'card')} />)}
-                        </div>
-                      </div>
-                    ))}
-                    {(day.sports.length > 0 || (showIntimacy && day.intimacy.length > 0)) && (
-                      <div className="hist-entries">
-                        {day.sports.map((ss) => (
-                          <SportRow key={ss.id} ss={ss} sport={sportById[ss.sport_id]} lang={lang}
-                            selectMode={false} selected={false} onToggle={noop} onOpen={noop} />
-                        ))}
-                        {showIntimacy && day.intimacy.map((r) => (
-                          <IntimacyRow key={r.id} r={r} lang={lang} discreet={discreet}
-                            selectMode={false} selected={false} onToggle={noop} onOpen={noop} />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="hist-entries">
-                    {singles.map((entry) => <EntryCard key={entry.id} {...cardProps(entry, 'row')} />)}
-                    {day.sports.map((ss) => (
-                      <SportRow key={ss.id} ss={ss} sport={sportById[ss.sport_id]} lang={lang}
-                        selectMode={false} selected={false} onToggle={noop} onOpen={noop} />
-                    ))}
-                    {showIntimacy && day.intimacy.map((r) => (
-                      <IntimacyRow key={r.id} r={r} lang={lang} discreet={discreet}
-                        selectMode={false} selected={false} onToggle={noop} onOpen={noop} />
-                    ))}
-                  </div>
-                )}
-              </section>
-            )
-          })}
+          {days.map(renderDay)}
         </div>
       </div>
     </div>
   )
+
+  function renderDay(day: DayGroup) {
+    const { circuits, singles } = partitionCircuits(day.items)
+    const loop = loopInfo(day.date, day.items)
+    return (
+      <section key={day.date} className="hist-session">
+        <div className="hist-date-row">
+          <h3 className="hist-date">{day.date}</h3>
+          {loop && (
+            <span className="hist-loop">
+              {loop.labels.map((l) => (
+                <span key={l.label} className="hist-loop-day"><b>{l.label}</b> {l.title}</span>
+              ))}
+              {loop.round != null && <span className="hist-loop-round">R{loop.round}</span>}
+            </span>
+          )}
+        </div>
+
+        {layout === 'list' && circuits.map((members) => (
+          <CircuitCard
+            key={members[0].superset_group ?? members[0].id}
+            members={members}
+            exById={exById}
+            setMap={setMap}
+            lang={lang}
+            discreet={discreet}
+            onUnmerge={noop}
+            variant="row"
+          />
+        ))}
+
+        {layout === 'grouped' ? (
+          <div className="hist-modules">
+            {circuits.map((members) => (
+              <CircuitCard
+                key={members[0].superset_group ?? members[0].id}
+                members={members}
+                exById={exById}
+                setMap={setMap}
+                lang={lang}
+                discreet={discreet}
+                onUnmerge={noop}
+              />
+            ))}
+            {groupByModule(singles, exById).map((g) => (
+              <div key={g.key} className="hist-module" data-count={Math.min(g.items.length, 4)}>
+                <div className="hist-module-head">{g.key === '__none' ? '—' : categoryLabel(g.key, lang)}</div>
+                <div className="hist-cards">
+                  {g.items.map((entry) => <EntryCard key={entry.id} {...cardProps(entry, 'card')} />)}
+                </div>
+              </div>
+            ))}
+            {(day.sports.length > 0 || (showIntimacy && day.intimacy.length > 0)) && (
+              <div className="hist-entries">
+                {day.sports.map((ss) => (
+                  <SportRow key={ss.id} ss={ss} sport={sportById[ss.sport_id]} lang={lang}
+                    selectMode={false} selected={false} onToggle={noop} onOpen={noop} />
+                ))}
+                {showIntimacy && day.intimacy.map((r) => (
+                  <IntimacyRow key={r.id} r={r} lang={lang} discreet={discreet}
+                    selectMode={false} selected={false} onToggle={noop} onOpen={noop} />
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="hist-entries">
+            {singles.map((entry) => <EntryCard key={entry.id} {...cardProps(entry, 'row')} />)}
+            {day.sports.map((ss) => (
+              <SportRow key={ss.id} ss={ss} sport={sportById[ss.sport_id]} lang={lang}
+                selectMode={false} selected={false} onToggle={noop} onOpen={noop} />
+            ))}
+            {showIntimacy && day.intimacy.map((r) => (
+              <IntimacyRow key={r.id} r={r} lang={lang} discreet={discreet}
+                selectMode={false} selected={false} onToggle={noop} onOpen={noop} />
+            ))}
+          </div>
+        )}
+      </section>
+    )
+  }
 }
