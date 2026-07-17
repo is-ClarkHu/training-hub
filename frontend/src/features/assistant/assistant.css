@@ -270,6 +270,19 @@
 .asst-typing { color: var(--text-dim); letter-spacing: 2px; }
 
 .asst-disclaimer { font-size: 10px; color: var(--text-dim); text-align: center; margin: 6px 0 0; opacity: 0.75; }
+/* Cold-start notice, shown beside the typing dots only once a reply is slow. */
+.asst-waking { margin-left: 8px; font: 11px/1.4 var(--mono); color: var(--text-dim); }
+/* Shown in place of the composer when no relay is configured for this origin. */
+.asst-offline {
+  margin: 0;
+  padding: 12px 14px;
+  font: 12px/1.5 var(--mono);
+  color: var(--text-dim);
+  background: var(--bg-panel);
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+}
+.asst-data-hint { margin: 4px 0 0; font: 11px/1.4 var(--mono); color: var(--text-dim); }
 .asst-form { display: flex; gap: 8px; }
 .asst-form .th-input { flex: 1; }
 .asst-send { width: auto; padding: 10px 18px; }

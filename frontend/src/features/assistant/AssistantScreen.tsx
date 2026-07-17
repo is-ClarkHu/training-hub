@@ -17,7 +17,8 @@ import {
   createChatroomMemory,
 } from '../../db'
 import type { Chatroom, ChatroomPermCategory } from '../../supabase/types'
-import { AI_PROVIDERS, aiPayload, payloadForProvider, type AiProvider } from '../../ai/config'
+import { AI_PROVIDERS, aiPayload, hasBackend, payloadForProvider, type AiProvider } from '../../ai/config'
+import { useSlowHint } from '../../ai/useSlowHint'
 import { useLanguage } from '../../i18n'
 import { askAssistant } from './assistantClient'
 import { MemoryPanel } from './MemoryPanel'
@@ -55,6 +56,10 @@ export function AssistantScreen() {
   const [messages, setMessages] = useState<Msg[]>([])
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
+  // Chat needs the relay (it reads your data + enforces room permissions server-side);
+  // without one there's nothing to send to, so say so rather than fail on submit.
+  const aiOffline = !hasBackend()
+  const waking = useSlowHint(busy)
   const [error, setError] = useState<string | null>(null)
   const endRef = useRef<HTMLDivElement>(null)
 
@@ -295,23 +300,42 @@ export function AssistantScreen() {
               )}
             </div>
           ))}
-          {busy && <div className="asst-msg assistant"><span className="asst-bubble asst-typing">…</span></div>}
+          {busy && (
+            <div className="asst-msg assistant">
+              <span className="asst-bubble asst-typing">…</span>
+              {waking && (
+                <span className="asst-waking">
+                  {lang === 'zh'
+                    ? '正在唤醒 AI 服务(闲置后首次提问约需 1 分钟)…'
+                    : 'Waking the AI service (the first question after idle takes ~1 min)…'}
+                </span>
+              )}
+            </div>
+          )}
           {error && <p className="th-error">{error}</p>}
           <div ref={endRef} />
         </div>
 
-        <form className="asst-form" onSubmit={onSubmit}>
-          <input
-            className="th-input"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder={lang === 'zh' ? '输入消息…' : 'Type a message…'}
-            disabled={busy}
-          />
-          <button className="th-btn asst-send" type="submit" disabled={busy || !input.trim() || !activeId}>
-            {lang === 'zh' ? '发送' : 'Send'}
-          </button>
-        </form>
+        {aiOffline ? (
+          <p className="asst-offline">
+            {lang === 'zh'
+              ? 'AI 问答在这个线上版本不可用 —— 它需要一个后端服务来读取你的数据并执行聊天室权限。本地运行(localhost)或部署后端后即可使用。'
+              : 'AI chat is unavailable in this hosted build — it needs a backend to read your data and enforce room permissions. Run locally, or deploy the relay, to enable it.'}
+          </p>
+        ) : (
+          <form className="asst-form" onSubmit={onSubmit}>
+            <input
+              className="th-input"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder={lang === 'zh' ? '输入消息…' : 'Type a message…'}
+              disabled={busy}
+            />
+            <button className="th-btn asst-send" type="submit" disabled={busy || !input.trim() || !activeId}>
+              {lang === 'zh' ? '发送' : 'Send'}
+            </button>
+          </form>
+        )}
         <p className="asst-disclaimer">
           {lang === 'zh'
             ? 'AI 可能出错,仅供参考。重要的健康、伤病或医疗决定请咨询专业人士。'

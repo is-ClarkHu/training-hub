@@ -17,6 +17,7 @@ import {
   getPublicFiles, createPublicFile, setPublicFileSummary, deletePublicFile,
   today,
 } from '../../db'
+import { hasBackend } from '../../ai/config'
 import { describeFood, summarizeFile } from './assistantClient'
 import type {
   Basics, BodyMeasurement, FoodLog, MedicalBackground, Note, NoteTag, PublicFile, Supplement, TrainingEnv,
@@ -74,7 +75,8 @@ export function DataPanel({ lang }: { lang: L }) {
   async function uploadFile(f: File) {
     const row = await createPublicFile(f)
     await reload()
-    if (row.content) {
+    // The file itself stores fine without a relay; only the AI summary needs one.
+    if (row.content && hasBackend()) {
       setSummarizing(row.id)
       try { const s = await summarizeFile(row.content); if (s) await setPublicFileSummary(row.id, s) }
       catch { /* summary best-effort */ }
@@ -223,7 +225,9 @@ export function DataPanel({ lang }: { lang: L }) {
               }} /></label>
             </div>
             {foodDraft.photo && <img className="asst-food-preview" src={foodDraft.photo} alt="" />}
-            {foodDraft.photo && (
+            {/* Photo + note still save without a relay; only the AI read of the
+                image needs one, so hide just that button. */}
+            {foodDraft.photo && hasBackend() && (
               <button className="th-btn" type="button" disabled={recognizing} onClick={async () => {
                 if (!foodDraft.photo) return
                 setRecognizing(true); setFoodErr(null)
@@ -231,6 +235,9 @@ export function DataPanel({ lang }: { lang: L }) {
                 catch (err) { setFoodErr(err instanceof Error ? err.message : String(err)) }
                 finally { setRecognizing(false) }
               }}>{recognizing ? t('识别中…', 'Recognizing…') : t('AI 识别图片', 'AI recognize')}</button>
+            )}
+            {foodDraft.photo && !hasBackend() && (
+              <p className="asst-data-hint">{t('AI 图片识别需要后端服务,线上版本暂不可用', 'AI photo recognition needs the backend — unavailable in this hosted build')}</p>
             )}
             {foodDraft.aiDesc !== undefined && (
               <label className="asst-data-full">{t('AI 识别(可改)', 'AI recognition (editable)')}

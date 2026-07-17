@@ -69,3 +69,18 @@ export function backendUrl(): string {
   // `||` (not `??`) so an empty VITE_ASSISTANT_API_URL="" falls back to the default.
   return import.meta.env.VITE_ASSISTANT_API_URL || 'http://localhost:8000'
 }
+
+/**
+ * Is an AI relay actually reachable from this origin?
+ *
+ * The localhost:8000 fallback above only means anything while developing. A
+ * deployed HTTPS build with no VITE_ASSISTANT_API_URL secret would fire requests
+ * at the visitor's OWN machine — blocked as mixed content, and nothing is
+ * listening regardless. Callers use this to disable the relay-backed features up
+ * front instead of letting them fail with a console error.
+ */
+export function hasBackend(): boolean {
+  if ((import.meta.env.VITE_ASSISTANT_API_URL || '').trim()) return true
+  const h = location.hostname
+  return h === 'localhost' || h === '127.0.0.1'
+}
