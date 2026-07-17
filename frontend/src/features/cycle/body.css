@@ -39,6 +39,14 @@
   filter: drop-shadow(0 0 7px color-mix(in srgb, var(--accent) 35%, transparent));
 }
 
+/* Ramp legend — the fill scale is relative to the busiest region, so the top of
+   the ramp has to say what it's worth. */
+.bm-scale { display: flex; align-items: center; justify-content: center; gap: 8px; font: 600 10px/1 var(--mono); color: var(--text-dim); }
+.bm-scale i {
+  width: 110px; height: 6px; border-radius: 3px;
+  background: linear-gradient(90deg, var(--body-dim), var(--accent));
+}
+
 /* Floating hover box near the cursor. */
 .bm-tip {
   position: fixed;

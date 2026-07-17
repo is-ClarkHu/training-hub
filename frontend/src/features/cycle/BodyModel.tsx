@@ -8,7 +8,11 @@ import type { TranslationTarget } from '../../translation'
 import { regionLabel, type RegionId } from './anatomy'
 import './body.css'
 
-const RAMP_MAX = 8
+// A round puts roughly 5–12 sets into a worked region, so a fixed 8-set ceiling
+// pinned nearly everything at full accent and the figure read as one flat colour.
+// The ramp is instead relative to the busiest region, floored at RAMP_FLOOR so a
+// round with one lone set doesn't light that region up as if it were a full week.
+const RAMP_FLOOR = 12
 const W = 200 // viewBox width; mirror axis = W/2 = 100
 
 export interface RegionView {
@@ -16,11 +20,21 @@ export interface RegionView {
   items: Array<{ name: string; sets: number; day: string | null; date?: string | null }>
 }
 
-function fillFor(id: RegionId, sets: number): string {
+/** Sets that map to a fully-lit region: the busiest one, or RAMP_FLOOR if it's quiet. */
+export function rampMax(activity: Record<string, RegionView>): number {
+  let max = 0
+  for (const a of Object.values(activity)) max = Math.max(max, a.sets)
+  return Math.max(RAMP_FLOOR, max)
+}
+
+// Sequential single-hue ramp: dim → accent, mixed in oklab so equal set-count
+// steps land as equal perceived steps. 15% is the floor so one set still reads as
+// "touched" while staying clearly apart from the 100% top.
+function fillFor(id: RegionId, sets: number, max: number): string {
   if (sets <= 0) return 'var(--body-dim)'
   const hue = id === 'genitals' ? 'var(--body-pink)' : 'var(--accent)'
-  const t = Math.min(1, sets / RAMP_MAX)
-  return `color-mix(in srgb, ${hue} ${Math.round((0.3 + 0.7 * t) * 100)}%, var(--body-dim))`
+  const t = Math.min(1, sets / max)
+  return `color-mix(in oklab, ${hue} ${Math.round((0.15 + 0.85 * t) * 100)}%, var(--body-dim))`
 }
 
 function Sym({ children }: { children: React.ReactNode }) {
@@ -28,12 +42,12 @@ function Sym({ children }: { children: React.ReactNode }) {
 }
 
 interface HoverState { id: RegionId; x: number; y: number }
-interface RP { activity: Record<string, RegionView>; hoverId: RegionId | null; onHover: (h: HoverState | null) => void }
-function Reg({ id, activity, hoverId, onHover, children }: RP & { id: RegionId; children: React.ReactNode }) {
+interface RP { activity: Record<string, RegionView>; max: number; hoverId: RegionId | null; onHover: (h: HoverState | null) => void }
+function Reg({ id, activity, max, hoverId, onHover, children }: RP & { id: RegionId; children: React.ReactNode }) {
   return (
     <g
       className={`bm-region ${hoverId === id ? 'is-hover' : ''}`}
-      fill={fillFor(id, activity[id]?.sets ?? 0)}
+      fill={fillFor(id, activity[id]?.sets ?? 0, max)}
       onMouseEnter={(e) => onHover({ id, x: e.clientX, y: e.clientY })}
       onMouseMove={(e) => onHover({ id, x: e.clientX, y: e.clientY })}
       onMouseLeave={() => onHover(null)}
@@ -58,8 +72,7 @@ const FOOT = <ellipse cx="74" cy="444" rx="13" ry="7" />
 const FRONT_LINES = 'M100 66 L100 126 M78 116 Q100 126 122 116 M100 130 L100 204 M86 150 H114 M85 170 H115 M86 190 H114'
 const BACK_LINES = 'M100 66 L100 206 M78 150 Q100 158 122 150'
 
-function Front({ activity, hoverId, onHover }: RP) {
-  const P = { activity, hoverId, onHover }
+function Front(P: RP) {
   return (
     <g>
       <Head />
@@ -76,8 +89,7 @@ function Front({ activity, hoverId, onHover }: RP) {
   )
 }
 
-function Back({ activity, hoverId, onHover }: RP) {
-  const P = { activity, hoverId, onHover }
+function Back(P: RP) {
   return (
     <g>
       <Head />
@@ -107,7 +119,8 @@ export function BodyModel({
   compact?: boolean
 }) {
   const [hover, setHover] = useState<HoverState | null>(null)
-  const P = { activity, hoverId: hover?.id ?? null, onHover: setHover }
+  const max = rampMax(activity)
+  const P = { activity, max, hoverId: hover?.id ?? null, onHover: setHover }
 
   return (
     <div className={`bodymodel ${compact ? 'compact' : ''}`}>
@@ -132,6 +145,14 @@ export function BodyModel({
           </figure>
         )}
       </div>
+
+      {!compact && (
+        <div className="bm-scale" aria-hidden="true">
+          <span>0</span>
+          <i />
+          <span>{max}{lang === 'zh' ? '组' : ' sets'}</span>
+        </div>
+      )}
 
       {hover && (
         <div className="bm-tip" style={{ left: hover.x + 14, top: hover.y + 14 }}>

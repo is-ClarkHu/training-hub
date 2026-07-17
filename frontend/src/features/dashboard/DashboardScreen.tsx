@@ -120,7 +120,13 @@ export function DashboardScreen() {
         const chains: RingChain[] = [
           { id: 'complete', label: lang === 'zh' ? '完成' : 'Done', color: '#8ab4f8', value: m.completedDays, goal: m.totalDays || 1 },
           { id: 'volume', label: lang === 'zh' ? '容量' : 'Volume', color: '#ff8a5c', value: m.sets, goal: volumeGoal },
-          { id: 'sessions', label: lang === 'zh' ? '天数' : 'Days', color: '#7dd3a0', value: m.sessions, goal: m.totalDays || 1 },
+          // Balance, not session count: sessions tracked completed-days almost 1:1
+          // (you train one day label per session), so the inner ring just echoed
+          // the outer one. Evenness across push/pull/legs is orthogonal to both.
+          {
+            id: 'balance', label: lang === 'zh' ? '均衡' : 'Balance', color: '#7dd3a0',
+            value: m.balance, goal: 100, display: `${m.balance}%`,
+          },
         ]
         return { round, chains }
       })

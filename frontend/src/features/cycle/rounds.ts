@@ -2,6 +2,7 @@
 // ordered day labels; these derive the current round number and what's left from
 // the stored CycleRound rows.
 import type { CycleRound, TrainingCycle, WorkoutEntry } from '../../supabase/types'
+import { MUSCLE_CHAINS, type ChainId } from './anatomy'
 
 export interface RoundView {
   index: number             // current round number (the open one, or the next to open)
@@ -68,11 +69,36 @@ export function roundRegionActivity(
   return out
 }
 
+/** Sets per push/pull/legs chain. A region feeding two chains counts in both —
+ *  same convention the body model uses, so the two views agree. */
+export function chainSums(activity: Record<string, RoundRegionActivity>): Record<ChainId, number> {
+  const out = { push: 0, pull: 0, legs: 0 }
+  for (const chain of MUSCLE_CHAINS) {
+    for (const region of chain.regions) out[chain.id] += activity[region]?.sets ?? 0
+  }
+  return out
+}
+
+/**
+ * How evenly a round's volume spreads across push/pull/legs, 0–100.
+ * min/max, so an untouched chain floors it at 0 and three equal chains hit 100.
+ * Orthogonal to day-completion and volume: you can finish every day at full
+ * volume and still score badly by skewing the split.
+ */
+export function balancePct(sums: Record<ChainId, number>): number {
+  const vals = MUSCLE_CHAINS.map((c) => sums[c.id])
+  const max = Math.max(...vals)
+  if (max <= 0) return 0
+  return Math.round((Math.min(...vals) / max) * 100)
+}
+
 export interface RoundMetrics {
   completedDays: number
   totalDays: number
   sets: number
   sessions: number   // distinct training dates in the round
+  balance: number    // 0–100, evenness across push/pull/legs
+  chains: Record<ChainId, number>
 }
 
 /** Split-agnostic round metrics — meaningful for any split (or rehab). */
@@ -94,11 +120,14 @@ export function roundMetrics(
   // deleting a day's last entry rolls the count back. A label counts as done only
   // while some entry still carries it.
   const doneLabels = new Set(inRound.map((e) => e.cycle_day_label as string))
+  const sums = chainSums(roundRegionActivity(cycle, round, entries, setCount))
   return {
     completedDays: doneLabels.size,
     totalDays: cycle.days.length,
     sets: inRound.reduce((s, e) => s + setCount(e.id), 0),
     sessions: new Set(inRound.map((e) => e.date)).size,
+    balance: balancePct(sums),
+    chains: sums,
   }
 }
 
