@@ -16,6 +16,18 @@ export const DEFAULT_MODEL: Record<AiProvider, string> = {
   gemini: 'gemini-2.0-flash',
 }
 
+// Per-provider identity for the chat avatar — a short glyph + a brand-ish colour,
+// so "which AI am I talking to?" is answerable at a glance. Label doubles as the
+// avatar tooltip.
+export const PROVIDER_META: Record<AiProvider, { label: string; glyph: string; color: string }> = {
+  deepseek: { label: 'DeepSeek', glyph: 'D', color: '#4d6bfe' },
+  openai: { label: 'OpenAI', glyph: 'O', color: '#10a37f' },
+  anthropic: { label: 'Claude', glyph: 'C', color: '#d97757' },
+  moonshot: { label: 'Kimi', glyph: 'K', color: '#7c3aed' },
+  mistral: { label: 'Mistral', glyph: 'M', color: '#fa520f' },
+  gemini: { label: 'Gemini', glyph: 'G', color: '#1a73e8' },
+}
+
 export interface TaskCfg {
   provider: AiProvider
   model: string

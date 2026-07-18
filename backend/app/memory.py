@@ -25,10 +25,16 @@ RECENT_DAYS = 56  # ~8 weeks
 MAX_CHAT_MESSAGES = 12          # verbatim recent tail kept out of the summary
 MAX_UNFOLDED = MAX_CHAT_MESSAGES + 12  # safety cap on messages shown since the watermark
 MAX_INSIGHTS = 3
+# Per-exercise progression series. The old training block gave only ONE top weight
+# per lift, so "how is my bench progressing?" had no trajectory to reason about.
+# These emit a dated top-set series, focused on lifts the question mentions.
+MAX_PROGRESS_EXERCISES = 4
+MAX_PROGRESS_POINTS = 8
 MAX_NOTES = 10
 MAX_MEASUREMENTS = 12  # body-measurement points fed as a trend series
 MAX_FOOD = 8
 FILE_EXCERPT_CHARS = 1500  # capped excerpt per authorized reference file
+MAX_FILES = 6  # cap file COUNT too — excerpt size was capped, the count wasn't
 MAX_SHARED_MEMORIES = 8  # cross-room shared memory units pulled in per answer
 
 # Rolling summary (P4): fold aged-out messages into the room summary once this many
@@ -163,6 +169,51 @@ def build_memory_context(
             if prs:
                 top = sorted(prs.items(), key=lambda kv: kv[1], reverse=True)[:8]
                 lines.append("Top working-set weights: " + ", ".join(f"{name} {w}" for name, w in top))
+
+            # Per-exercise progression: the heaviest working set on each date, so the
+            # AI can actually see a trend ("bench went 60→65 over 3 weeks") rather
+            # than a lone number. weight_reps only. Ranked by relevance to the
+            # question (ask about bench → bench first), then by how often it's trained.
+            prog: dict[str, dict[str, tuple[float, Any]]] = {}  # name -> date -> (weight, reps)
+            freq: Counter[str] = Counter()
+            for e in entries:
+                ex = exercises.get(e["exercise_id"])
+                if not ex or ex.get("measure_type") != "weight_reps":
+                    continue
+                name = ex.get("name_en") or ex.get("name_zh") or ""
+                if not name:
+                    continue
+                freq[name] += 1
+                by_date = prog.setdefault(name, {})
+                for s in sets_by_entry.get(e["id"], []):
+                    if s.get("set_type") == "warmup":
+                        continue
+                    w = s.get("weight")
+                    if w is None:
+                        continue
+                    prev = by_date.get(e["date"])
+                    if prev is None or w > prev[0]:
+                        by_date[e["date"]] = (w, s.get("reps"))
+
+            def _rank(name: str) -> tuple[int, int]:
+                # relevance to the question wins; frequency breaks ties.
+                return (relevance(name, q_terms), freq[name])
+
+            ranked = sorted(
+                (n for n, d in prog.items() if len(d) >= 2),  # need ≥2 points to show a trend
+                key=_rank,
+                reverse=True,
+            )[:MAX_PROGRESS_EXERCISES]
+            if ranked:
+                lines.append("Progression (heaviest working set per day):")
+                for name in ranked:
+                    pts = sorted(prog[name].items())[-MAX_PROGRESS_POINTS:]
+                    series = ", ".join(
+                        f"{w:g}×{r}({d[5:]})" if r is not None else f"{w:g}({d[5:]})"
+                        for d, (w, r) in pts
+                    )
+                    lines.append(f"- {name}: {series}")
+
             lines.append("")
             sources.append("Recent training")
 
@@ -352,7 +403,7 @@ def build_memory_context(
         file_ids = [g["file_id"] for g in fgrants]
         if file_ids:
             files = _rows(
-                sb.table("public_files").select("*").in_("id", file_ids).eq("deleted", False).execute()
+                sb.table("public_files").select("*").in_("id", file_ids).eq("deleted", False).order("updated_at", desc=True).limit(MAX_FILES).execute()
             )
             if files:
                 lines.append("== Reference files ==")

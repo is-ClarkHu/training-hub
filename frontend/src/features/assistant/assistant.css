@@ -232,7 +232,26 @@
 
 .asst-msg { display: flex; flex-direction: column; }
 .asst-msg.user { align-items: flex-end; }
-.asst-msg.assistant { align-items: flex-start; }
+/* Assistant rows carry an avatar: avatar in col 1, bubble + sources + suggestion
+   stacked in col 2. */
+.asst-msg.assistant {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  column-gap: 8px;
+  justify-items: start;
+  align-items: start;
+}
+.asst-msg.assistant > :not(.asst-avatar) { grid-column: 2; }
+.asst-avatar {
+  grid-column: 1;
+  width: 26px; height: 26px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  font: 700 12px/1 var(--mono);
+  color: #fff;
+  user-select: none;
+  flex: none;
+}
 .asst-sources { font-size: 11px; color: var(--text-dim); margin-top: 3px; padding: 0 2px; }
 .asst-suggest {
   display: flex;

@@ -17,9 +17,10 @@ import {
   createChatroomMemory,
 } from '../../db'
 import type { Chatroom, ChatroomPermCategory } from '../../supabase/types'
-import { AI_PROVIDERS, aiPayload, hasBackend, payloadForProvider, type AiProvider } from '../../ai/config'
+import { AI_PROVIDERS, PROVIDER_META, aiPayload, getTaskCfg, hasBackend, payloadForProvider, type AiProvider } from '../../ai/config'
 import { useSlowHint } from '../../ai/useSlowHint'
 import { useLanguage } from '../../i18n'
+import { flushToServer } from '../../sync'
 import { askAssistant } from './assistantClient'
 import { MemoryPanel } from './MemoryPanel'
 import { DataPanel } from './DataPanel'
@@ -91,6 +92,10 @@ export function AssistantScreen() {
   }, [messages, busy])
 
   const activeRoom = rooms.find((r) => r.id === activeId) ?? null
+  // Which model this room actually talks to (room override, else the assistant
+  // default) — drives the chat avatar so it's clear who's answering.
+  const roomProvider = (activeRoom?.provider as AiProvider) || getTaskCfg('assistant').provider
+  const bot = PROVIDER_META[roomProvider] ?? PROVIDER_META.deepseek
 
   async function refreshRooms(selectId?: string) {
     const rs = await getChatrooms()
@@ -178,6 +183,11 @@ export function AssistantScreen() {
       ? payloadForProvider(activeRoom.provider as AiProvider, activeRoom.model)
       : aiPayload('assistant')
     try {
+      // The backend reads perms + training data from Supabase, so local-only
+      // writes (a just-toggled permission, a workout logged offline, this room
+      // itself) must reach the server first — otherwise the AI answers against
+      // stale data ("I can't see your records" right after you granted them).
+      await flushToServer().catch(() => {})
       const { reply, sources, suggestedMemory } = await askAssistant(text, activeId, ai)
       setMessages((m) => [...m, { role: 'assistant', content: reply, sources, suggestedMemory: suggestedMemory || undefined }])
     } catch (err) {
@@ -283,6 +293,9 @@ export function AssistantScreen() {
           )}
           {messages.map((m, i) => (
             <div key={i} className={`asst-msg ${m.role}`}>
+              {m.role === 'assistant' && (
+                <span className="asst-avatar" style={{ background: bot.color }} title={bot.label}>{bot.glyph}</span>
+              )}
               <span className="asst-bubble">{m.content}</span>
               {m.role === 'assistant' && m.sources && m.sources.length > 0 && (
                 <span className="asst-sources">
@@ -302,6 +315,7 @@ export function AssistantScreen() {
           ))}
           {busy && (
             <div className="asst-msg assistant">
+              <span className="asst-avatar" style={{ background: bot.color }} title={bot.label}>{bot.glyph}</span>
               <span className="asst-bubble asst-typing">…</span>
               {waking && (
                 <span className="asst-waking">

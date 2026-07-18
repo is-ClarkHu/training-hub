@@ -131,32 +131,24 @@ async function pullTable(uid: string, table: TableName): Promise<number> {
   return remote.length
 }
 
-let running = false
-
 export interface SyncResult {
   pushed: number
   pulled: number
   errors: string[]
 }
 
-/** One push+pull pass across all tables. No-op when signed out or already running.
- *  A single table's failure (e.g. a Supabase column missing) no longer aborts the
- *  whole run — the error is collected and the other tables still sync. */
-export async function syncNow(): Promise<SyncResult | null> {
-  const uid = currentUserId()
-  if (!uid || running) return null
-  running = true
+async function runSync(uid: string, pushOnly: boolean): Promise<SyncResult> {
   const errors: string[] = []
-  try {
-    let pushed = 0
-    let pulled = 0
-    for (const t of TABLES) {
-      try {
-        pushed += await pushTable(uid, t)
-      } catch (e) {
-        errors.push(`push ${t}: ${errorMessage(e)}`)
-      }
+  let pushed = 0
+  let pulled = 0
+  for (const t of TABLES) {
+    try {
+      pushed += await pushTable(uid, t)
+    } catch (e) {
+      errors.push(`push ${t}: ${errorMessage(e)}`)
     }
+  }
+  if (!pushOnly) {
     for (const t of TABLES) {
       try {
         pulled += await pullTable(uid, t)
@@ -164,10 +156,39 @@ export async function syncNow(): Promise<SyncResult | null> {
         errors.push(`pull ${t}: ${errorMessage(e)}`)
       }
     }
-    return { pushed, pulled, errors }
-  } finally {
-    running = false
   }
+  return { pushed, pulled, errors }
+}
+
+// Serialized queue. The old guard made a call a no-op while another was running,
+// which broke "await syncNow() before I read from the server": a caller couldn't
+// know its just-written rows had actually been pushed. Chaining instead means each
+// call waits for the in-flight run and then does its own fresh pass, so an awaited
+// call always reflects local state written before it.
+let chain: Promise<unknown> = Promise.resolve()
+
+function enqueue(pushOnly: boolean): Promise<SyncResult | null> {
+  const run = chain.then(async (): Promise<SyncResult | null> => {
+    const uid = currentUserId()
+    if (!uid) return null
+    return runSync(uid, pushOnly)
+  })
+  chain = run.catch(() => {}) // keep the queue alive past a failed run
+  return run
+}
+
+/** One push+pull pass across all tables (queued behind any in-flight sync).
+ *  A single table's failure (e.g. a Supabase column missing) no longer aborts the
+ *  whole run — the error is collected and the other tables still sync. */
+export function syncNow(): Promise<SyncResult | null> {
+  return enqueue(false)
+}
+
+/** Push local changes up (no pull), queued. Await this before a server-side read
+ *  that must see local writes — e.g. the AI assistant reads your perms + training
+ *  data from Supabase, so a just-toggled permission has to be pushed first. */
+export function flushToServer(): Promise<SyncResult | null> {
+  return enqueue(true)
 }
 
 /** Start background sync: now, on focus, on `online`, and every `intervalMs` (§3). */
