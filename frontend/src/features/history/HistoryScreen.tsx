@@ -18,7 +18,7 @@ import {
   patchEntry,
   moveDayEntries,
   refreshCycleRoundsForAssignments,
-  assignEntriesToCycleRound,
+  assignEntriesToCycleTargets,
   reorderEntries,
   entrySortKey,
   softDeleteEntry,
@@ -707,6 +707,8 @@ function CyclePickerDialog({
   )
 }
 
+interface EntryTarget { roundId: string | null; dayLabel: string; modulePart: BodyPart | '' }
+
 function CycleAssignDialog({
   date,
   items,
@@ -734,14 +736,27 @@ function CycleAssignDialog({
   // (highest-index, still open, not skipped) — the round you're currently filling;
   // else null = start a new round.
   const latestOpen = [...rounds].sort((a, b) => b.index - a.index).find((r) => !r.ended_on && !r.skipped)
-  const existingRound = items.find((e) => e.cycle_round_id)?.cycle_round_id ?? latestOpen?.id ?? null
-  const [roundId, setRoundId] = useState<string | null>(existingRound)
-  const [dayLabel, setDayLabel] = useState(items.find((e) => e.cycle_day_label)?.cycle_day_label ?? cycle.days[0]?.label ?? '')
-  const [selected, setSelected] = useState<Set<string>>(() => new Set(items.map((e) => e.id)))
-  const [moduleById, setModuleById] = useState<Record<string, BodyPart | ''>>(() => Object.fromEntries(items.map((e) => [e.id, e.module_part ?? ''])))
+  // Per-entry target so one date can split across rounds/days (leg lifts → R2's leg
+  // day, chest lifts → R3's chest day). Each entry keeps its own (round, day).
+  const [targets, setTargets] = useState<Record<string, EntryTarget>>(() =>
+    Object.fromEntries(items.map((e) => [e.id, {
+      roundId: e.cycle_round_id ?? latestOpen?.id ?? null,
+      dayLabel: e.cycle_day_label ?? '',
+      modulePart: (e.module_part ?? '') as BodyPart | '',
+    }])),
+  )
+  const setTarget = (id: string, patch: Partial<EntryTarget>) =>
+    setTargets((t) => ({ ...t, [id]: { ...t[id], ...patch } }))
+  // Quick-apply for the common "whole day is one label" case.
+  const [bulkRound, setBulkRound] = useState<string | null>(latestOpen?.id ?? null)
+  const [bulkDay, setBulkDay] = useState(cycle.days[0]?.label ?? '')
+  const applyAll = () => setTargets((t) =>
+    Object.fromEntries(Object.entries(t).map(([id, v]) => [id, { ...v, roundId: bulkRound, dayLabel: bulkDay }])))
   const countSets = useMemo(() => (id: string) => setCountOf(setMap, id), [setMap])
   const orderedRounds = useMemo(() => [...rounds].sort((a, b) => b.index - a.index), [rounds])
-  const previewRound = roundId ? rounds.find((r) => r.id === roundId) ?? null : null
+  // The round whose body map is previewed — a reference while assigning, not the target.
+  const [focusRoundId, setFocusRoundId] = useState<string | null>(latestOpen?.id ?? null)
+  const focusRound = focusRoundId ? rounds.find((r) => r.id === focusRoundId) ?? null : null
   const volumeGoal = Math.max(20, cycle.days.length * 12)
 
   function ringFor(round: CycleRound): RingChain[] {
@@ -757,8 +772,8 @@ function CycleAssignDialog({
   }
 
   const body = useMemo<Record<string, RegionView>>(() => {
-    if (!previewRound) return {}
-    const activity = roundRegionActivity(cycle, previewRound, allEntries, countSets)
+    if (!focusRound) return {}
+    const activity = roundRegionActivity(cycle, focusRound, allEntries, countSets)
     const out: Record<string, RegionView> = {}
     for (const [region, a] of Object.entries(activity)) {
       const byEx = new Map<string, { name: string; sets: number; day: string; date: string | null }>()
@@ -772,27 +787,17 @@ function CycleAssignDialog({
       out[region] = { sets: a.sets, items: [...byEx.values()].sort((a, b) => b.sets - a.sets) }
     }
     return out
-  }, [allEntries, countSets, cycle, exById, lang, previewRound])
+  }, [allEntries, countSets, cycle, exById, lang, focusRound])
 
-  function toggle(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
+  const anyAssigned = items.some((e) => targets[e.id]?.dayLabel)
 
   async function save() {
-    await assignEntriesToCycleRound(cycle, {
-      date,
-      dayLabel,
-      roundId,
-      entries: [...selected].map((entryId) => ({
-        entryId,
-        modulePart: moduleById[entryId] ? moduleById[entryId] as BodyPart : null,
-      })),
-    })
+    await assignEntriesToCycleTargets(cycle, date, items.map((e) => ({
+      entryId: e.id,
+      roundId: targets[e.id].roundId,
+      dayLabel: targets[e.id].dayLabel,
+      modulePart: targets[e.id].modulePart ? (targets[e.id].modulePart as BodyPart) : null,
+    })))
     onSaved()
   }
 
@@ -809,48 +814,55 @@ function CycleAssignDialog({
 
         <div className="hist-assign-grid">
           <section className="hist-assign-panel">
-            <span className="th-label">{lang === 'zh' ? '第几轮' : 'Round'}</span>
+            <span className="th-label">{lang === 'zh' ? '已有轮次(参考)' : 'Existing rounds (reference)'}</span>
             <div className="hist-assign-rounds">
-              <button type="button" className={`hist-round-pick ${roundId === null ? 'on' : ''}`} onClick={() => setRoundId(null)}>
-                <span>R{rounds.reduce((m, r) => Math.max(m, r.index), 0) + 1}</span>
-                <small>{lang === 'zh' ? '新一轮' : 'new'}</small>
-              </button>
               {orderedRounds.map((r) => (
-                <RoundRings key={r.id} mini chains={ringFor(r)} centerLabel={`R${r.index}`} active={roundId === r.id} onClick={() => setRoundId(r.id)} />
+                <RoundRings key={r.id} mini chains={ringFor(r)} centerLabel={`R${r.index}`} active={focusRoundId === r.id} onClick={() => setFocusRoundId(r.id)} />
               ))}
             </div>
-            {previewRound ? <BodyModel activity={body} lang={lang} compact /> : <p className="hist-assign-hint">{lang === 'zh' ? '保存时创建新一轮' : 'Saving creates a new round'}</p>}
+            {focusRound
+              ? <BodyModel activity={body} lang={lang} compact />
+              : <p className="hist-assign-hint">{lang === 'zh' ? '点上面的轮次查看身体图' : 'Tap a round to preview its body map'}</p>}
           </section>
 
           <section className="hist-assign-panel">
-            <span className="th-label">{lang === 'zh' ? '分化部分' : 'Split day'}</span>
-            <div className="hist-assign-days">
-              {cycle.days.map((d) => (
-                <button key={d.label} type="button" className={`hist-day-pick ${dayLabel === d.label ? 'on' : ''}`} onClick={() => setDayLabel(d.label)}>
-                  <b>{d.label}</b>
-                  <span>{cycleDayTitle(d, lang)}</span>
-                </button>
-              ))}
+            {/* Quick path: set every entry to one round+day at once. */}
+            <div className="hist-assign-bulk">
+              <span className="th-label">{lang === 'zh' ? '批量设为' : 'Set all to'}</span>
+              <div className="hist-assign-bulk-row">
+                <select className="th-input" value={bulkRound ?? ''} onChange={(e) => setBulkRound(e.target.value || null)}>
+                  <option value="">{lang === 'zh' ? '新一轮' : 'New round'}</option>
+                  {orderedRounds.map((r) => <option key={r.id} value={r.id}>R{r.index}</option>)}
+                </select>
+                <select className="th-input" value={bulkDay} onChange={(e) => setBulkDay(e.target.value)}>
+                  {cycle.days.map((d) => <option key={d.label} value={d.label}>{d.label} · {cycleDayTitle(d, lang)}</option>)}
+                </select>
+                <button type="button" className="th-btn-ghost" onClick={applyAll}>{lang === 'zh' ? '应用到全部' : 'Apply'}</button>
+              </div>
             </div>
 
-            <span className="th-label">{lang === 'zh' ? '动作归入' : 'Entries'}</span>
+            <span className="th-label">{lang === 'zh' ? '逐个归类(可各不相同)' : 'Per entry (can differ)'}</span>
             <div className="hist-assign-entries">
               {items.map((e) => {
                 const ex = exById[e.exercise_id]
+                const tg = targets[e.id]
                 return (
-                  <label key={e.id} className={`hist-assign-entry ${selected.has(e.id) ? 'on' : ''}`}>
-                    <input type="checkbox" checked={selected.has(e.id)} onChange={() => toggle(e.id)} />
-                    <span>{ex ? exerciseName(ex, lang) : '?'}</span>
+                  <div key={e.id} className={`hist-assign-row ${tg.dayLabel ? 'on' : ''}`}>
+                    <span className="hist-assign-nm">{ex ? exerciseName(ex, lang) : '?'}</span>
                     <small>{countSets(e.id)} {lang === 'zh' ? '组' : 'sets'}</small>
-                    <select
-                      className="th-input"
-                      value={moduleById[e.id] ?? ''}
-                      onChange={(ev) => setModuleById((m) => ({ ...m, [e.id]: ev.target.value as BodyPart | '' }))}
-                    >
+                    <select className="th-input" value={tg.roundId ?? ''} onChange={(ev) => setTarget(e.id, { roundId: ev.target.value || null })}>
+                      <option value="">{lang === 'zh' ? '新一轮' : 'New'}</option>
+                      {orderedRounds.map((r) => <option key={r.id} value={r.id}>R{r.index}</option>)}
+                    </select>
+                    <select className="th-input" value={tg.dayLabel} onChange={(ev) => setTarget(e.id, { dayLabel: ev.target.value })}>
+                      <option value="">{lang === 'zh' ? '不归类' : 'skip'}</option>
+                      {cycle.days.map((d) => <option key={d.label} value={d.label}>{d.label} · {cycleDayTitle(d, lang)}</option>)}
+                    </select>
+                    <select className="th-input" value={tg.modulePart} onChange={(ev) => setTarget(e.id, { modulePart: ev.target.value as BodyPart | '' })}>
                       <option value="">{lang === 'zh' ? '默认肌群' : 'default'}</option>
                       {categoryKeys().map((k) => <option key={k} value={k}>{categoryLabel(k, lang)}</option>)}
                     </select>
-                  </label>
+                  </div>
                 )
               })}
             </div>
@@ -859,7 +871,7 @@ function CycleAssignDialog({
 
         <div className="hist-assign-actions">
           <button className="th-btn-ghost" type="button" onClick={onClose}>{lang === 'zh' ? '取消' : 'Cancel'}</button>
-          <button className="th-btn" type="button" onClick={() => void save()} disabled={!dayLabel || selected.size === 0}>
+          <button className="th-btn" type="button" onClick={() => void save()} disabled={!anyAssigned}>
             {lang === 'zh' ? '保存归类' : 'Save'}
           </button>
         </div>

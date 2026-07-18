@@ -197,8 +197,10 @@
 .dash-round-hist-label { font: 700 11px/1 var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-dim); }
 .dash-round-hist-scroll {
   display: flex; flex-wrap: wrap; gap: 10px;
-  max-height: 210px; overflow-y: auto; padding-right: 4px;
+  max-height: 240px; overflow-y: auto; padding-right: 4px;
 }
+.dash-round-hist-item { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.dash-round-dates { font: 10px/1.2 var(--mono); color: var(--text-dim); white-space: nowrap; }
 
 .rr { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 4px; background: none; border: none; cursor: pointer; }
 .rr-svg { width: 172px; height: 172px; display: block; }

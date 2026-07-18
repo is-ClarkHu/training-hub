@@ -66,6 +66,12 @@ const HEAT = ['var(--panelhi)', 'rgba(125,211,160,.38)', 'rgba(125,211,160,.7)',
 const HEART_SHADES = ['#f9a8d4', '#f472b6', '#ec4899', '#db2777']
 const heartColor = (count: number): string => HEART_SHADES[Math.min(count, HEART_SHADES.length) - 1]
 
+// A round's date span for the rounds list: "07-11 → 07-18" (open round → "07-11 → …").
+const md = (iso: string): string => iso.slice(5)
+function roundDateRange(round: CycleRound): string {
+  return `${md(round.started_on)} → ${round.ended_on ? md(round.ended_on) : '…'}`
+}
+
 export function DashboardScreen() {
   const { lang } = useLanguage()
   const [entries, setEntries] = useState<WorkoutEntry[]>([])
@@ -397,14 +403,16 @@ export function DashboardScreen() {
                 <span className="dash-round-hist-label">{lang === 'zh' ? '轮次列表' : 'Rounds'}</span>
                 <div className="dash-round-hist-scroll">
                   {roundData.list.map(({ round, chains }) => (
-                    <RoundRings
-                      key={round.id}
-                      mini
-                      chains={chains}
-                      centerLabel={`R${round.index}`}
-                      active={round.id === modalRoundId}
-                      onClick={() => setModalRoundId(round.id)}
-                    />
+                    <div key={round.id} className="dash-round-hist-item">
+                      <RoundRings
+                        mini
+                        chains={chains}
+                        centerLabel={`R${round.index}`}
+                        active={round.id === modalRoundId}
+                        onClick={() => setModalRoundId(round.id)}
+                      />
+                      <span className="dash-round-dates">{roundDateRange(round)}</span>
+                    </div>
                   ))}
                 </div>
               </div>

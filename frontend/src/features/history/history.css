@@ -269,10 +269,32 @@
 .hist-assign-entry .th-input { height: 32px; font-size: 12px; padding: 5px 7px; }
 .hist-assign-actions { justify-content: flex-end; }
 
+/* Quick-apply row + per-entry target rows (round + day + module each). */
+.hist-assign-bulk { display: flex; flex-direction: column; gap: 6px; }
+.hist-assign-bulk-row { display: flex; gap: 6px; align-items: center; }
+.hist-assign-bulk-row .th-input { height: 32px; font-size: 12px; padding: 5px 7px; flex: 1; min-width: 0; }
+/* width:auto so the button doesn't inherit .th-btn-ghost's width:100% and squash
+   the two flex selects to arrow-only. */
+.hist-assign-bulk-row .th-btn-ghost { flex: none; width: auto; padding: 6px 12px; font-size: 12px; }
+.hist-assign-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(66px, 84px) minmax(96px, 130px) minmax(96px, 130px);
+  align-items: center; gap: 7px;
+  padding: 8px 10px; color: var(--text-dim);
+  background: var(--bg-input); border: 1px solid var(--border); border-radius: 8px;
+}
+.hist-assign-row.on { color: var(--text-bright); border-color: color-mix(in srgb, var(--teal) 45%, var(--border)); }
+.hist-assign-nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 700 12px/1.2 var(--sans); }
+.hist-assign-row small { font: 11px/1 var(--mono); color: var(--text-dim); }
+.hist-assign-row .th-input { height: 32px; font-size: 12px; padding: 5px 6px; min-width: 0; }
+
 @media (max-width: 760px) {
   .hist-assign-grid { grid-template-columns: 1fr; }
   .hist-assign-entry { grid-template-columns: 18px minmax(0, 1fr) auto; }
   .hist-assign-entry .th-input { grid-column: 2 / -1; }
+  /* Stack the per-entry selects: name/sets on row 1, the three selects on row 2. */
+  .hist-assign-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .hist-assign-row .th-input { grid-column: 1 / -1; }
 }
 
 /* review stepper */

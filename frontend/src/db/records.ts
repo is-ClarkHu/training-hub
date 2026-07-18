@@ -724,6 +724,69 @@ export async function assignEntriesToCycleRound(
   return round ?? null
 }
 
+export interface CycleTargetAssignment {
+  entryId: string
+  roundId: string | null   // null = assign to a freshly-created round
+  dayLabel: string         // '' = leave this entry unassigned (skipped)
+  modulePart?: BodyPart | null
+}
+
+/**
+ * Assign a day's entries to PER-ENTRY (round, day-label) targets in one save, so a
+ * single date can be split across rounds/days — e.g. two leg lifts → R2's leg day,
+ * three chest lifts → R3's chest day. (assignEntriesToCycleRound only does one
+ * target for the whole batch, which forced the whole day onto one round/day.)
+ * Entries with an empty dayLabel are left untouched. All null-round entries share
+ * ONE new round.
+ */
+export async function assignEntriesToCycleTargets(
+  cycle: TrainingCycle,
+  date: string,
+  assignments: CycleTargetAssignment[],
+): Promise<void> {
+  const validLabels = new Set(cycle.days.map((d) => d.label))
+  const valid = assignments.filter((a) => validLabels.has(a.dayLabel))
+  if (valid.length === 0) return
+  const touched = new Set<string>()
+  await db.transaction('rw', db.workout_entries, db.cycle_rounds, async () => {
+    let newRoundId: string | null = null
+    if (valid.some((a) => !a.roundId)) {
+      const rounds = await getCycleRounds(cycle.id)
+      const maxIdx = rounds.reduce((m, r) => Math.max(m, r.index), 0)
+      const round: CycleRound = {
+        ...syncFields(),
+        cycle_id: cycle.id,
+        index: maxIdx + 1,
+        started_on: date,
+        ended_on: null,
+        completed_labels: [],
+        skipped: false,
+      }
+      await db.cycle_rounds.add(round)
+      newRoundId = round.id
+    }
+    const ts = nowIso()
+    for (const a of valid) {
+      const e = await db.workout_entries.get(a.entryId)
+      if (!e || e.deleted) continue
+      const rid = a.roundId ?? newRoundId
+      if (!rid) continue
+      const r = await db.cycle_rounds.get(rid)
+      if (!r || r.deleted || r.cycle_id !== cycle.id) continue
+      touched.add(rid)
+      await db.workout_entries.put({
+        ...e,
+        cycle_id: cycle.id,
+        cycle_round_id: rid,
+        cycle_day_label: a.dayLabel,
+        module_part: a.modulePart === undefined ? e.module_part : a.modulePart,
+        updated_at: ts,
+      })
+    }
+  })
+  for (const rid of touched) await refreshCycleRoundFromAssignments(cycle, rid)
+}
+
 /** Rebuild a cycle's rounds from dated entry labels. This is used after History
  *  relabels older days, where there may be no open round to append to. */
 export async function rebuildCycleRounds(cycle: TrainingCycle): Promise<void> {
