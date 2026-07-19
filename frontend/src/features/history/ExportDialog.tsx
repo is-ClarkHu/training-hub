@@ -10,11 +10,12 @@
 import { useMemo, useRef, useState } from 'react'
 import { toPng } from 'html-to-image'
 import type {
-  CycleRound, Exercise, ExerciseSet, OptionalTracker, Sport, SportSession, TrainingCycle, WorkoutEntry,
+  CycleRound, EntryCycleAssignment, Exercise, ExerciseSet, OptionalTracker, Sport, SportSession, TrainingCycle, WorkoutEntry,
 } from '../../supabase/types'
 import { entrySortKey } from '../../db'
 import { categoryLabel } from '../../categories'
 import { cycleDayTitle } from '../cycle/day'
+import { cycleMemberships } from '../cycle/rounds'
 import {
   CircuitCard, EntryCard, IntimacyRow, SportRow, groupByModule, partitionCircuits, type LoopInfo,
 } from './rows'
@@ -36,6 +37,7 @@ export function ExportDialog({
   intimacyRows,
   activeCycle,
   rounds,
+  assignments,
   lang,
   onClose,
 }: {
@@ -48,6 +50,7 @@ export function ExportDialog({
   intimacyRows: OptionalTracker[]
   activeCycle: TrainingCycle | null
   rounds: CycleRound[]
+  assignments: EntryCycleAssignment[]
   lang: 'en' | 'zh'
   onClose: () => void
 }) {
@@ -83,25 +86,29 @@ export function ExportDialog({
     return [...map.values()].sort((a, b) => (a.date < b.date ? 1 : -1))
   }, [entries, sportSessions, intimacyRows, from, to, showIntimacy])
 
-  // Mirrors HistoryScreen.loopInfo so exported days carry the same split/round badges.
+  // Mirrors HistoryScreen.loopInfo so exported days carry the same split/round
+  // badges — derived from the M2M memberships of the date's entries.
   const loopInfo = (date: string, items: WorkoutEntry[]): LoopInfo | null => {
     if (!activeCycle) return null
     const dayByLabel = new Map(activeCycle.days.map((d) => [d.label, d]))
+    const roundById = new Map(rounds.map((r) => [r.id, r]))
+    const ids = new Set(items.map((e) => e.id))
+    const mems = cycleMemberships(activeCycle, entries, assignments).filter((m) => ids.has(m.entryId))
     const seen = new Set<string>()
     const labels: { label: string; title: string }[] = []
-    for (const e of items) {
-      if (!e.cycle_day_label || seen.has(e.cycle_day_label)) continue
-      if (e.cycle_id && e.cycle_id !== activeCycle.id) continue
-      const day = dayByLabel.get(e.cycle_day_label)
-      if (!day) continue
-      seen.add(e.cycle_day_label)
-      labels.push({ label: e.cycle_day_label, title: cycleDayTitle(day, lang) })
+    const roundIdxs = new Set<number>()
+    for (const m of mems) {
+      const day = dayByLabel.get(m.dayLabel)
+      if (day && !seen.has(m.dayLabel)) {
+        seen.add(m.dayLabel)
+        labels.push({ label: m.dayLabel, title: cycleDayTitle(day, lang) })
+      }
+      const r = (m.roundId ? roundById.get(m.roundId) : undefined)
+        ?? rounds.find((rr) => rr.started_on <= date && (rr.ended_on ?? '9999-12-31') >= date)
+      if (r) roundIdxs.add(r.index)
     }
     if (labels.length === 0) return null
-    const roundId = items.find((e) => e.cycle_round_id && (!e.cycle_id || e.cycle_id === activeCycle.id))?.cycle_round_id
-    const round = (roundId ? rounds.find((r) => r.id === roundId) : undefined)
-      ?? rounds.find((r) => r.started_on <= date && (r.ended_on ?? '9999-12-31') >= date)
-    return { labels, round: round?.index ?? null }
+    return { labels, rounds: [...roundIdxs].sort((a, b) => a - b) }
   }
 
   async function generate() {
@@ -206,7 +213,7 @@ export function ExportDialog({
               {loop.labels.map((l) => (
                 <span key={l.label} className="hist-loop-day"><b>{l.label}</b> {l.title}</span>
               ))}
-              {loop.round != null && <span className="hist-loop-round">R{loop.round}</span>}
+              {loop.rounds.map((r) => <span key={r} className="hist-loop-round">R{r}</span>)}
             </span>
           )}
         </div>

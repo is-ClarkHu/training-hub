@@ -14,7 +14,7 @@ import {
   Legend,
 } from 'chart.js'
 import { Doughnut, Bar, Line } from 'react-chartjs-2'
-import { getActiveCycle, getCycleRounds, getEntries, getExercises, getSetsByEntryIds, getSportSessions, getInjuries, getSports, getTrackerEntries } from '../../db'
+import { getActiveCycle, getCycleRounds, getEntryCycleAssignments, getEntries, getExercises, getSetsByEntryIds, getSportSessions, getInjuries, getSports, getTrackerEntries } from '../../db'
 import { useLanguage } from '../../i18n'
 import {
   type Exercise,
@@ -29,7 +29,7 @@ import { getCategories, categoryLabel } from '../../categories'
 import { roundMetrics, roundRegionActivity } from '../cycle/rounds'
 import { BodyModel, type RegionView } from '../cycle/BodyModel'
 import { RoundRings, type RingChain } from './RoundRings'
-import type { CycleRound, TrainingCycle } from '../../supabase/types'
+import type { CycleRound, EntryCycleAssignment, TrainingCycle } from '../../supabase/types'
 import { ActiveInjuryBanner, bodyAreaLabel } from '../injuries'
 import { INJURY_STATUS_LABELS, daysBetween, daysSince } from '../injuries/util'
 import { SportCharts, sportName } from '../sports'
@@ -86,6 +86,7 @@ export function DashboardScreen() {
   const [sportId, setSportId] = useState('')
   const [activeCycle, setActiveCycle] = useState<TrainingCycle | null>(null)
   const [cycleRounds, setCycleRounds] = useState<CycleRound[]>([])
+  const [assignments, setAssignments] = useState<EntryCycleAssignment[]>([])
   const [modalRoundId, setModalRoundId] = useState<string | null>(null)
 
   useEffect(() => {
@@ -108,6 +109,7 @@ export function DashboardScreen() {
       const cyc = await getActiveCycle()
       setActiveCycle(cyc)
       setCycleRounds(cyc ? await getCycleRounds(cyc.id) : [])
+      setAssignments(cyc ? await getEntryCycleAssignments() : [])
     })()
   }, [])
 
@@ -122,7 +124,7 @@ export function DashboardScreen() {
     const list = [...cycleRounds]
       .sort((a, b) => b.index - a.index)
       .map((round) => {
-        const m = roundMetrics(activeCycle, round, entries, setCount)
+        const m = roundMetrics(activeCycle, round, entries, setCount, assignments)
         const chains: RingChain[] = [
           { id: 'complete', label: lang === 'zh' ? '完成' : 'Done', color: '#8ab4f8', value: m.completedDays, goal: m.totalDays || 1 },
           { id: 'volume', label: lang === 'zh' ? '容量' : 'Volume', color: '#ff8a5c', value: m.sets, goal: volumeGoal },
@@ -137,13 +139,13 @@ export function DashboardScreen() {
         return { round, chains }
       })
     return { list, current: list.find((r) => r.round.ended_on == null) ?? list[0] }
-  }, [activeCycle, cycleRounds, entries, setCount, lang])
+  }, [activeCycle, cycleRounds, entries, setCount, lang, assignments])
 
   // Body-model activity for whichever round the modal is showing.
   const modalRound = roundData?.list.find((r) => r.round.id === modalRoundId) ?? null
   const modalBody = useMemo<Record<string, RegionView>>(() => {
     if (!activeCycle || !modalRound) return {}
-    const activity = roundRegionActivity(activeCycle, modalRound.round, entries, setCount)
+    const activity = roundRegionActivity(activeCycle, modalRound.round, entries, setCount, assignments)
     const body: Record<string, RegionView> = {}
     for (const [region, a] of Object.entries(activity)) {
       const byEx = new Map<string, { name: string; sets: number; day: string; date: string | null }>()
@@ -157,7 +159,7 @@ export function DashboardScreen() {
       body[region] = { sets: a.sets, items: [...byEx.values()].sort((x, y) => y.sets - x.sets) }
     }
     return body
-  }, [activeCycle, modalRound, entries, setCount, exById, lang])
+  }, [activeCycle, modalRound, entries, setCount, exById, lang, assignments])
   const recovery = useMemo(() => muscleRecovery(entries, exById), [entries, exById])
   const bpCounts = useMemo(() => bodyPartCounts(entries, exById), [entries, exById])
   const stCounts = useMemo(() => setTypeCounts(allSets), [allSets])

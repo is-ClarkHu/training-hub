@@ -8,6 +8,7 @@ import {
   getCycleRounds,
   getCycles,
   getEntries,
+  getEntryCycleAssignments,
   getExercises,
   getSetsByEntryIds,
   getSports,
@@ -27,6 +28,7 @@ import {
   type BodyPart,
   type CycleDay,
   type CycleRound,
+  type EntryCycleAssignment,
   type Exercise,
   type OptionalTracker,
   type Sport,
@@ -40,7 +42,7 @@ import { daysSince } from '../injuries/util'
 import { sportName } from '../sports'
 import { ExerciseManager } from '../log'
 import { CategoryManager } from './CategoryManager'
-import { currentRound, liveCompletedLabels } from './rounds'
+import { currentRound, cycleMemberships, liveCompletedLabels } from './rounds'
 import { BodyModel, type RegionView } from './BodyModel'
 import { REGIONS, regionLabel, type RegionId } from './anatomy'
 import { cycleDayTitle } from './day'
@@ -54,6 +56,7 @@ export function CycleScreen() {
   const [cycles, setCycles] = useState<TrainingCycle[]>([])
   const [active, setActive] = useState<TrainingCycle | null>(null)
   const [entries, setEntries] = useState<WorkoutEntry[]>([])
+  const [assignments, setAssignments] = useState<EntryCycleAssignment[]>([])
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [exById, setExById] = useState<Record<string, Exercise>>({})
   const [sports, setSports] = useState<Sport[]>([])
@@ -88,6 +91,7 @@ export function CycleScreen() {
     setIntimacyRows(intimacy)
     const pairs = await Promise.all(cs.map(async (c) => [c.id, await getCycleRounds(c.id)] as const))
     setRoundsByCycle(Object.fromEntries(pairs))
+    setAssignments(await getEntryCycleAssignments())
     const sm = await getSetsByEntryIds(es.map((e) => e.id))
     const counts: Record<string, number> = {}
     for (const [eid, list] of Object.entries(sm)) counts[eid] = list.filter((s) => s.set_type !== 'warmup').length
@@ -125,25 +129,23 @@ export function CycleScreen() {
     // hover box shows what drove the glow (brighter = more sets).
     const dayRegions = new Map(c.days.map((d) => [d.label, (d.regions ?? []) as RegionId[]]))
     const perRegion = new Map<RegionId, Map<string, { name: string; sets: number; day: string; date: string | null }>>()
-    for (const e of entries) {
-      if (e.cycle_id && e.cycle_id !== c.id) continue
-      if (!e.cycle_day_label) continue
-      // Which entries count this round: prefer the explicit assignment (cycle_round_id),
-      // fall back to the round's date span for legacy entries. (Matches roundRegionActivity.)
-      const inRound = e.cycle_round_id ? e.cycle_round_id === open.id : e.date >= open.started_on && (!open.ended_on || e.date <= open.ended_on)
+    // Iterate M2M memberships (assignment rows, with legacy-column fallback) so an
+    // entry shared across splits lights each split's regions.
+    for (const m of cycleMemberships(c, entries, assignments)) {
+      const inRound = m.roundId ? m.roundId === open.id : m.date >= open.started_on && (!open.ended_on || m.date <= open.ended_on)
       if (!inRound) continue
-      const regions = dayRegions.get(e.cycle_day_label)
+      const regions = dayRegions.get(m.dayLabel) as RegionId[] | undefined
       if (!regions || regions.length === 0) continue
-      const n = setCounts[e.id] ?? 0
+      const n = setCounts[m.entryId] ?? 0
       if (n <= 0) continue
-      const ex = exById[e.exercise_id]
+      const ex = exById[m.exId]
       const name = ex ? exerciseName(ex, lang) : '?'
       for (const region of regions) {
         const byEx = perRegion.get(region) ?? new Map()
-        const k = `${e.cycle_day_label}:${e.exercise_id}`
-        const cur = byEx.get(k) ?? { name, sets: 0, day: e.cycle_day_label, date: null as string | null }
+        const k = `${m.dayLabel}:${m.exId}`
+        const cur = byEx.get(k) ?? { name, sets: 0, day: m.dayLabel, date: null as string | null }
         cur.sets += n
-        if (!cur.date || e.date > cur.date) cur.date = e.date
+        if (!cur.date || m.date > cur.date) cur.date = m.date
         byEx.set(k, cur)
         perRegion.set(region, byEx)
       }
@@ -253,8 +255,8 @@ export function CycleScreen() {
         <section className={`cyc-loop-board ${sideCycles.length ? 'has-side' : ''}`}>
           <CycleVisualCard
             cycle={mainCycle}
-            round={currentRound(mainCycle, roundsByCycle[mainCycle.id] ?? [], entries)}
-            activity={bodyActivityFor(mainCycle, currentRound(mainCycle, roundsByCycle[mainCycle.id] ?? [], entries))}
+            round={currentRound(mainCycle, roundsByCycle[mainCycle.id] ?? [], entries, assignments)}
+            activity={bodyActivityFor(mainCycle, currentRound(mainCycle, roundsByCycle[mainCycle.id] ?? [], entries, assignments))}
             getDaySummary={daySummary}
             lang={lang}
             adult={showIntimacy}
@@ -265,7 +267,7 @@ export function CycleScreen() {
           {sideCycles.length > 0 && (
             <div className="cyc-loop-side">
               {sideCycles.map((c) => {
-                const rv = currentRound(c, roundsByCycle[c.id] ?? [], entries)
+                const rv = currentRound(c, roundsByCycle[c.id] ?? [], entries, assignments)
                 return (
                   <CycleVisualCard
                     key={c.id}
@@ -291,6 +293,7 @@ export function CycleScreen() {
           cycles={cycles}
           roundsByCycle={roundsByCycle}
           entries={entries}
+          assignments={assignments}
           getDaySummary={daySummary}
           sideCycleId={hoveredSideCycleId}
           lang={lang}
@@ -302,7 +305,7 @@ export function CycleScreen() {
           <span className="th-label">{lang === 'zh' ? '轮次历史' : 'Round history'}</span>
           <ul className="cyc-rounds-list">
             {[...rounds].reverse().map((r) => {
-              const done = liveCompletedLabels(active, r, entries)
+              const done = liveCompletedLabels(active, r, entries, assignments)
               const allDone = done.length === active.days.length
               return (
                 <li key={r.id} className="cyc-round-row">
@@ -433,6 +436,7 @@ function CyclePlanMatrix({
   cycles,
   roundsByCycle,
   entries,
+  assignments,
   getDaySummary,
   sideCycleId,
   lang,
@@ -440,6 +444,7 @@ function CyclePlanMatrix({
   cycles: TrainingCycle[]
   roundsByCycle: Record<string, CycleRound[]>
   entries: WorkoutEntry[]
+  assignments: EntryCycleAssignment[]
   getDaySummary: (cycle: TrainingCycle, day: CycleDay) => CycleDaySummary
   sideCycleId: string | null
   lang: 'en' | 'zh'
@@ -454,7 +459,7 @@ function CyclePlanMatrix({
       <div className={`cyc-plan-grid ${side ? 'has-side-detail' : ''}`}>
         <PlanCycleCard
           cycle={main}
-          round={currentRound(main, roundsByCycle[main.id] ?? [], entries)}
+          round={currentRound(main, roundsByCycle[main.id] ?? [], entries, assignments)}
           getDaySummary={getDaySummary}
           lang={lang}
           primary
@@ -463,7 +468,7 @@ function CyclePlanMatrix({
           <aside className="cyc-plan-side">
             <PlanCycleCard
               cycle={side}
-              round={currentRound(side, roundsByCycle[side.id] ?? [], entries)}
+              round={currentRound(side, roundsByCycle[side.id] ?? [], entries, assignments)}
               getDaySummary={getDaySummary}
               lang={lang}
             />

@@ -589,10 +589,37 @@ export async function getCycleRounds(cycleId: string): Promise<CycleRound[]> {
 }
 
 /** All live entry↔cycle assignments (M2M membership, §6B). Source of truth for
- *  cycle membership from P2 on; during P1 it's backfilled + synced but not yet read
- *  by display code. */
+ *  cycle membership. The "primary" row for an entry reuses the entry's id. */
 export async function getEntryCycleAssignments(): Promise<EntryCycleAssignment[]> {
   return (await db.entry_cycle_assignments.toArray()).filter((a) => !a.deleted)
+}
+
+/**
+ * Keep an entry's PRIMARY assignment row (id = entry id) in step with its legacy
+ * cycle_* columns. Called by every write that changes an entry's cycle target, so
+ * the M2M read layer (which prefers assignments over the legacy columns) never sees
+ * a stale primary. Additional memberships (other cycles) live in their own rows and
+ * are managed separately. Runs inside the caller's transaction when given `tx`.
+ */
+async function syncPrimaryAssignment(entry: WorkoutEntry): Promise<void> {
+  const table = db.entry_cycle_assignments
+  const ts = nowIso()
+  if (entry.cycle_id && entry.cycle_day_label) {
+    const existing = await table.get(entry.id)
+    await table.put({
+      id: entry.id,
+      user_id: entry.user_id || currentUserId() || existing?.user_id || '',
+      updated_at: ts,
+      deleted: false,
+      entry_id: entry.id,
+      cycle_id: entry.cycle_id,
+      cycle_round_id: entry.cycle_round_id ?? null,
+      cycle_day_label: entry.cycle_day_label,
+    })
+  } else {
+    const existing = await table.get(entry.id)
+    if (existing && !existing.deleted) await table.put({ ...existing, deleted: true, updated_at: ts })
+  }
 }
 
 /** The open (in-progress) round for a cycle, or null. */
@@ -756,7 +783,7 @@ export async function assignEntriesToCycleTargets(
   const valid = assignments.filter((a) => validLabels.has(a.dayLabel))
   if (valid.length === 0) return
   const touched = new Set<string>()
-  await db.transaction('rw', db.workout_entries, db.cycle_rounds, async () => {
+  await db.transaction('rw', db.workout_entries, db.cycle_rounds, db.entry_cycle_assignments, async () => {
     let newRoundId: string | null = null
     if (valid.some((a) => !a.roundId)) {
       const rounds = await getCycleRounds(cycle.id)
@@ -782,14 +809,16 @@ export async function assignEntriesToCycleTargets(
       const r = await db.cycle_rounds.get(rid)
       if (!r || r.deleted || r.cycle_id !== cycle.id) continue
       touched.add(rid)
-      await db.workout_entries.put({
+      const updated = {
         ...e,
         cycle_id: cycle.id,
         cycle_round_id: rid,
         cycle_day_label: a.dayLabel,
         module_part: a.modulePart === undefined ? e.module_part : a.modulePart,
         updated_at: ts,
-      })
+      }
+      await db.workout_entries.put(updated)
+      await syncPrimaryAssignment(updated)
     }
   })
   for (const rid of touched) await refreshCycleRoundFromAssignments(cycle, rid)
@@ -1338,7 +1367,11 @@ export async function moveDayEntries(fromDate: string, toDate: string): Promise<
 export async function setDayCycleLabel(date: string, label: string | null, cycleId: string | null = null): Promise<number> {
   const ts = nowIso()
   const rows = (await db.workout_entries.where('date').equals(date).toArray()).filter((e) => !e.deleted)
-  await db.workout_entries.bulkPut(rows.map((e) => ({ ...e, cycle_day_label: label, cycle_id: label ? cycleId : null, updated_at: ts })))
+  const updated = rows.map((e) => ({ ...e, cycle_day_label: label, cycle_id: label ? cycleId : null, updated_at: ts }))
+  await db.transaction('rw', db.workout_entries, db.entry_cycle_assignments, async () => {
+    await db.workout_entries.bulkPut(updated)
+    for (const e of updated) await syncPrimaryAssignment(e)
+  })
   return rows.length
 }
 

@@ -22,10 +22,12 @@ import {
 } from '../log/util'
 import { EditEntryDialog } from './EditEntryDialog'
 
-/** Loop context for a date: which split day(s) were trained, and the round. */
+/** Loop context for a date: which split day(s) were trained, and the round(s).
+ *  A date can span several rounds now (M2M, §6B) — e.g. R2's leg day + R3's chest
+ *  day logged together. */
 export interface LoopInfo {
   labels: { label: string; title: string }[]
-  round: number | null
+  rounds: number[]
 }
 
 /** Group a date's entries into category modules, ordered by category order. */

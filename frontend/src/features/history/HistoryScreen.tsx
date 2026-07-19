@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'r
 import {
   getActiveCycle,
   getCycles,
+  getEntryCycleAssignments,
   getCycleRounds,
   getEntries,
   getExercises,
@@ -30,10 +31,10 @@ import {
 import { useUndo } from '../../undo'
 import { categoryKeys, categoryLabel } from '../../categories'
 import { useLanguage } from '../../i18n'
-import type { CycleRound, Exercise, ExerciseSet, IntimacyCategory, OptionalTracker, Sport, SportSession, TrainingCycle, WorkoutEntry } from '../../supabase/types'
+import type { CycleRound, EntryCycleAssignment, Exercise, ExerciseSet, IntimacyCategory, OptionalTracker, Sport, SportSession, TrainingCycle, WorkoutEntry } from '../../supabase/types'
 import type { BodyPart } from '../../supabase/types'
 import { cycleDayTitle } from '../cycle/day'
-import { liveCompletedLabels, roundMetrics, roundRegionActivity, openRound } from '../cycle/rounds'
+import { cycleMemberships, liveCompletedLabels, roundMetrics, roundRegionActivity, openRound } from '../cycle/rounds'
 import { BodyModel, type RegionView } from '../cycle/BodyModel'
 import { RoundRings, type RingChain } from '../dashboard/RoundRings'
 import { SportSessionDialog } from '../sports'
@@ -78,6 +79,7 @@ export function HistoryScreen() {
   const [intimacyRows, setIntimacyRows] = useState<OptionalTracker[]>([])
   const [activeCycle, setActiveCycle] = useState<TrainingCycle | null>(null)
   const [rounds, setRounds] = useState<CycleRound[]>([])
+  const [assignments, setAssignments] = useState<EntryCycleAssignment[]>([])
   const [allCycles, setAllCycles] = useState<TrainingCycle[]>([])
   const [roundsByCycle, setRoundsByCycle] = useState<Record<string, CycleRound[]>>({})
   const [assignCycle, setAssignCycle] = useState<TrainingCycle | null>(null)
@@ -118,6 +120,7 @@ export function HistoryScreen() {
     const cyc = await getActiveCycle()
     setActiveCycle(cyc)
     setRounds(cyc ? await getCycleRounds(cyc.id) : [])
+    setAssignments(await getEntryCycleAssignments())
     // All cycles + their rounds — the assign flow lets you file a day into ANY split.
     const cs = await getCycles()
     setAllCycles(cs)
@@ -177,33 +180,36 @@ export function HistoryScreen() {
     if (!activeCycle) return null
     const round = openRound(rounds)
     if (!round || round.skipped) return null
-    const done = liveCompletedLabels(activeCycle, round, entries)
+    const done = liveCompletedLabels(activeCycle, round, entries, assignments)
     const remaining = activeCycle.days.map((d) => d.label).filter((l) => !done.includes(l))
     return { round, done, remaining }
-  }, [activeCycle, rounds, entries])
+  }, [activeCycle, rounds, entries, assignments])
 
-  // Which split day(s) + round a date belongs to (active cycle only).
+  // Which split day(s) + round(s) a date belongs to (active cycle only). Derived
+  // from the M2M memberships of the date's entries, so a date split across rounds
+  // shows all of them.
   const loopInfo = useCallback((date: string, items: WorkoutEntry[]): LoopInfo | null => {
     if (!activeCycle) return null
     const dayByLabel = new Map(activeCycle.days.map((d) => [d.label, d]))
+    const roundById = new Map(rounds.map((r) => [r.id, r]))
+    const ids = new Set(items.map((e) => e.id))
+    const mems = cycleMemberships(activeCycle, entries, assignments).filter((m) => ids.has(m.entryId))
     const seen = new Set<string>()
     const labels: { label: string; title: string }[] = []
-    for (const e of items) {
-      if (!e.cycle_day_label || seen.has(e.cycle_day_label)) continue
-      if (e.cycle_id && e.cycle_id !== activeCycle.id) continue
-      const day = dayByLabel.get(e.cycle_day_label)
-      if (!day) continue
-      seen.add(e.cycle_day_label)
-      labels.push({ label: e.cycle_day_label, title: cycleDayTitle(day, lang) })
+    const roundIdxs = new Set<number>()
+    for (const m of mems) {
+      const day = dayByLabel.get(m.dayLabel)
+      if (day && !seen.has(m.dayLabel)) {
+        seen.add(m.dayLabel)
+        labels.push({ label: m.dayLabel, title: cycleDayTitle(day, lang) })
+      }
+      const r = (m.roundId ? roundById.get(m.roundId) : undefined)
+        ?? rounds.find((rr) => rr.started_on <= date && (rr.ended_on ?? '9999-12-31') >= date)
+      if (r) roundIdxs.add(r.index)
     }
     if (labels.length === 0) return null
-    // Prefer the round the day's entries are actually assigned to (cycle_round_id);
-    // fall back to date-range matching only for legacy entries without an assignment.
-    const roundId = items.find((e) => e.cycle_round_id && (!e.cycle_id || e.cycle_id === activeCycle.id))?.cycle_round_id
-    const round = (roundId ? rounds.find((r) => r.id === roundId) : undefined)
-      ?? rounds.find((r) => r.started_on <= date && (r.ended_on ?? '9999-12-31') >= date)
-    return { labels, round: round?.index ?? null }
-  }, [activeCycle, rounds, lang])
+    return { labels, rounds: [...roundIdxs].sort((a, b) => a - b) }
+  }, [activeCycle, rounds, entries, assignments, lang])
 
   const groupByModule = useCallback(
     (items: WorkoutEntry[]) => groupEntriesByModule(items, exById),
@@ -428,7 +434,7 @@ export function HistoryScreen() {
                   {loop.labels.map((l) => (
                     <span key={l.label} className="hist-loop-day"><b>{l.label}</b> {l.title}</span>
                   ))}
-                  {loop.round != null && <span className="hist-loop-round">R{loop.round}</span>}
+                  {loop.rounds.map((r) => <span key={r} className="hist-loop-round">R{r}</span>)}
                 </span>
               )}
             </div>
@@ -537,6 +543,7 @@ export function HistoryScreen() {
           intimacyRows={intimacyRows}
           activeCycle={activeCycle}
           rounds={rounds}
+          assignments={assignments}
           lang={lang}
           onClose={() => setExporting(false)}
         />
@@ -547,6 +554,7 @@ export function HistoryScreen() {
           cycles={allCycles}
           roundsByCycle={roundsByCycle}
           entries={entries}
+          assignments={assignments}
           exById={exById}
           setMap={setMap}
           lang={lang}
@@ -561,6 +569,7 @@ export function HistoryScreen() {
           cycle={assignCycle}
           rounds={roundsByCycle[assignCycle.id] ?? []}
           allEntries={entries}
+          assignments={assignments}
           exById={exById}
           setMap={setMap}
           lang={lang}
@@ -635,6 +644,7 @@ function CyclePickerDialog({
   cycles,
   roundsByCycle,
   entries,
+  assignments,
   exById,
   setMap,
   lang,
@@ -644,6 +654,7 @@ function CyclePickerDialog({
   cycles: TrainingCycle[]
   roundsByCycle: Record<string, CycleRound[]>
   entries: WorkoutEntry[]
+  assignments: EntryCycleAssignment[]
   exById: Record<string, Exercise>
   setMap: Record<string, ExerciseSet[]>
   lang: 'en' | 'zh'
@@ -668,7 +679,7 @@ function CyclePickerDialog({
               const mode = c.display_mode ?? 'circle'
               const activity: Record<string, RegionView> = {}
               if (round && mode === 'body') {
-                const ra = roundRegionActivity(c, round, entries, countSets)
+                const ra = roundRegionActivity(c, round, entries, countSets, assignments)
                 for (const [region, a] of Object.entries(ra)) {
                   const byEx = new Map<string, { name: string; sets: number; day: string; date: string | null }>()
                   for (const it of a.items) {
@@ -681,7 +692,7 @@ function CyclePickerDialog({
                   activity[region] = { sets: a.sets, items: [...byEx.values()] }
                 }
               }
-              const done = round ? new Set(liveCompletedLabels(c, round, entries)) : new Set<string>()
+              const done = round ? new Set(liveCompletedLabels(c, round, entries, assignments)) : new Set<string>()
               return (
                 <div key={c.id} role="button" tabIndex={0} className="hist-cyclepick-card" onClick={() => onPick(c)}>
                   <span className="hist-cyclepick-name">{c.name}{round ? ` · R${round.index}` : ''}</span>
@@ -715,6 +726,7 @@ function CycleAssignDialog({
   cycle,
   rounds,
   allEntries,
+  assignments,
   exById,
   setMap,
   lang,
@@ -726,6 +738,7 @@ function CycleAssignDialog({
   cycle: TrainingCycle
   rounds: CycleRound[]
   allEntries: WorkoutEntry[]
+  assignments: EntryCycleAssignment[]
   exById: Record<string, Exercise>
   setMap: Record<string, ExerciseSet[]>
   lang: 'en' | 'zh'
@@ -755,7 +768,7 @@ function CycleAssignDialog({
   const volumeGoal = Math.max(20, cycle.days.length * 12)
 
   function ringFor(round: CycleRound): RingChain[] {
-    const m = roundMetrics(cycle, round, allEntries, countSets)
+    const m = roundMetrics(cycle, round, allEntries, countSets, assignments)
     return [
       { id: 'complete', label: lang === 'zh' ? '完成' : 'Done', color: '#8ab4f8', value: m.completedDays, goal: m.totalDays || 1 },
       { id: 'volume', label: lang === 'zh' ? '容量' : 'Volume', color: '#ff8a5c', value: m.sets, goal: volumeGoal },
@@ -768,7 +781,7 @@ function CycleAssignDialog({
 
   const body = useMemo<Record<string, RegionView>>(() => {
     if (!focusRound) return {}
-    const activity = roundRegionActivity(cycle, focusRound, allEntries, countSets)
+    const activity = roundRegionActivity(cycle, focusRound, allEntries, countSets, assignments)
     const out: Record<string, RegionView> = {}
     for (const [region, a] of Object.entries(activity)) {
       const byEx = new Map<string, { name: string; sets: number; day: string; date: string | null }>()

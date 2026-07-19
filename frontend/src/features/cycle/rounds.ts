@@ -1,7 +1,7 @@
 // Pure helpers for round display (§6B). A round is one pass through the cycle's
 // ordered day labels; these derive the current round number and what's left from
 // the stored CycleRound rows.
-import type { CycleRound, TrainingCycle, WorkoutEntry } from '../../supabase/types'
+import type { CycleRound, EntryCycleAssignment, TrainingCycle, WorkoutEntry } from '../../supabase/types'
 import { MUSCLE_CHAINS, type ChainId } from './anatomy'
 
 export interface RoundView {
@@ -18,16 +18,60 @@ export function openRound(rounds: CycleRound[]): CycleRound | null {
   return rounds.filter((r) => r.ended_on == null).sort((a, b) => b.index - a.index)[0] ?? null
 }
 
-/** Day labels a round actually covers RIGHT NOW, from live (non-deleted) entries —
- *  self-heals when an entry is deleted, unlike the stored `completed_labels`. */
-export function liveCompletedLabels(cycle: TrainingCycle, round: CycleRound, entries: WorkoutEntry[]): string[] {
-  const out = new Set<string>()
+// One entry's membership in a cycle: (round, day) it belongs to. An entry can have
+// SEVERAL of these (many-to-many, §6B). Carries the entry's date + exercise so the
+// round functions don't need to re-join.
+export interface CycleMembership { entryId: string; exId: string; date: string; roundId: string | null; dayLabel: string }
+
+/**
+ * Flatten entries into their memberships in ONE cycle. Uses assignment rows when an
+ * entry has them; falls back to the entry's legacy cycle_* columns when it has NONE
+ * — so display works before the migration/backfill populates assignments, and for
+ * any entry that predates them. Pass `assignments = []` (the default) and every
+ * entry falls back to legacy, i.e. the exact pre-M2M behaviour.
+ */
+export function cycleMemberships(
+  cycle: TrainingCycle,
+  entries: WorkoutEntry[],
+  assignments: EntryCycleAssignment[] = [],
+): CycleMembership[] {
+  const cycleAssigns = assignments.filter((a) => !a.deleted && a.cycle_id === cycle.id)
+  const hasAssign = new Set(cycleAssigns.map((a) => a.entry_id))
+  const entryById = new Map(entries.map((e) => [e.id, e]))
+  const out: CycleMembership[] = []
+  for (const a of cycleAssigns) {
+    const e = entryById.get(a.entry_id)
+    if (!e || e.deleted) continue
+    out.push({ entryId: e.id, exId: e.exercise_id, date: e.date, roundId: a.cycle_round_id, dayLabel: a.cycle_day_label })
+  }
+  // Legacy fallback: entries with no assignment row in this cycle. Mirrors the old
+  // filter — an entry counts here if its cycle_id matches (or is null, pre-cycle_id
+  // data) and it carries a day label.
   for (const e of entries) {
-    if (e.cycle_id && e.cycle_id !== cycle.id) continue
+    if (e.deleted || hasAssign.has(e.id)) continue
     if (!e.cycle_day_label) continue
-    const inRound = e.cycle_round_id ? e.cycle_round_id === round.id : e.date >= round.started_on && (!round.ended_on || e.date <= round.ended_on)
-    if (!inRound) continue
-    out.add(e.cycle_day_label)
+    if (e.cycle_id && e.cycle_id !== cycle.id) continue
+    out.push({ entryId: e.id, exId: e.exercise_id, date: e.date, roundId: e.cycle_round_id ?? null, dayLabel: e.cycle_day_label })
+  }
+  return out
+}
+
+/** Whether a membership belongs to `round`: by explicit round id, else by date range. */
+function memberInRound(m: CycleMembership, round: CycleRound): boolean {
+  return m.roundId ? m.roundId === round.id : m.date >= round.started_on && (!round.ended_on || m.date <= round.ended_on)
+}
+
+/** Day labels a round actually covers RIGHT NOW, from live memberships —
+ *  self-heals when an entry is deleted, unlike the stored `completed_labels`. */
+export function liveCompletedLabels(
+  cycle: TrainingCycle,
+  round: CycleRound,
+  entries: WorkoutEntry[],
+  assignments: EntryCycleAssignment[] = [],
+): string[] {
+  const out = new Set<string>()
+  for (const m of cycleMemberships(cycle, entries, assignments)) {
+    if (memberInRound(m, round)) out.add(m.dayLabel)
   }
   return cycle.days.map((d) => d.label).filter((l) => out.has(l)) // in day order
 }
@@ -47,23 +91,21 @@ export function roundRegionActivity(
   round: CycleRound | null,
   entries: WorkoutEntry[],
   setCount: (entryId: string) => number,
+  assignments: EntryCycleAssignment[] = [],
 ): Record<string, RoundRegionActivity> {
   const out: Record<string, RoundRegionActivity> = {}
   if (!round) return out
   const dayRegions = new Map(cycle.days.map((d) => [d.label, d.regions ?? []]))
-  for (const e of entries) {
-    if (e.cycle_id && e.cycle_id !== cycle.id) continue
-    if (!e.cycle_day_label) continue
-    const inRound = e.cycle_round_id ? e.cycle_round_id === round.id : e.date >= round.started_on && (!round.ended_on || e.date <= round.ended_on)
-    if (!inRound) continue
-    const regions = dayRegions.get(e.cycle_day_label)
+  for (const m of cycleMemberships(cycle, entries, assignments)) {
+    if (!memberInRound(m, round)) continue
+    const regions = dayRegions.get(m.dayLabel)
     if (!regions || regions.length === 0) continue
-    const n = setCount(e.id)
+    const n = setCount(m.entryId)
     if (n <= 0) continue
     for (const region of regions) {
       const a = (out[region] ??= { sets: 0, items: [] })
       a.sets += n
-      a.items.push({ exId: e.exercise_id, sets: n, day: e.cycle_day_label, date: e.date })
+      a.items.push({ exId: m.exId, sets: n, day: m.dayLabel, date: m.date })
     }
   }
   return out
@@ -124,25 +166,24 @@ export function roundMetrics(
   round: CycleRound,
   entries: WorkoutEntry[],
   setCount: (entryId: string) => number,
+  assignments: EntryCycleAssignment[] = [],
 ): RoundMetrics {
   const labels = new Set(cycle.days.map((d) => d.label))
-  const inRound = entries.filter(
-    (e) => {
-      if (e.cycle_id && e.cycle_id !== cycle.id) return false
-      if (!e.cycle_day_label || !labels.has(e.cycle_day_label)) return false
-      return e.cycle_round_id ? e.cycle_round_id === round.id : e.date >= round.started_on && (!round.ended_on || e.date <= round.ended_on)
-    },
+  const inRound = cycleMemberships(cycle, entries, assignments).filter(
+    (m) => labels.has(m.dayLabel) && memberInRound(m, round),
   )
-  // Derive completed days from LIVE entries (not the stored completed_labels) so
-  // deleting a day's last entry rolls the count back. A label counts as done only
-  // while some entry still carries it.
-  const doneLabels = new Set(inRound.map((e) => e.cycle_day_label as string))
-  const sums = chainSums(roundRegionActivity(cycle, round, entries, setCount))
+  // Derive completed days from LIVE memberships (not the stored completed_labels) so
+  // deleting a day's last entry rolls the count back.
+  const doneLabels = new Set(inRound.map((m) => m.dayLabel))
+  // Volume/sessions dedupe by entry — an entry counts once in the round even if it
+  // has several day memberships here (its sets aren't done twice).
+  const roundEntries = new Map(inRound.map((m) => [m.entryId, m.date]))
+  const sums = chainSums(roundRegionActivity(cycle, round, entries, setCount, assignments))
   return {
     completedDays: doneLabels.size,
     totalDays: cycle.days.length,
-    sets: inRound.reduce((s, e) => s + setCount(e.id), 0),
-    sessions: new Set(inRound.map((e) => e.date)).size,
+    sets: [...roundEntries.keys()].reduce((s, id) => s + setCount(id), 0),
+    sessions: new Set(roundEntries.values()).size,
     balance: balancePct(sums, plannedChains(cycle)),
     chains: sums,
   }
@@ -150,13 +191,13 @@ export function roundMetrics(
 
 // Pass `entries` to derive completion from live data (self-heals on delete);
 // omit it to fall back to the round's stored completed_labels.
-export function currentRound(cycle: TrainingCycle, rounds: CycleRound[], entries?: WorkoutEntry[]): RoundView {
+export function currentRound(cycle: TrainingCycle, rounds: CycleRound[], entries?: WorkoutEntry[], assignments: EntryCycleAssignment[] = []): RoundView {
   const labels = cycle.days.map((d) => d.label)
   const open = rounds.filter((r) => r.ended_on == null).sort((a, b) => b.index - a.index)[0] ?? null
   const maxIdx = rounds.reduce((m, r) => Math.max(m, r.index), 0)
   const completed = open
     ? entries
-      ? liveCompletedLabels(cycle, open, entries).filter((l) => labels.includes(l))
+      ? liveCompletedLabels(cycle, open, entries, assignments).filter((l) => labels.includes(l))
       : open.completed_labels.filter((l) => labels.includes(l))
     : []
   const remaining = labels.filter((l) => !completed.includes(l))
