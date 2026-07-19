@@ -57,6 +57,7 @@ export {
   refreshCycleRoundsForAssignments,
   assignEntriesToCycleRound,
   assignEntriesToCycleTargets,
+  applyEntryCycleAssignments,
   logTracker,
   getTrackerEntries,
   deleteTrackerEntry,

@@ -269,6 +269,34 @@
 .hist-assign-entry .th-input { height: 32px; font-size: 12px; padding: 5px 7px; }
 .hist-assign-actions { justify-content: flex-end; }
 
+/* Multi-target assign dialog: per entry, a list of (split, round, day) rows. */
+.hist-assign-lead { margin: 0 0 4px; font: 12px/1.4 var(--mono); color: var(--text-dim); }
+.hist-assign-list { display: flex; flex-direction: column; gap: 12px; max-height: 60vh; overflow-y: auto; padding-right: 4px; }
+.hist-assign-entry-block {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 10px 12px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 10px;
+}
+.hist-assign-entry-head { display: flex; align-items: center; gap: 8px; }
+.hist-assign-entry-head .hist-assign-nm { flex: 1; font: 700 13px/1.2 var(--sans); color: var(--text-bright); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hist-assign-entry-head small { font: 11px/1 var(--mono); color: var(--text-dim); flex: none; }
+.hist-assign-mod { flex: none; width: auto; height: 30px; font-size: 12px; padding: 4px 6px; }
+.hist-assign-none { margin: 0; font: 11px/1 var(--mono); color: var(--text-dim); font-style: italic; }
+.hist-assign-target { display: flex; align-items: center; gap: 6px; }
+.hist-assign-target .th-input { height: 32px; font-size: 12px; padding: 5px 6px; min-width: 0; flex: 1; }
+.hist-assign-x {
+  flex: none; width: 28px; height: 28px; padding: 0;
+  display: grid; place-items: center;
+  font: 700 16px/1 var(--mono); color: var(--text-dim);
+  background: none; border: 1px solid var(--border); border-radius: 7px; cursor: pointer;
+}
+.hist-assign-x:hover { color: #f472b6; border-color: #f472b6; }
+.hist-assign-add {
+  align-self: flex-start;
+  padding: 5px 10px; font: 600 12px/1 var(--mono); color: var(--accent);
+  background: none; border: 1px dashed color-mix(in srgb, var(--accent) 50%, var(--border)); border-radius: 7px; cursor: pointer;
+}
+.hist-assign-add:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+
 /* Quick-apply row + per-entry target rows (round + day + module each). */
 .hist-assign-bulk { display: flex; flex-direction: column; gap: 6px; }
 .hist-assign-bulk-row { display: flex; gap: 6px; align-items: center; }

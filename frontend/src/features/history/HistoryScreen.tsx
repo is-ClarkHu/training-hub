@@ -19,7 +19,7 @@ import {
   patchEntry,
   moveDayEntries,
   refreshCycleRoundsForAssignments,
-  assignEntriesToCycleTargets,
+  applyEntryCycleAssignments,
   reorderEntries,
   entrySortKey,
   softDeleteEntry,
@@ -34,9 +34,7 @@ import { useLanguage } from '../../i18n'
 import type { CycleRound, EntryCycleAssignment, Exercise, ExerciseSet, IntimacyCategory, OptionalTracker, Sport, SportSession, TrainingCycle, WorkoutEntry } from '../../supabase/types'
 import type { BodyPart } from '../../supabase/types'
 import { cycleDayTitle } from '../cycle/day'
-import { cycleMemberships, liveCompletedLabels, roundMetrics, roundRegionActivity, openRound } from '../cycle/rounds'
-import { BodyModel, type RegionView } from '../cycle/BodyModel'
-import { RoundRings, type RingChain } from '../dashboard/RoundRings'
+import { cycleMemberships, liveCompletedLabels, openRound } from '../cycle/rounds'
 import { SportSessionDialog } from '../sports'
 import { INTIMACY_CATEGORIES, intimacyCategory, intimacyLabel, intimacyVisible } from '../intimacy'
 import { exerciseName, primaryCategory } from '../log/util'
@@ -82,7 +80,6 @@ export function HistoryScreen() {
   const [assignments, setAssignments] = useState<EntryCycleAssignment[]>([])
   const [allCycles, setAllCycles] = useState<TrainingCycle[]>([])
   const [roundsByCycle, setRoundsByCycle] = useState<Record<string, CycleRound[]>>({})
-  const [assignCycle, setAssignCycle] = useState<TrainingCycle | null>(null)
   const [showIntimacy, setShowIntimacy] = useState(false)
   const [loading, setLoading] = useState(true)
   const [sportEditing, setSportEditing] = useState<SportSession | null>(null)
@@ -549,32 +546,18 @@ export function HistoryScreen() {
         />
       )}
 
-      {cycleAssigning && !assignCycle && (
-        <CyclePickerDialog
-          cycles={allCycles}
-          roundsByCycle={roundsByCycle}
-          entries={entries}
-          assignments={assignments}
-          exById={exById}
-          setMap={setMap}
-          lang={lang}
-          onPick={(c) => setAssignCycle(c)}
-          onClose={() => setCycleAssigning(null)}
-        />
-      )}
-      {cycleAssigning && assignCycle && (
+      {cycleAssigning && (
         <CycleAssignDialog
           date={cycleAssigning.date}
           items={cycleAssigning.items}
-          cycle={assignCycle}
-          rounds={roundsByCycle[assignCycle.id] ?? []}
-          allEntries={entries}
+          cycles={allCycles}
+          roundsByCycle={roundsByCycle}
           assignments={assignments}
           exById={exById}
           setMap={setMap}
           lang={lang}
-          onSaved={() => { setAssignCycle(null); setCycleAssigning(null); void reload() }}
-          onClose={() => setAssignCycle(null)}
+          onSaved={() => { setCycleAssigning(null); void reload() }}
+          onClose={() => setCycleAssigning(null)}
         />
       )}
 
@@ -638,94 +621,17 @@ function ModuleChooser({
   )
 }
 
-// Step 1 of assigning a day: pick which split (a day can span several). Each split
-// shows its latest round as a body map (body mode) or a day-loop (circle mode).
-function CyclePickerDialog({
-  cycles,
-  roundsByCycle,
-  entries,
-  assignments,
-  exById,
-  setMap,
-  lang,
-  onPick,
-  onClose,
-}: {
-  cycles: TrainingCycle[]
-  roundsByCycle: Record<string, CycleRound[]>
-  entries: WorkoutEntry[]
-  assignments: EntryCycleAssignment[]
-  exById: Record<string, Exercise>
-  setMap: Record<string, ExerciseSet[]>
-  lang: 'en' | 'zh'
-  onPick: (cycle: TrainingCycle) => void
-  onClose: () => void
-}) {
-  const countSets = (id: string) => setCountOf(setMap, id)
-  return (
-    <div className="log-dialog-backdrop" onClick={onClose}>
-      <div className="log-dialog hist-cyclepick" onClick={(e) => e.stopPropagation()}>
-        <h3>{lang === 'zh' ? '归到哪个分化?' : 'Assign to which split?'}</h3>
-        <p className="hist-cyclepick-hint">
-          {lang === 'zh' ? '一天可以跨多个分化 — 先选一个,存完可以再选另一个归类剩下的。' : 'A day can span splits — pick one, save, then pick another for the rest.'}
-        </p>
-        {cycles.length === 0 ? (
-          <p className="hist-empty">{lang === 'zh' ? '还没有分化框架(去 Cycle 页新建)。' : 'No splits yet (create one in Cycle).'}</p>
-        ) : (
-          <div className="hist-cyclepick-grid">
-            {cycles.map((c) => {
-              const rs = roundsByCycle[c.id] ?? []
-              const round = openRound(rs) ?? [...rs].sort((a, b) => b.index - a.index)[0] ?? null
-              const mode = c.display_mode ?? 'circle'
-              const activity: Record<string, RegionView> = {}
-              if (round && mode === 'body') {
-                const ra = roundRegionActivity(c, round, entries, countSets, assignments)
-                for (const [region, a] of Object.entries(ra)) {
-                  const byEx = new Map<string, { name: string; sets: number; day: string; date: string | null }>()
-                  for (const it of a.items) {
-                    const ex = exById[it.exId]
-                    const cur = byEx.get(it.exId) ?? { name: ex ? exerciseName(ex, lang) : '?', sets: 0, day: it.day, date: null as string | null }
-                    cur.sets += it.sets
-                    if (it.date && (!cur.date || it.date > cur.date)) cur.date = it.date
-                    byEx.set(it.exId, cur)
-                  }
-                  activity[region] = { sets: a.sets, items: [...byEx.values()] }
-                }
-              }
-              const done = round ? new Set(liveCompletedLabels(c, round, entries, assignments)) : new Set<string>()
-              return (
-                <div key={c.id} role="button" tabIndex={0} className="hist-cyclepick-card" onClick={() => onPick(c)}>
-                  <span className="hist-cyclepick-name">{c.name}{round ? ` · R${round.index}` : ''}</span>
-                  {mode === 'body' ? (
-                    <div className="hist-cyclepick-body"><BodyModel activity={activity} lang={lang} showBack={false} compact /></div>
-                  ) : (
-                    <span className="hist-cyclepick-loop">
-                      {c.days.map((d) => (
-                        <span key={d.label} className={`hist-cyclepick-day ${done.has(d.label) ? 'done' : ''}`}>{d.label}</span>
-                      ))}
-                    </span>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        )}
-        <div className="log-dialog-actions">
-          <button className="th-btn-ghost" type="button" onClick={onClose}>{lang === 'zh' ? '取消' : 'Cancel'}</button>
-        </div>
-      </div>
-    </div>
-  )
-}
 
-interface EntryTarget { roundId: string | null; dayLabel: string; modulePart: BodyPart | '' }
+interface UITarget { cycleId: string; roundId: string | null; dayLabel: string }
 
+// Assign a day's entries to cycle memberships. Each entry can carry SEVERAL targets,
+// each a (split, round, day) — so one lift can count toward two splits, and different
+// lifts of the day can go to different splits/rounds (M2M, §6B).
 function CycleAssignDialog({
   date,
   items,
-  cycle,
-  rounds,
-  allEntries,
+  cycles,
+  roundsByCycle,
   assignments,
   exById,
   setMap,
@@ -735,9 +641,8 @@ function CycleAssignDialog({
 }: {
   date: string
   items: WorkoutEntry[]
-  cycle: TrainingCycle
-  rounds: CycleRound[]
-  allEntries: WorkoutEntry[]
+  cycles: TrainingCycle[]
+  roundsByCycle: Record<string, CycleRound[]>
   assignments: EntryCycleAssignment[]
   exById: Record<string, Exercise>
   setMap: Record<string, ExerciseSet[]>
@@ -745,67 +650,45 @@ function CycleAssignDialog({
   onSaved: () => void
   onClose: () => void
 }) {
-  // Default to the day's existing assignment, else the LATEST not-yet-full round
-  // (highest-index, still open, not skipped) — the round you're currently filling;
-  // else null = start a new round.
-  const latestOpen = [...rounds].sort((a, b) => b.index - a.index).find((r) => !r.ended_on && !r.skipped)
-  // Per-entry target so one date can split across rounds/days (leg lifts → R2's leg
-  // day, chest lifts → R3's chest day). Each entry keeps its own (round, day).
-  const [targets, setTargets] = useState<Record<string, EntryTarget>>(() =>
-    Object.fromEntries(items.map((e) => [e.id, {
-      roundId: e.cycle_round_id ?? latestOpen?.id ?? null,
-      dayLabel: e.cycle_day_label ?? '',
-      modulePart: (e.module_part ?? '') as BodyPart | '',
-    }])),
-  )
-  const setTarget = (id: string, patch: Partial<EntryTarget>) =>
-    setTargets((t) => ({ ...t, [id]: { ...t[id], ...patch } }))
   const countSets = useMemo(() => (id: string) => setCountOf(setMap, id), [setMap])
-  const orderedRounds = useMemo(() => [...rounds].sort((a, b) => b.index - a.index), [rounds])
-  // The round whose body map is previewed — a reference while assigning, not the target.
-  const [focusRoundId, setFocusRoundId] = useState<string | null>(latestOpen?.id ?? null)
-  const focusRound = focusRoundId ? rounds.find((r) => r.id === focusRoundId) ?? null : null
-  const volumeGoal = Math.max(20, cycle.days.length * 12)
+  const firstCycle = cycles[0]?.id ?? ''
+  // A round to default a fresh target to: the split's latest still-open round, else new.
+  const latestOpenOf = (cycleId: string) =>
+    [...(roundsByCycle[cycleId] ?? [])].sort((a, b) => b.index - a.index).find((r) => !r.ended_on && !r.skipped)?.id ?? null
 
-  function ringFor(round: CycleRound): RingChain[] {
-    const m = roundMetrics(cycle, round, allEntries, countSets, assignments)
-    return [
-      { id: 'complete', label: lang === 'zh' ? '完成' : 'Done', color: '#8ab4f8', value: m.completedDays, goal: m.totalDays || 1 },
-      { id: 'volume', label: lang === 'zh' ? '容量' : 'Volume', color: '#ff8a5c', value: m.sets, goal: volumeGoal },
-      {
-        id: 'balance', label: lang === 'zh' ? '均衡' : 'Balance', color: '#7dd3a0',
-        value: m.balance, goal: 100, display: `${m.balance}%`,
-      },
-    ]
-  }
-
-  const body = useMemo<Record<string, RegionView>>(() => {
-    if (!focusRound) return {}
-    const activity = roundRegionActivity(cycle, focusRound, allEntries, countSets, assignments)
-    const out: Record<string, RegionView> = {}
-    for (const [region, a] of Object.entries(activity)) {
-      const byEx = new Map<string, { name: string; sets: number; day: string; date: string | null }>()
-      for (const it of a.items) {
-        const ex = exById[it.exId]
-        const cur = byEx.get(it.exId) ?? { name: ex ? exerciseName(ex, lang) : '?', sets: 0, day: it.day, date: null as string | null }
-        cur.sets += it.sets
-        if (it.date && (!cur.date || it.date > cur.date)) cur.date = it.date
-        byEx.set(it.exId, cur)
+  // Per-entry list of targets, seeded from the entry's existing assignments.
+  const [targets, setTargets] = useState<Record<string, UITarget[]>>(() =>
+    Object.fromEntries(items.map((e) => {
+      const rows = assignments
+        .filter((a) => !a.deleted && a.entry_id === e.id)
+        .map((a) => ({ cycleId: a.cycle_id, roundId: a.cycle_round_id, dayLabel: a.cycle_day_label }))
+      // Fallback for an entry tagged via its legacy columns but not yet in the
+      // assignment table (e.g. logged before the M2M migration populated it).
+      if (rows.length === 0 && e.cycle_id && e.cycle_day_label) {
+        rows.push({ cycleId: e.cycle_id, roundId: e.cycle_round_id ?? null, dayLabel: e.cycle_day_label })
       }
-      out[region] = { sets: a.sets, items: [...byEx.values()].sort((a, b) => b.sets - a.sets) }
-    }
-    return out
-  }, [allEntries, countSets, cycle, exById, lang, focusRound])
+      return [e.id, rows]
+    })),
+  )
+  const [modules, setModules] = useState<Record<string, BodyPart | ''>>(() =>
+    Object.fromEntries(items.map((e) => [e.id, (e.module_part ?? '') as BodyPart | ''])),
+  )
 
-  const anyAssigned = items.some((e) => targets[e.id]?.dayLabel)
+  const addTarget = (eid: string) =>
+    setTargets((t) => ({ ...t, [eid]: [...t[eid], { cycleId: firstCycle, roundId: latestOpenOf(firstCycle), dayLabel: '' }] }))
+  const removeTarget = (eid: string, i: number) =>
+    setTargets((t) => ({ ...t, [eid]: t[eid].filter((_, j) => j !== i) }))
+  const patchTarget = (eid: string, i: number, patch: Partial<UITarget>) =>
+    setTargets((t) => ({ ...t, [eid]: t[eid].map((tg, j) => (j === i ? { ...tg, ...patch } : tg)) }))
 
   async function save() {
-    await assignEntriesToCycleTargets(cycle, date, items.map((e) => ({
-      entryId: e.id,
-      roundId: targets[e.id].roundId,
-      dayLabel: targets[e.id].dayLabel,
-      modulePart: targets[e.id].modulePart ? (targets[e.id].modulePart as BodyPart) : null,
-    })))
+    const byEntry: Record<string, { cycleId: string; roundId: string | null; dayLabel: string }[]> = {}
+    const moduleByEntry: Record<string, BodyPart | null> = {}
+    for (const e of items) {
+      byEntry[e.id] = targets[e.id].filter((t) => t.cycleId && t.dayLabel)
+      moduleByEntry[e.id] = modules[e.id] ? (modules[e.id] as BodyPart) : null
+    }
+    await applyEntryCycleAssignments(date, cycles, byEntry, moduleByEntry)
     onSaved()
   }
 
@@ -815,56 +698,68 @@ function CycleAssignDialog({
         <div className="hist-assign-head">
           <div>
             <span className="th-label">{lang === 'zh' ? '分化归类' : 'Cycle assignment'}</span>
-            <h3>{date} · {cycle.name}</h3>
+            <h3>{date}</h3>
           </div>
           <button className="cyc-dialog-x" type="button" onClick={onClose} aria-label="close">×</button>
         </div>
 
-        <div className="hist-assign-grid">
-          <section className="hist-assign-panel">
-            <span className="th-label">{lang === 'zh' ? '已有轮次(参考)' : 'Existing rounds (reference)'}</span>
-            <div className="hist-assign-rounds">
-              {orderedRounds.map((r) => (
-                <RoundRings key={r.id} mini chains={ringFor(r)} centerLabel={`R${r.index}`} active={focusRoundId === r.id} onClick={() => setFocusRoundId(r.id)} />
-              ))}
-            </div>
-            {focusRound
-              ? <BodyModel activity={body} lang={lang} compact />
-              : <p className="hist-assign-hint">{lang === 'zh' ? '点上面的轮次查看身体图' : 'Tap a round to preview its body map'}</p>}
-          </section>
+        <p className="hist-assign-lead">
+          {lang === 'zh'
+            ? '每个动作可以归到多个分化 — 同一动作能同时算进不同分化的容量。'
+            : 'Each exercise can belong to several splits — one lift can count toward more than one.'}
+        </p>
 
-          <section className="hist-assign-panel">
-            <span className="th-label">{lang === 'zh' ? '逐个归类(可各不相同)' : 'Per entry (can differ)'}</span>
-            <div className="hist-assign-entries">
-              {items.map((e) => {
-                const ex = exById[e.exercise_id]
-                const tg = targets[e.id]
-                return (
-                  <div key={e.id} className={`hist-assign-row ${tg.dayLabel ? 'on' : ''}`}>
+        {cycles.length === 0 ? (
+          <p className="hist-empty">{lang === 'zh' ? '还没有分化框架(去 Cycle 页新建)。' : 'No splits yet (create one in Cycle).'}</p>
+        ) : (
+          <div className="hist-assign-list">
+            {items.map((e) => {
+              const ex = exById[e.exercise_id]
+              const tgs = targets[e.id]
+              return (
+                <div key={e.id} className="hist-assign-entry-block">
+                  <div className="hist-assign-entry-head">
                     <span className="hist-assign-nm">{ex ? exerciseName(ex, lang) : '?'}</span>
                     <small>{countSets(e.id)} {lang === 'zh' ? '组' : 'sets'}</small>
-                    <select className="th-input" value={tg.roundId ?? ''} onChange={(ev) => setTarget(e.id, { roundId: ev.target.value || null })}>
-                      <option value="">{lang === 'zh' ? '新一轮' : 'New'}</option>
-                      {orderedRounds.map((r) => <option key={r.id} value={r.id}>R{r.index}</option>)}
-                    </select>
-                    <select className="th-input" value={tg.dayLabel} onChange={(ev) => setTarget(e.id, { dayLabel: ev.target.value })}>
-                      <option value="">{lang === 'zh' ? '不归类' : 'skip'}</option>
-                      {cycle.days.map((d) => <option key={d.label} value={d.label}>{d.label} · {cycleDayTitle(d, lang)}</option>)}
-                    </select>
-                    <select className="th-input" value={tg.modulePart} onChange={(ev) => setTarget(e.id, { modulePart: ev.target.value as BodyPart | '' })}>
+                    <select className="th-input hist-assign-mod" value={modules[e.id]} onChange={(ev) => setModules((m) => ({ ...m, [e.id]: ev.target.value as BodyPart | '' }))}>
                       <option value="">{lang === 'zh' ? '默认肌群' : 'default'}</option>
                       {categoryKeys().map((k) => <option key={k} value={k}>{categoryLabel(k, lang)}</option>)}
                     </select>
                   </div>
-                )
-              })}
-            </div>
-          </section>
-        </div>
+
+                  {tgs.length === 0 && <p className="hist-assign-none">{lang === 'zh' ? '未归类' : 'not assigned'}</p>}
+                  {tgs.map((tg, i) => {
+                    const rs = [...(roundsByCycle[tg.cycleId] ?? [])].sort((a, b) => b.index - a.index)
+                    const days = cycles.find((c) => c.id === tg.cycleId)?.days ?? []
+                    return (
+                      <div key={i} className="hist-assign-target">
+                        <select className="th-input" value={tg.cycleId} onChange={(ev) => patchTarget(e.id, i, { cycleId: ev.target.value, roundId: latestOpenOf(ev.target.value), dayLabel: '' })}>
+                          {cycles.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
+                        <select className="th-input" value={tg.roundId ?? ''} onChange={(ev) => patchTarget(e.id, i, { roundId: ev.target.value || null })}>
+                          <option value="">{lang === 'zh' ? '新一轮' : 'New'}</option>
+                          {rs.map((r) => <option key={r.id} value={r.id}>R{r.index}</option>)}
+                        </select>
+                        <select className="th-input" value={tg.dayLabel} onChange={(ev) => patchTarget(e.id, i, { dayLabel: ev.target.value })}>
+                          <option value="">{lang === 'zh' ? '选日' : 'day'}</option>
+                          {days.map((d) => <option key={d.label} value={d.label}>{d.label} · {cycleDayTitle(d, lang)}</option>)}
+                        </select>
+                        <button type="button" className="hist-assign-x" onClick={() => removeTarget(e.id, i)} aria-label="remove" title={lang === 'zh' ? '移除' : 'remove'}>×</button>
+                      </div>
+                    )
+                  })}
+                  <button type="button" className="hist-assign-add" onClick={() => addTarget(e.id)}>
+                    + {lang === 'zh' ? '添加分化' : 'Add split'}
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )}
 
         <div className="hist-assign-actions">
           <button className="th-btn-ghost" type="button" onClick={onClose}>{lang === 'zh' ? '取消' : 'Cancel'}</button>
-          <button className="th-btn" type="button" onClick={() => void save()} disabled={!anyAssigned}>
+          <button className="th-btn" type="button" onClick={() => void save()} disabled={cycles.length === 0}>
             {lang === 'zh' ? '保存归类' : 'Save'}
           </button>
         </div>

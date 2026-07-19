@@ -182,9 +182,12 @@ export async function createEntryWithSets(
     bpm: null,
     ...s,
   }))
-  await db.transaction('rw', db.workout_entries, db.sets, async () => {
+  await db.transaction('rw', db.workout_entries, db.sets, db.entry_cycle_assignments, async () => {
     await db.workout_entries.add(entry)
     await db.sets.bulkAdd(sets)
+    // A cycle-tagged log gets its primary assignment row immediately, so the M2M
+    // read layer + the assign dialog see it without relying on the legacy fallback.
+    await syncPrimaryAssignment(entry)
   })
   return { entry, sets }
 }
@@ -686,10 +689,18 @@ async function refreshCycleRoundFromAssignments(cycle: TrainingCycle, roundId: s
   const round = await db.cycle_rounds.get(roundId)
   if (!round || round.deleted) return
   const labels = cycle.days.map((d) => d.label)
-  const rows = (await db.workout_entries.toArray())
-    .filter((e) => !e.deleted && e.cycle_round_id === roundId && e.cycle_day_label && labels.includes(e.cycle_day_label))
-  const dates = rows.map((e) => e.date).sort()
-  const completed = labels.filter((l) => rows.some((e) => e.cycle_day_label === l))
+  // Round membership is the ASSIGNMENT rows pointing at this round (M2M), joined to
+  // their live entries for the date. (Was: entries whose single cycle_round_id
+  // matched — which missed members that belong via a secondary assignment row.)
+  const assigns = (await db.entry_cycle_assignments.where('cycle_round_id').equals(roundId).toArray())
+    .filter((a) => !a.deleted && labels.includes(a.cycle_day_label))
+  const entries = await db.workout_entries.bulkGet([...new Set(assigns.map((a) => a.entry_id))])
+  const liveById = new Map(entries.filter((e): e is WorkoutEntry => !!e && !e.deleted).map((e) => [e.id, e]))
+  const rows = assigns
+    .filter((a) => liveById.has(a.entry_id))
+    .map((a) => ({ date: liveById.get(a.entry_id)!.date, label: a.cycle_day_label }))
+  const dates = rows.map((r) => r.date).sort()
+  const completed = labels.filter((l) => rows.some((r) => r.label === l))
   const allDone = completed.length === labels.length && labels.length > 0
   await db.cycle_rounds.put({
     ...round,
@@ -822,6 +833,92 @@ export async function assignEntriesToCycleTargets(
     }
   })
   for (const rid of touched) await refreshCycleRoundFromAssignments(cycle, rid)
+}
+
+// One (cycle, round, day) target for an entry. roundId null = a new round in that
+// cycle. dayLabel '' filters the target out.
+export interface EntryTarget { cycleId: string; roundId: string | null; dayLabel: string }
+
+/**
+ * Replace each entry's FULL set of cycle memberships (M2M, §6B) — this is what lets
+ * one entry belong to several splits/rounds at once, and different entries of a day
+ * go to different splits. `byEntry` maps entry id → its desired targets across ANY
+ * cycles. `moduleByEntry` optionally sets each entry's History module override.
+ *
+ * The primary assignment row (id = entry id) mirrors the FIRST target and keeps the
+ * entry's legacy cycle_* columns in step (fallback/rollback); extra targets get
+ * fresh rows. Null-round targets share ONE freshly-created round per cycle for this
+ * save. An entry with no targets is fully un-assigned.
+ */
+export async function applyEntryCycleAssignments(
+  date: string,
+  cycles: TrainingCycle[],
+  byEntry: Record<string, EntryTarget[]>,
+  moduleByEntry: Record<string, BodyPart | null> = {},
+): Promise<void> {
+  const cycleById = new Map(cycles.map((c) => [c.id, c]))
+  const touched = new Set<string>()
+  await db.transaction('rw', db.workout_entries, db.cycle_rounds, db.entry_cycle_assignments, async () => {
+    const ts = nowIso()
+    const newRoundByCycle = new Map<string, string>()
+    const ensureNewRound = async (cycleId: string): Promise<string | null> => {
+      if (newRoundByCycle.has(cycleId)) return newRoundByCycle.get(cycleId)!
+      const rounds = await getCycleRounds(cycleId)
+      const maxIdx = rounds.reduce((m, r) => Math.max(m, r.index), 0)
+      const round: CycleRound = { ...syncFields(), cycle_id: cycleId, index: maxIdx + 1, started_on: date, ended_on: null, completed_labels: [], skipped: false }
+      await db.cycle_rounds.add(round)
+      newRoundByCycle.set(cycleId, round.id)
+      return round.id
+    }
+
+    for (const [entryId, rawTargets] of Object.entries(byEntry)) {
+      const e = await db.workout_entries.get(entryId)
+      if (!e || e.deleted) continue
+
+      // Resolve valid targets (cycle exists, day label belongs to it, round resolved).
+      const resolved: Array<{ cycleId: string; roundId: string; dayLabel: string }> = []
+      for (const t of rawTargets) {
+        const cyc = cycleById.get(t.cycleId)
+        if (!cyc || !t.dayLabel || !cyc.days.some((d) => d.label === t.dayLabel)) continue
+        const rid = t.roundId ?? (await ensureNewRound(t.cycleId))
+        if (!rid) continue
+        resolved.push({ cycleId: t.cycleId, roundId: rid, dayLabel: t.dayLabel })
+        touched.add(rid)
+      }
+
+      // Soft-delete this entry's existing assignment rows; we re-create what we keep.
+      const existing = await db.entry_cycle_assignments.where('entry_id').equals(entryId).toArray()
+      for (const a of existing) {
+        if (!a.deleted) await db.entry_cycle_assignments.put({ ...a, deleted: true, updated_at: ts })
+        if (a.cycle_round_id) touched.add(a.cycle_round_id)
+      }
+
+      const modulePart = entryId in moduleByEntry ? moduleByEntry[entryId] : e.module_part ?? null
+      if (resolved.length === 0) {
+        await db.workout_entries.put({ ...e, cycle_id: null, cycle_round_id: null, cycle_day_label: null, module_part: modulePart, updated_at: ts })
+        continue
+      }
+      const primary = resolved[0]
+      // Primary row reuses the entry id; entry legacy columns mirror it.
+      await db.entry_cycle_assignments.put({
+        id: entryId, user_id: e.user_id || currentUserId() || '', updated_at: ts, deleted: false,
+        entry_id: entryId, cycle_id: primary.cycleId, cycle_round_id: primary.roundId, cycle_day_label: primary.dayLabel,
+      })
+      await db.workout_entries.put({ ...e, cycle_id: primary.cycleId, cycle_round_id: primary.roundId, cycle_day_label: primary.dayLabel, module_part: modulePart, updated_at: ts })
+      for (const t of resolved.slice(1)) {
+        await db.entry_cycle_assignments.put({
+          id: newId(), user_id: e.user_id || currentUserId() || '', updated_at: ts, deleted: false,
+          entry_id: entryId, cycle_id: t.cycleId, cycle_round_id: t.roundId, cycle_day_label: t.dayLabel,
+        })
+      }
+    }
+  })
+  // Refresh every round that gained or lost a member, across all touched cycles.
+  for (const rid of touched) {
+    const r = await db.cycle_rounds.get(rid)
+    const cyc = r ? cycleById.get(r.cycle_id) : null
+    if (cyc) await refreshCycleRoundFromAssignments(cyc, rid)
+  }
 }
 
 /** Rebuild a cycle's rounds from dated entry labels. This is used after History
