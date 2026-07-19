@@ -283,6 +283,20 @@ export interface CycleRound extends SyncFields {
   skipped: boolean                   // closed early (not all days done)
 }
 
+// Many-to-many cycle membership (§6B). A workout entry can belong to SEVERAL
+// (cycle, round, day) targets at once — e.g. one bench press counting toward both
+// a 4-split's chest day and a push/pull split's push day. This table is the source
+// of truth for cycle membership; the single cycle_id/cycle_round_id/cycle_day_label
+// columns on workout_entries are kept for backfill + fallback but no longer drive
+// display once assignments exist. The backfilled "primary" row reuses the entry's
+// id (deterministic → server and client backfill produce the same row, no dupes).
+export interface EntryCycleAssignment extends SyncFields {
+  entry_id: string
+  cycle_id: string
+  cycle_round_id: string | null
+  cycle_day_label: string
+}
+
 export interface OptionalTracker extends SyncFields {
   tracker: TrackerType
   date: string
@@ -452,6 +466,7 @@ export interface Database {
   injuries: Injury
   training_cycle: TrainingCycle
   cycle_rounds: CycleRound
+  entry_cycle_assignments: EntryCycleAssignment
   optional_trackers: OptionalTracker
   translation_dictionary: TranslationDictionaryRow
   chatrooms: Chatroom

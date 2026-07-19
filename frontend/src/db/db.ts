@@ -17,6 +17,7 @@ import type {
   InjuryPhoto,
   TrainingCycle,
   CycleRound,
+  EntryCycleAssignment,
   OptionalTracker,
   TranslationDictionaryRow,
   Chatroom,
@@ -46,6 +47,7 @@ export class TrainingHubDB extends Dexie {
   injuries!: Table<Injury, string>
   training_cycle!: Table<TrainingCycle, string>
   cycle_rounds!: Table<CycleRound, string>
+  entry_cycle_assignments!: Table<EntryCycleAssignment, string>
   optional_trackers!: Table<OptionalTracker, string>
   translation_dictionary!: Table<TranslationDictionaryRow, string>
   chatrooms!: Table<Chatroom, string>
@@ -133,6 +135,35 @@ export class TrainingHubDB extends Dexie {
       public_files: 'id, updated_at',
       chatroom_file_access: 'id, chatroom_id, file_id, updated_at',
     })
+    // v10: many-to-many cycle membership (§6B). New table only — existing stores
+    // and their data are untouched. Backfill one assignment per already-assigned
+    // entry, reusing the entry's id so this is idempotent and matches the server
+    // backfill exactly (no duplicate rows after sync).
+    this.version(10)
+      .stores({
+        entry_cycle_assignments: 'id, entry_id, cycle_id, cycle_round_id, updated_at',
+      })
+      .upgrade(async (tx) => {
+        const now = new Date().toISOString()
+        const rows: EntryCycleAssignment[] = []
+        await tx.table('workout_entries').toCollection().each((e: Record<string, unknown>) => {
+          if (e.deleted) return
+          const cycleId = e.cycle_id as string | null | undefined
+          const dayLabel = e.cycle_day_label as string | null | undefined
+          if (!cycleId || !dayLabel) return // only entries actually assigned to a cycle
+          rows.push({
+            id: e.id as string, // deterministic: the primary assignment shares the entry id
+            user_id: (e.user_id as string) ?? '',
+            updated_at: now,
+            deleted: false,
+            entry_id: e.id as string,
+            cycle_id: cycleId,
+            cycle_round_id: (e.cycle_round_id as string | null) ?? null,
+            cycle_day_label: dayLabel,
+          })
+        })
+        if (rows.length) await tx.table('entry_cycle_assignments').bulkPut(rows)
+      })
   }
 }
 

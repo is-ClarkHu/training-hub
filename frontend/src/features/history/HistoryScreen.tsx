@@ -747,11 +747,6 @@ function CycleAssignDialog({
   )
   const setTarget = (id: string, patch: Partial<EntryTarget>) =>
     setTargets((t) => ({ ...t, [id]: { ...t[id], ...patch } }))
-  // Quick-apply for the common "whole day is one label" case.
-  const [bulkRound, setBulkRound] = useState<string | null>(latestOpen?.id ?? null)
-  const [bulkDay, setBulkDay] = useState(cycle.days[0]?.label ?? '')
-  const applyAll = () => setTargets((t) =>
-    Object.fromEntries(Object.entries(t).map(([id, v]) => [id, { ...v, roundId: bulkRound, dayLabel: bulkDay }])))
   const countSets = useMemo(() => (id: string) => setCountOf(setMap, id), [setMap])
   const orderedRounds = useMemo(() => [...rounds].sort((a, b) => b.index - a.index), [rounds])
   // The round whose body map is previewed — a reference while assigning, not the target.
@@ -826,21 +821,6 @@ function CycleAssignDialog({
           </section>
 
           <section className="hist-assign-panel">
-            {/* Quick path: set every entry to one round+day at once. */}
-            <div className="hist-assign-bulk">
-              <span className="th-label">{lang === 'zh' ? '批量设为' : 'Set all to'}</span>
-              <div className="hist-assign-bulk-row">
-                <select className="th-input" value={bulkRound ?? ''} onChange={(e) => setBulkRound(e.target.value || null)}>
-                  <option value="">{lang === 'zh' ? '新一轮' : 'New round'}</option>
-                  {orderedRounds.map((r) => <option key={r.id} value={r.id}>R{r.index}</option>)}
-                </select>
-                <select className="th-input" value={bulkDay} onChange={(e) => setBulkDay(e.target.value)}>
-                  {cycle.days.map((d) => <option key={d.label} value={d.label}>{d.label} · {cycleDayTitle(d, lang)}</option>)}
-                </select>
-                <button type="button" className="th-btn-ghost" onClick={applyAll}>{lang === 'zh' ? '应用到全部' : 'Apply'}</button>
-              </div>
-            </div>
-
             <span className="th-label">{lang === 'zh' ? '逐个归类(可各不相同)' : 'Per entry (can differ)'}</span>
             <div className="hist-assign-entries">
               {items.map((e) => {

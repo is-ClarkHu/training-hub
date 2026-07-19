@@ -42,6 +42,7 @@ import type {
   TrackerType,
   TrainingCycle,
   CycleRound,
+  EntryCycleAssignment,
   WorkoutEntry,
 } from '../supabase/types'
 
@@ -585,6 +586,13 @@ export async function createDefaultSplitCycle(): Promise<TrainingCycle> {
 export async function getCycleRounds(cycleId: string): Promise<CycleRound[]> {
   const all = await db.cycle_rounds.where('cycle_id').equals(cycleId).toArray()
   return all.filter((r) => !r.deleted).sort((a, b) => a.index - b.index)
+}
+
+/** All live entry↔cycle assignments (M2M membership, §6B). Source of truth for
+ *  cycle membership from P2 on; during P1 it's backfilled + synced but not yet read
+ *  by display code. */
+export async function getEntryCycleAssignments(): Promise<EntryCycleAssignment[]> {
+  return (await db.entry_cycle_assignments.toArray()).filter((a) => !a.deleted)
 }
 
 /** The open (in-progress) round for a cycle, or null. */

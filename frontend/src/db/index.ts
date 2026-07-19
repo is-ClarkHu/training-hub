@@ -47,6 +47,7 @@ export {
   softDeleteCycle,
   createDefaultSplitCycle,
   getCycleRounds,
+  getEntryCycleAssignments,
   getOpenRound,
   recordCycleDay,
   skipCycleRound,
