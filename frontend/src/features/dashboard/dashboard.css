@@ -149,6 +149,14 @@
 @media (max-width: 640px) {
   .dash-charts { grid-template-columns: 1fr; }
   .dash-intimacy-grid { grid-template-columns: 1fr; }
+  /* When the round ring + history rail can't sit side by side they wrap; centre
+     the main ring and let the rail take the full row so nothing floats offset. */
+  .dash-round-grid { justify-content: center; }
+  .dash-round-main { width: 100%; }
+  .dash-round-history { flex-basis: 100%; }
+  .dash-round-hist-scroll { justify-content: center; }
+  /* Keep the intimacy header from splitting its title and total awkwardly. */
+  .dash-intimacy-head { flex-wrap: wrap; }
 }
 
 /* heatmap tooltip */

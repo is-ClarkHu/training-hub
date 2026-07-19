@@ -399,6 +399,13 @@
 .cyc-cat-usedhint { margin: 0 0 4px; font: 11px/1.4 var(--mono); color: var(--faint); }
 
 @media (max-width: 720px) {
+  /* Stack the main split on top (full width), then pack the side loops two-up
+     below it — a "1 / 2" layout — instead of one tall column of big charts that
+     never fits on a screen. 3 splits → 1+2, 4 → 1+2+1, 5 → 1+2+2. */
   .cyc-loop-board.has-side { grid-template-columns: 1fr; }
-  .cyc-loop-side { grid-template-columns: 1fr; }
+  .cyc-loop-side { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* An odd last side loop spans the full row so it centres instead of sitting
+     lonely in the left half. */
+  .cyc-loop-side > .cyc-visual:last-child:nth-child(odd) { grid-column: 1 / -1; }
+  .cyc-visual.secondary { min-height: 0; }
 }

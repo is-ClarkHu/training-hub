@@ -92,6 +92,7 @@ export function HistoryScreen() {
   const [discreet, setDiscreet] = useState(false)
   const [reviewOnly, setReviewOnly] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [moreOpen, setMoreOpen] = useState(false)
   const [mode, setMode] = useState<HistMode>(() => (localStorage.getItem(MODE_KEY) === 'grouped' ? 'grouped' : 'list'))
 
   useEffect(() => { localStorage.setItem(MODE_KEY, mode) }, [mode])
@@ -332,12 +333,6 @@ export function HistoryScreen() {
             ▶ {lang === 'zh' ? '开始复核' : 'start review'}
           </button>
         )}
-        <button className={`th-pill ${discreet ? 'on' : ''}`} type="button" onClick={() => setDiscreet((v) => !v)}>
-          {discreet ? '🙈' : '👁'} {lang === 'zh' ? '数值' : 'values'}
-        </button>
-        <button className="th-pill" type="button" onClick={() => setExporting(true)}>
-          🖼 {lang === 'zh' ? '导出' : 'Export'}
-        </button>
         <button className={`th-pill ${selectMode ? 'on' : ''}`} type="button" onClick={() => { setSelectMode((v) => !v); setSelected(new Set()) }}>
           {selectMode ? (lang === 'zh' ? '取消' : 'cancel') : (lang === 'zh' ? '选择' : 'select')}
         </button>
@@ -356,11 +351,52 @@ export function HistoryScreen() {
             🗑 {lang === 'zh' ? `删除 ${selected.size}` : `delete ${selected.size}`}
           </button>
         )}
-        {mode === 'grouped' && !selectMode && (
-          <button className={`th-pill ${reorderMode ? 'on' : ''}`} type="button" onClick={() => { setReorderMode((v) => !v); drag.current = null }}>
-            ↕ {reorderMode ? (lang === 'zh' ? '完成' : 'done') : (lang === 'zh' ? '排序' : 'reorder')}
+        {/* Secondary actions live behind a ⋯ menu so the bar stays a short, tidy
+            row instead of a long line (or, on phones, a wrapping wall) of pills. */}
+        <div className="hist-more">
+          <button
+            className={`hist-mode-btn ${moreOpen || discreet || reorderMode ? 'is-on' : ''}`}
+            type="button"
+            aria-haspopup="menu"
+            aria-expanded={moreOpen}
+            title={lang === 'zh' ? '更多' : 'More'}
+            onClick={() => setMoreOpen((v) => !v)}
+          >
+            ⋯
           </button>
-        )}
+          {moreOpen && (
+            <>
+              <div className="hist-more-backdrop" onClick={() => setMoreOpen(false)} />
+              <div className="hist-more-menu" role="menu">
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={discreet ? 'is-on' : ''}
+                  onClick={() => { setDiscreet((v) => !v); setMoreOpen(false) }}
+                >
+                  {discreet ? '🙈' : '👁'} {lang === 'zh' ? '数值' : 'Values'}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => { setExporting(true); setMoreOpen(false) }}
+                >
+                  🖼 {lang === 'zh' ? '导出' : 'Export'}
+                </button>
+                {mode === 'grouped' && !selectMode && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className={reorderMode ? 'is-on' : ''}
+                    onClick={() => { setReorderMode((v) => !v); drag.current = null; setMoreOpen(false) }}
+                  >
+                    ↕ {reorderMode ? (lang === 'zh' ? '完成排序' : 'Done reordering') : (lang === 'zh' ? '排序' : 'Reorder')}
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+        </div>
         <button
           className="hist-mode-btn"
           type="button"

@@ -16,16 +16,44 @@
 }
 .hist-check { width: 17px; height: 17px; accent-color: var(--lime); flex: none; }
 
-/* layout-mode toggle — pinned to the right edge of the toolbar */
+/* layout-mode toggle — pinned to the right edge of the toolbar (the .hist-more
+   group carries the margin-left:auto that pushes both to the edge). */
 .hist-mode-btn {
-  margin-left: auto; flex: none;
+  flex: none;
   width: 34px; height: 30px; padding: 0;
   display: inline-flex; align-items: center; justify-content: center;
   font-size: 16px; line-height: 1; color: var(--text-dim); cursor: pointer;
   background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px;
 }
 .hist-mode-btn:hover { color: var(--accent); border-color: var(--accent); }
+.hist-mode-btn.is-on { color: var(--accent); border-color: var(--accent); }
 .th-pill.accent { color: #04181a; background: var(--teal); border-color: var(--teal); }
+
+/* Overflow "⋯" menu holding the secondary toolbar actions (values / export /
+   reorder). Sits with the view-mode toggle at the right edge of the bar. */
+.hist-more { position: relative; margin-left: auto; flex: none; }
+.hist-more-backdrop { position: fixed; inset: 0; z-index: 30; }
+.hist-more-menu {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 31;
+  min-width: 172px;
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 6px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+}
+.hist-more-menu button {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; text-align: left;
+  padding: 9px 10px;
+  font: 600 13px/1.1 var(--mono);
+  color: var(--text);
+  background: none; border: none; border-radius: 7px;
+  cursor: pointer;
+}
+.hist-more-menu button:hover { background: var(--bg-input); color: var(--text-bright); }
+.hist-more-menu button.is-on { color: var(--teal); }
 
 /* Cycle rounds band (§6B) */
 .hist-rounds { display: flex; flex-direction: column; gap: 8px; }

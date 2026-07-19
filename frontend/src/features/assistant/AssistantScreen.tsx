@@ -52,7 +52,11 @@ export function AssistantScreen() {
   const { lang } = useLanguage()
   const [rooms, setRooms] = useState<Chatroom[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  // Open by default only on wide screens. On a phone the rooms list floats over
+  // the chat as an overlay drawer (see assistant.css), so it starts closed.
+  const [sidebarOpen, setSidebarOpen] = useState(
+    () => typeof window === 'undefined' || window.matchMedia('(min-width: 900px)').matches,
+  )
   const [rightPanel, setRightPanel] = useState<null | 'memory' | 'data'>(null)
   const [messages, setMessages] = useState<Msg[]>([])
   const [input, setInput] = useState('')
@@ -96,6 +100,12 @@ export function AssistantScreen() {
   // default) — drives the chat avatar so it's clear who's answering.
   const roomProvider = (activeRoom?.provider as AiProvider) || getTaskCfg('assistant').provider
   const bot = PROVIDER_META[roomProvider] ?? PROVIDER_META.deepseek
+
+  // On a phone the rooms list is an overlay — dismiss it once a room is chosen.
+  function selectRoom(id: string) {
+    setActiveId(id)
+    if (window.matchMedia('(max-width: 899px)').matches) setSidebarOpen(false)
+  }
 
   async function refreshRooms(selectId?: string) {
     const rs = await getChatrooms()
@@ -199,6 +209,17 @@ export function AssistantScreen() {
 
   return (
     <div className="asst-layout">
+      {/* Overlay scrim behind the floating rooms / right panel on phones; hidden
+          on desktop where those panels are inline (see assistant.css). */}
+      {(sidebarOpen || rightPanel) && (
+        <div
+          className="asst-overlay-backdrop"
+          onClick={() => {
+            setSidebarOpen(false)
+            setRightPanel(null)
+          }}
+        />
+      )}
       {sidebarOpen && (
         <aside className="asst-rooms">
           <button className="th-btn asst-newroom" type="button" onClick={onNewRoom}>
@@ -207,7 +228,7 @@ export function AssistantScreen() {
           <ul className="asst-roomlist">
             {rooms.map((r, i) => (
               <li key={r.id} className={`asst-room ${r.id === activeId ? 'is-active' : ''}`}>
-                <button className="asst-room-name" type="button" onClick={() => setActiveId(r.id)}>
+                <button className="asst-room-name" type="button" onClick={() => selectRoom(r.id)}>
                   {r.name}
                 </button>
                 {r.id === activeId && (

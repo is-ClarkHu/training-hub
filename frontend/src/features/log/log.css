@@ -8,9 +8,14 @@
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 12px;
 }
 .log-date { width: auto; }
+/* A cycle-day option can read "A · 胸 / 肩 / 三头" — width:auto sizes the <select>
+   to its widest option and blows past the header edge. Cap it and let the native
+   control truncate the shown label. */
+.log-cycleday { max-width: min(62vw, 260px); }
 .log-lang { width: auto; padding: 9px 12px; font-size: 12px; }
 
 /* Round context (§6B): which round the tagged cycle-day feeds into. */
@@ -213,7 +218,7 @@
   border-radius: 10px;
 }
 .log-entry-modal {
-  width: min(760px, 100%);
+  width: min(560px, 100%);
   max-height: calc(100vh - 96px);
   overflow-y: auto;
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
