@@ -63,6 +63,15 @@ export function AddInjuryDialog({
   const [checkpoints, setCheckpoints] = useState<InjuryCheckpoint[]>(injury?.checkpoints ?? [])
   const setCp = (i: number, patch: Partial<InjuryCheckpoint>) =>
     setCheckpoints((cs) => cs.map((c, idx) => (idx === i ? { ...c, ...patch } : c)))
+  const addCheckpoint = () =>
+    setCheckpoints((cs) => [...cs, { status: 'treating' as InjuryStatus, date: startedOn }])
+  const removeCheckpoint = (i: number) => setCheckpoints((cs) => cs.filter((_, idx) => idx !== i))
+  // Changing the CURRENT status also ensures that stage has a checkpoint, so the
+  // history stays in step with where the injury is now.
+  const changeStatus = (s: InjuryStatus) => {
+    setStatus(s)
+    setCheckpoints((cs) => (cs.some((c) => c.status === s) ? cs : [...cs, { status: s, date: today() }]))
+  }
   const [severity, setSeverity] = useState<number | ''>(injury?.severity ?? '')
   const [noteZh, setNoteZh] = useState(injury?.note_zh ?? '')
   const [noteEn, setNoteEn] = useState(injury?.note_en ?? '')
@@ -170,7 +179,9 @@ export function AddInjuryDialog({
       note_zh: noteZh.trim(),
       note_en: noteEn.trim(),
       attachments: [...linkRefs, ...photoRefs],
-      checkpoints: checkpoints.map((c) => ({ ...c, note: c.note?.trim() || undefined })),
+      checkpoints: checkpoints
+        .map((c) => ({ ...c, note: c.note?.trim() || undefined }))
+        .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)),
     }
     let saved: Injury
     if (injury) {
@@ -280,11 +291,16 @@ export function AddInjuryDialog({
 
         <div className="inj-field">
           <label className="th-label" htmlFor="inj-status">{lang === 'zh' ? '当前状态' : 'Status'}</label>
-          <select id="inj-status" className="th-input" value={status} onChange={(e) => setStatus(e.target.value as InjuryStatus)}>
+          <select id="inj-status" className="th-input" value={status} onChange={(e) => changeStatus(e.target.value as InjuryStatus)}>
             {INJURY_STATUSES.map((s) => (
               <option key={s} value={s}>{INJURY_STATUS_LABELS[s][lang]}</option>
             ))}
           </select>
+          <p className="inj-hint">
+            {lang === 'zh'
+              ? '这是当前状态。要补记之前经过的中间阶段(如逐步复训),请在下方「阶段历史」添加,不要改这里 —— 否则会把伤病拉回未康复。'
+              : 'This is the current status. To backfill middle stages you passed through, add them in “Stage history” below — changing this would re-open the injury.'}
+          </p>
         </div>
 
         <div className="inj-field">
@@ -301,14 +317,30 @@ export function AddInjuryDialog({
           {hint && <p className="inj-hint">{hint}</p>}
         </div>
 
-        {checkpoints.length > 0 && (
-          <div className="inj-field">
-            <label className="th-label">{lang === 'zh' ? '阶段记录 (日期 + 说明)' : 'Stages (date + note)'}</label>
+        <div className="inj-field">
+          <div className="inj-note-head">
+            <label className="th-label">{lang === 'zh' ? '阶段历史 (日期 + 说明)' : 'Stage history (date + note)'}</label>
+            <button className="th-btn-ghost inj-translate" type="button" onClick={addCheckpoint}>
+              {lang === 'zh' ? '+ 阶段' : '+ Stage'}
+            </button>
+          </div>
+          {checkpoints.length === 0 ? (
+            <p className="inj-hint">{lang === 'zh' ? '暂无阶段记录。' : 'No stages recorded yet.'}</p>
+          ) : (
             <div className="inj-stages-edit">
               {checkpoints.map((cp, i) => (
                 <div key={i} className="inj-stage-edit">
-                  <span className="inj-stage-edit-label">{INJURY_STATUS_LABELS[cp.status][lang]}</span>
+                  <select
+                    className="th-input inj-stage-stage"
+                    value={cp.status}
+                    onChange={(e) => setCp(i, { status: e.target.value as InjuryStatus })}
+                  >
+                    {INJURY_STATUSES.map((s) => (
+                      <option key={s} value={s}>{INJURY_STATUS_LABELS[s][lang]}</option>
+                    ))}
+                  </select>
                   <input className="th-input inj-stage-date" type="date" value={cp.date} onChange={(e) => setCp(i, { date: e.target.value })} />
+                  <button className="inj-stage-del" type="button" onClick={() => removeCheckpoint(i)} aria-label={lang === 'zh' ? '删除阶段' : 'remove stage'}>×</button>
                   <textarea
                     className="th-input inj-stage-note"
                     rows={2}
@@ -319,8 +351,8 @@ export function AddInjuryDialog({
                 </div>
               ))}
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
         <div className="inj-field">
           <div className="inj-note-head">

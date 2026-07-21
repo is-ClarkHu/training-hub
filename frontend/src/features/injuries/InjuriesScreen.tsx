@@ -89,7 +89,13 @@ export function InjuriesScreen() {
         <div className="inj-list">
           {injuries.map((i) => {
             const linked = entries.filter((e) => e.injury_id === i.id && !e.deleted).length
-            const injured = sessions.filter((s) => s.injury && s.date >= i.started_on).length
+            // Every workout done while injured counts — the window is onset →
+            // recovery, not the manual per-session "injured" flag (which the user
+            // only sets on the injuring session). Ongoing injuries count to today.
+            const windowEnd = i.status === 'recovered' ? i.resolved_on : null
+            const injured = sessions.filter(
+              (s) => !s.deleted && s.date >= i.started_on && (!windowEnd || s.date < windowEnd),
+            ).length
             return (
               <div key={i.id} className={`inj-card status-${i.status}`}>
                 <div className="inj-card-head">

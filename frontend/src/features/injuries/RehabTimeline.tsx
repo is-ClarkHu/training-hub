@@ -26,8 +26,10 @@ export function RehabTimeline({
       ? INJURY_STAGES.length - 1
       : INJURY_STAGES.indexOf(injury.status)
 
+  // Recovered: count onset→recovery inclusive of both ends (7.1 → 7.15 = 15 days).
+  // Ongoing: elapsed days since onset.
   const days = recovered && injury.resolved_on
-    ? daysBetween(injury.started_on, injury.resolved_on)
+    ? daysBetween(injury.started_on, injury.resolved_on) + 1
     : daysSince(injury.started_on)
 
   // Latest date + note the injury entered each stage (from checkpoints).
@@ -50,7 +52,7 @@ export function RehabTimeline({
           <div key={s} className={`inj-stage ${i <= currentIdx && !relapsed ? 'done' : ''} ${i === currentIdx && !relapsed ? 'current' : ''}`}>
             <span className="inj-stage-dot" />
             <span className="inj-stage-label">{INJURY_STATUS_LABELS[s][lang]}</span>
-            {stageDate[s] && <span className="inj-stage-date">{stageDate[s]}</span>}
+            {stageDate[s] && <span className="inj-stage-date">{stageDate[s]!.slice(5)}</span>}
             {stageNote[s] && <span className="inj-stage-cpnote">{stageNote[s]}</span>}
           </div>
         ))}

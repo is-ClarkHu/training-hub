@@ -101,13 +101,22 @@
 .inj-days-n { font: 700 26px/1 var(--mono); color: var(--teal); }
 .inj-days-l { font: 11px/1 var(--mono); color: var(--text-dim); }
 
-.inj-stages { display: flex; align-items: center; gap: 0; }
-.inj-stage { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; position: relative; }
+/* Equal-width columns (so the connector lines line up dot-to-dot) with a floor,
+   and horizontal scroll below that floor — this is what stops the labels/dates
+   from colliding with each other and with the connector line on narrow screens.
+   Labels wrap within their column rather than overflowing into the neighbour. */
+.inj-stages { display: flex; align-items: flex-start; gap: 0; overflow-x: auto; padding-bottom: 2px; }
+.inj-stage {
+  flex: 1 0 0; min-width: 54px;
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  position: relative; text-align: center;
+}
 .inj-stage:not(:last-child)::after {
   content: '';
   position: absolute;
   top: 6px; left: 50%; width: 100%; height: 2px;
   background: var(--border);
+  z-index: 0;
 }
 .inj-stage.done:not(:last-child)::after { background: var(--teal); }
 .inj-stage-dot {
@@ -117,7 +126,7 @@
 }
 .inj-stage.done .inj-stage-dot { background: var(--teal); border-color: var(--teal); }
 .inj-stage.current .inj-stage-dot { box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.25); }
-.inj-stage-label { font: 11px/1 var(--mono); color: var(--text-dim); }
+.inj-stage-label { font: 10.5px/1.2 var(--mono); color: var(--text-dim); overflow-wrap: anywhere; }
 .inj-stage.current .inj-stage-label { color: var(--text-bright); }
 
 .inj-activity { display: flex; flex-wrap: wrap; gap: 10px; font: 12px/1.4 var(--mono); color: var(--text-dim); }
@@ -137,16 +146,34 @@
 .inj-translate { width: auto; padding: 4px 10px; font-size: 11px; }
 .inj-field > .th-input + .th-input { margin-top: 6px; }
 .inj-note-area { resize: vertical; min-height: 70px; line-height: 1.5; }
-.inj-stages-edit { display: flex; flex-direction: column; gap: 8px; }
-.inj-stage-edit { display: grid; grid-template-columns: auto 132px 1fr; gap: 6px; align-items: start; }
-.inj-stage-edit-label { font: 600 12px/2.4 var(--mono); color: var(--teal); white-space: nowrap; }
-.inj-stage-note { resize: vertical; min-height: 40px; line-height: 1.4; }
+.inj-stages-edit { display: flex; flex-direction: column; gap: 10px; }
+/* stage select | date | delete on row 1; the note spans row 2 */
+.inj-stage-edit {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 140px auto;
+  gap: 6px;
+  align-items: center;
+  padding: 8px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.inj-stage-stage { min-width: 0; }
+.inj-stage-note { grid-column: 1 / -1; resize: vertical; min-height: 40px; line-height: 1.4; }
+.inj-stage-del {
+  width: 30px; height: 30px; padding: 0;
+  display: grid; place-items: center;
+  font: 700 16px/1 var(--mono); color: var(--text-dim);
+  background: transparent; border: 1px solid var(--border); border-radius: 6px; cursor: pointer;
+}
+.inj-stage-del:hover { color: var(--danger); border-color: var(--danger); }
 .inj-attach-row { margin-top: 6px; }
 .inj-attach-row .log-row { display: flex; gap: 6px; align-items: center; }
 .inj-hint { margin: 4px 0 0; font: 11px/1.4 var(--mono); color: var(--amber); }
 
-/* timeline extras */
-.inj-stage-date { font: 9px/1 var(--mono); color: var(--text-dim); opacity: 0.7; }
+/* timeline extras — scoped to the read-only timeline so it doesn't shrink the
+   date <input> in the editor, which reuses the .inj-stage-date class. */
+.inj-stages .inj-stage-date { font: 9px/1 var(--mono); color: var(--text-dim); opacity: 0.7; white-space: nowrap; }
 .inj-timeline.relapsed .inj-stage.done .inj-stage-dot { background: var(--danger); border-color: var(--danger); }
 .inj-timeline.relapsed .inj-stage.done:not(:last-child)::after { background: var(--danger); }
 .inj-relapse-flag { font: 600 12px/1.4 var(--mono); color: var(--danger); }

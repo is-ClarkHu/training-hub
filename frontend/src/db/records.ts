@@ -25,6 +25,7 @@ import type {
   Injury,
   InjuryAssessment,
   InjuryAttachmentRef,
+  InjuryCheckpoint,
   InjuryLaterality,
   InjuryPhoto,
   InjuryModified,
@@ -312,6 +313,7 @@ export interface NewInjuryInput {
   note_zh?: string
   note_en?: string
   attachments?: InjuryAttachmentRef[]
+  checkpoints?: InjuryCheckpoint[]
 }
 
 const HAS_CJK = /[一-鿿]/
@@ -387,10 +389,18 @@ export async function createInjury(input: NewInjuryInput): Promise<Injury> {
     assessments: [] as InjuryAssessment[],
     ...input,
   }
+  // Honour any stage history the editor supplied (backfilled middle stages);
+  // otherwise seed a single checkpoint at onset.
+  const checkpoints =
+    base.checkpoints && base.checkpoints.length > 0
+      ? [...base.checkpoints].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+      : [{ status: base.status, date: base.started_on }]
+  const recovered = [...checkpoints].reverse().find((c) => c.status === 'recovered')
   const row: Injury = {
     ...base,
     body_area: base.body_area || base.body_area_zh || base.body_area_en,
-    checkpoints: [{ status: base.status, date: base.started_on }],
+    checkpoints,
+    resolved_on: base.status === 'recovered' ? recovered?.date ?? base.resolved_on ?? today() : null,
   }
   await db.injuries.add(row)
   return row
@@ -421,18 +431,26 @@ export async function updateInjury(
   // keep legacy body_area in step with the bilingual pair
   next.body_area = next.body_area_zh || next.body_area_en || next.body_area
 
-  // Record a checkpoint whenever the stage changes (§6A) — the middle stages are
-  // what the user manages, so the transition history is the point.
-  if (patch.status && patch.status !== cur.status) {
+  // Record a checkpoint on a quick status change (§6A) — e.g. the inline status
+  // switch on the injury card. The full editor owns the stage history and always
+  // sends an explicit `checkpoints` array (so it can backfill past middle stages
+  // WITHOUT the current status regressing), so skip the auto-append in that case.
+  if (patch.status && patch.status !== cur.status && patch.checkpoints === undefined) {
     const last = next.checkpoints[next.checkpoints.length - 1]
     if (!last || last.status !== next.status) {
       next.checkpoints = [...next.checkpoints, { status: next.status, date: today() }]
     }
   }
 
-  // Keep resolved_on consistent with status. relapsed re-opens the injury.
-  if (next.status === 'recovered' && !next.resolved_on) next.resolved_on = today()
-  if (next.status !== 'recovered') next.resolved_on = null
+  // Keep resolved_on consistent with status. relapsed re-opens the injury. When
+  // recovered, anchor resolved_on to the recovered checkpoint's date (which the
+  // user can backdate) so "days to recover" measures onset→recovery, not to today.
+  if (next.status === 'recovered') {
+    const rec = [...next.checkpoints].reverse().find((c) => c.status === 'recovered')
+    next.resolved_on = rec?.date ?? next.resolved_on ?? today()
+  } else {
+    next.resolved_on = null
+  }
   await db.injuries.put(next)
 }
 
