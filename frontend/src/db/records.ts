@@ -2,6 +2,7 @@
 // (client UUID, user_id from the session, updated_at, deleted=false) so the
 // SyncEngine can later upsert it to Supabase unchanged (SPEC §3).
 import { db } from './db'
+import { currentStage } from '../features/injuries/util'
 import { newId, nowIso, today } from './helpers'
 import { currentUserId, supabase } from '../supabase/client'
 import { FRISBEE_FIELDS } from '../supabase/types'
@@ -338,7 +339,7 @@ const STATUS_RANK: Record<InjuryStatus, number> = {
 
 /** Backfill old/partial rows so every read yields a full current-shape Injury. */
 function normalizeInjury(raw: Injury): Injury {
-  const status = LEGACY_STATUS[raw.status as string] ?? raw.status
+  const legacyStatus = LEGACY_STATUS[raw.status as string] ?? raw.status
   const noteRaw = raw.note_raw ?? ''
   const note_zh = raw.note_zh ?? (HAS_CJK.test(noteRaw) ? noteRaw : '')
   const note_en = raw.note_en ?? (HAS_CJK.test(noteRaw) ? '' : noteRaw)
@@ -348,10 +349,18 @@ function normalizeInjury(raw: Injury): Injury {
   const checkpoints =
     raw.checkpoints && raw.checkpoints.length > 0
       ? raw.checkpoints
-      : [{ status, date: raw.started_on }]
+      : [{ status: legacyStatus, date: raw.started_on }]
+  // Current status is DERIVED from the checkpoints: the furthest-along stage in
+  // the locked recovery flow (§6A), not the latest-dated one. Backfilling an
+  // earlier stage never re-opens the injury. resolved_on tracks the recovered
+  // checkpoint's date when recovered.
+  const current = currentStage(checkpoints)
+  const status = current?.status ?? legacyStatus
+  const resolved_on = status === 'recovered' ? current?.date ?? raw.resolved_on ?? null : null
   return {
     ...raw,
     status,
+    resolved_on,
     body_area: areaRaw || body_area_zh || body_area_en,
     body_area_zh,
     body_area_en,
@@ -390,17 +399,20 @@ export async function createInjury(input: NewInjuryInput): Promise<Injury> {
     ...input,
   }
   // Honour any stage history the editor supplied (backfilled middle stages);
-  // otherwise seed a single checkpoint at onset.
+  // otherwise seed a single checkpoint at onset. Kept sorted by date.
   const checkpoints =
     base.checkpoints && base.checkpoints.length > 0
       ? [...base.checkpoints].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
       : [{ status: base.status, date: base.started_on }]
-  const recovered = [...checkpoints].reverse().find((c) => c.status === 'recovered')
+  // Current status is derived from the latest-dated checkpoint (see currentStage).
+  const current = currentStage(checkpoints)
+  const status = current?.status ?? base.status
   const row: Injury = {
     ...base,
+    status,
     body_area: base.body_area || base.body_area_zh || base.body_area_en,
     checkpoints,
-    resolved_on: base.status === 'recovered' ? recovered?.date ?? base.resolved_on ?? today() : null,
+    resolved_on: status === 'recovered' ? current?.date ?? null : null,
   }
   await db.injuries.add(row)
   return row
@@ -431,26 +443,26 @@ export async function updateInjury(
   // keep legacy body_area in step with the bilingual pair
   next.body_area = next.body_area_zh || next.body_area_en || next.body_area
 
-  // Record a checkpoint on a quick status change (§6A) — e.g. the inline status
-  // switch on the injury card. The full editor owns the stage history and always
-  // sends an explicit `checkpoints` array (so it can backfill past middle stages
-  // WITHOUT the current status regressing), so skip the auto-append in that case.
+  // A quick status change (e.g. the inline status switch on the injury card, which
+  // sends `status` but no `checkpoints`) is recorded as a checkpoint dated today —
+  // so it becomes the latest-dated stage and thus the new current status. The full
+  // editor owns the stage history and sends an explicit `checkpoints` array (so it
+  // can backfill earlier-dated middle stages WITHOUT re-opening the injury), so the
+  // auto-append is skipped in that case.
   if (patch.status && patch.status !== cur.status && patch.checkpoints === undefined) {
     const last = next.checkpoints[next.checkpoints.length - 1]
-    if (!last || last.status !== next.status) {
-      next.checkpoints = [...next.checkpoints, { status: next.status, date: today() }]
+    if (!last || last.status !== patch.status) {
+      next.checkpoints = [...next.checkpoints, { status: patch.status, date: today() }]
     }
   }
 
-  // Keep resolved_on consistent with status. relapsed re-opens the injury. When
-  // recovered, anchor resolved_on to the recovered checkpoint's date (which the
-  // user can backdate) so "days to recover" measures onset→recovery, not to today.
-  if (next.status === 'recovered') {
-    const rec = [...next.checkpoints].reverse().find((c) => c.status === 'recovered')
-    next.resolved_on = rec?.date ?? next.resolved_on ?? today()
-  } else {
-    next.resolved_on = null
-  }
+  // Derive current status + resolved_on from the checkpoints (latest date wins).
+  // The `status` field is a cached projection of the stage history, never the
+  // source of truth. Checkpoints stay sorted by date.
+  next.checkpoints = [...next.checkpoints].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+  const current = currentStage(next.checkpoints)
+  next.status = current?.status ?? next.status
+  next.resolved_on = next.status === 'recovered' ? current?.date ?? null : null
   await db.injuries.put(next)
 }
 

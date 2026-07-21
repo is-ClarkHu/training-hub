@@ -429,7 +429,9 @@
 .hist-intimacy-pill {
   padding: 4px 10px;
   font: 700 12px/1 var(--mono);
-  color: #ffe4f1;
+  /* theme var: light pink on dark, deep rose on white — the hardcoded near-white
+     pink was invisible on the light-mode pink background. */
+  color: var(--intimacy-ink);
   background: rgba(255, 107, 157, 0.2);
   border: 1px solid rgba(255, 107, 157, 0.35);
   border-radius: 999px;

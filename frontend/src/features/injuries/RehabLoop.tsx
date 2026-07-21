@@ -218,7 +218,7 @@ function InjuryLoopCard({
       {/* training response */}
       <div className="loop-response">
         <span>{lang === 'zh' ? '训练反应' : 'Response'}:</span>
-        <span className="inj-stat">{response.count} {lang === 'zh' ? `次康复(近${RESPONSE_WINDOW_DAYS}天)` : `rehab logs (${RESPONSE_WINDOW_DAYS}d)`}</span>
+        <span className="inj-stat">{lang === 'zh' ? `近${RESPONSE_WINDOW_DAYS}天做了 ${response.count} 次康复训练` : `${response.count} rehab logs (${RESPONSE_WINDOW_DAYS}d)`}</span>
         {response.lastDate && <span className="loop-last">{lang === 'zh' ? '最近' : 'last'} {response.lastDate}</span>}
         <span className="loop-hint-inline">{lang === 'zh' ? '在 Log 记录计划动作' : 'log plan moves in Log'}</span>
       </div>

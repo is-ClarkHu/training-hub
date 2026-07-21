@@ -1,5 +1,6 @@
 import type {
   Injury,
+  InjuryCheckpoint,
   InjuryLaterality,
   InjuryScenario,
   InjuryStatus,
@@ -62,6 +63,54 @@ export const INJURY_LATERALITIES = Object.keys(INJURY_LATERALITY_LABELS) as Inju
 /** True for any stage that still needs managing (everything but recovered). */
 export function isActiveInjury(status: InjuryStatus): boolean {
   return status !== 'recovered'
+}
+
+/** Lifecycle position of a stage (higher = further along). Used to break date
+ *  ties when deciding the current stage. */
+export function stageRank(status: InjuryStatus): number {
+  const i = INJURY_STATUSES.indexOf(status)
+  return i < 0 ? 0 : i
+}
+
+/**
+ * The injury's current stage = the FURTHEST-ALONG stage in the (locked) recovery
+ * flow that has a checkpoint — not the one with the latest date. The flow order
+ * is fixed; a later-in-flow stage is never demoted just because its date is
+ * earlier. So backfilling middle steps never changes where the injury is now, and
+ * once you've recorded e.g. 逐步复训 the status stays there until you record a
+ * LATER-in-flow stage (like 已康复). Date sanity is enforced separately by
+ * checkpointOrderError. Same-stage duplicates tie-break to the later date.
+ */
+export function currentStage(checkpoints: InjuryCheckpoint[]): InjuryCheckpoint | null {
+  let best: InjuryCheckpoint | null = null
+  for (const c of checkpoints) {
+    if (
+      !best ||
+      stageRank(c.status) > stageRank(best.status) ||
+      (stageRank(c.status) === stageRank(best.status) && c.date > best.date)
+    ) {
+      best = c
+    }
+  }
+  return best
+}
+
+/**
+ * Validate that stage dates move forward along the lifecycle: a stage that comes
+ * LATER in the recovery flow must not be dated EARLIER than one before it.
+ * Returns the first offending pair (earlier-in-flow, later-in-flow), or null.
+ * 'relapsed' is a branch off the linear flow and is excluded from the check.
+ */
+export function checkpointOrderError(
+  checkpoints: InjuryCheckpoint[],
+): { before: InjuryCheckpoint; after: InjuryCheckpoint } | null {
+  const linear = checkpoints
+    .filter((c) => INJURY_STAGES.includes(c.status))
+    .sort((a, b) => INJURY_STAGES.indexOf(a.status) - INJURY_STAGES.indexOf(b.status))
+  for (let i = 1; i < linear.length; i++) {
+    if (linear[i].date < linear[i - 1].date) return { before: linear[i - 1], after: linear[i] }
+  }
+  return null
 }
 
 /** Body area in the current UI language, falling back across the pair + legacy (§14). */

@@ -17,7 +17,6 @@ import type {
   BodyPart,
   Injury,
   InjuryAttachmentRef,
-  InjuryCheckpoint,
   InjuryLaterality,
   InjuryScenario,
   InjuryStatus,
@@ -29,6 +28,8 @@ import { compressImage } from './photo'
 
 interface PhotoDraft { photo_id: string; label: string; dataUrl: string; storage_path?: string }
 import {
+  checkpointOrderError,
+  currentStage,
   INJURY_LATERALITIES,
   INJURY_LATERALITY_LABELS,
   INJURY_SCENARIOS,
@@ -38,6 +39,12 @@ import {
   INJURY_TYPES,
   INJURY_TYPE_LABELS,
 } from './util'
+
+// Editor row = a checkpoint plus a stable local key, so the list can re-sort by
+// date on every edit without React losing input focus.
+type CpRow = { _k: string; status: InjuryStatus; date: string; note?: string }
+const sortRows = (rows: CpRow[]): CpRow[] =>
+  [...rows].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
 
 export function AddInjuryDialog({
   lang,
@@ -59,19 +66,22 @@ export function AddInjuryDialog({
   const [injuryType, setInjuryType] = useState<InjuryType | ''>(injury?.injury_type ?? '')
   const [scenario, setScenario] = useState<InjuryScenario | ''>(injury?.scenario ?? '')
   const [startedOn, setStartedOn] = useState(injury?.started_on ?? today())
-  const [status, setStatus] = useState<InjuryStatus>(injury?.status ?? 'newly_occurred')
-  const [checkpoints, setCheckpoints] = useState<InjuryCheckpoint[]>(injury?.checkpoints ?? [])
-  const setCp = (i: number, patch: Partial<InjuryCheckpoint>) =>
-    setCheckpoints((cs) => cs.map((c, idx) => (idx === i ? { ...c, ...patch } : c)))
+  // Stage history is the source of truth; the current status is derived from it.
+  // New injury: seed one "newly occurred" checkpoint at onset.
+  const [checkpoints, setCheckpoints] = useState<CpRow[]>(() =>
+    sortRows(
+      (injury?.checkpoints?.length
+        ? injury.checkpoints
+        : [{ status: 'newly_occurred' as InjuryStatus, date: injury?.started_on ?? today() }]
+      ).map((c) => ({ _k: newId(), status: c.status, date: c.date, note: c.note })),
+    ),
+  )
+  const setCp = (k: string, patch: Partial<CpRow>) =>
+    setCheckpoints((cs) => sortRows(cs.map((c) => (c._k === k ? { ...c, ...patch } : c))))
   const addCheckpoint = () =>
-    setCheckpoints((cs) => [...cs, { status: 'treating' as InjuryStatus, date: startedOn }])
-  const removeCheckpoint = (i: number) => setCheckpoints((cs) => cs.filter((_, idx) => idx !== i))
-  // Changing the CURRENT status also ensures that stage has a checkpoint, so the
-  // history stays in step with where the injury is now.
-  const changeStatus = (s: InjuryStatus) => {
-    setStatus(s)
-    setCheckpoints((cs) => (cs.some((c) => c.status === s) ? cs : [...cs, { status: s, date: today() }]))
-  }
+    setCheckpoints((cs) => sortRows([...cs, { _k: newId(), status: 'treating', date: startedOn }]))
+  const removeCheckpoint = (k: string) => setCheckpoints((cs) => cs.filter((c) => c._k !== k))
+  const derivedStatus = currentStage(checkpoints)?.status ?? 'newly_occurred'
   const [severity, setSeverity] = useState<number | ''>(injury?.severity ?? '')
   const [noteZh, setNoteZh] = useState(injury?.note_zh ?? '')
   const [noteEn, setNoteEn] = useState(injury?.note_en ?? '')
@@ -161,6 +171,17 @@ export function AddInjuryDialog({
 
   async function onSave() {
     if (!hasArea) return
+    // Guard the lifecycle: a later stage must not be dated before an earlier one.
+    const orderErr = checkpointOrderError(checkpoints)
+    if (orderErr) {
+      const nm = (s: InjuryStatus) => INJURY_STATUS_LABELS[s][lang]
+      window.alert(
+        lang === 'zh'
+          ? `阶段日期顺序有误:「${nm(orderErr.after.status)}」(${orderErr.after.date}) 早于它之前的「${nm(orderErr.before.status)}」(${orderErr.before.date})。\n\n康复流程里靠后的阶段,日期不能比前面的阶段还早,请修正日期。`
+          : `Stage dates are out of order: “${nm(orderErr.after.status)}” (${orderErr.after.date}) is before the earlier stage “${nm(orderErr.before.status)}” (${orderErr.before.date}).\n\nA later stage can't be dated before an earlier one — please fix the dates.`,
+      )
+      return
+    }
     setBusy(true)
     const linkRefs = attachments
       .filter((a) => a.label.trim() || a.url?.trim())
@@ -174,14 +195,16 @@ export function AddInjuryDialog({
       injury_type: injuryType || null,
       scenario: scenario || null,
       started_on: startedOn,
-      status,
       severity: severity === '' ? null : Number(severity),
       note_zh: noteZh.trim(),
       note_en: noteEn.trim(),
       attachments: [...linkRefs, ...photoRefs],
-      checkpoints: checkpoints
-        .map((c) => ({ ...c, note: c.note?.trim() || undefined }))
-        .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)),
+      // Strip the editor-only key; the db derives current status from these.
+      checkpoints: sortRows(checkpoints).map((c) => ({
+        status: c.status,
+        date: c.date,
+        note: c.note?.trim() || undefined,
+      })),
     }
     let saved: Injury
     if (injury) {
@@ -290,20 +313,6 @@ export function AddInjuryDialog({
         </div>
 
         <div className="inj-field">
-          <label className="th-label" htmlFor="inj-status">{lang === 'zh' ? '当前状态' : 'Status'}</label>
-          <select id="inj-status" className="th-input" value={status} onChange={(e) => changeStatus(e.target.value as InjuryStatus)}>
-            {INJURY_STATUSES.map((s) => (
-              <option key={s} value={s}>{INJURY_STATUS_LABELS[s][lang]}</option>
-            ))}
-          </select>
-          <p className="inj-hint">
-            {lang === 'zh'
-              ? '这是当前状态。要补记之前经过的中间阶段(如逐步复训),请在下方「阶段历史」添加,不要改这里 —— 否则会把伤病拉回未康复。'
-              : 'This is the current status. To backfill middle stages you passed through, add them in “Stage history” below — changing this would re-open the injury.'}
-          </p>
-        </div>
-
-        <div className="inj-field">
           <div className="inj-note-head">
             <label className="th-label">{lang === 'zh' ? '记录 (双语)' : 'Note (bilingual)'}</label>
             <button className="th-btn-ghost inj-translate" type="button" onClick={onTranslateNote} disabled={translatingNote || (!noteZh.trim() && !noteEn.trim())}>
@@ -320,32 +329,40 @@ export function AddInjuryDialog({
         <div className="inj-field">
           <div className="inj-note-head">
             <label className="th-label">{lang === 'zh' ? '阶段历史 (日期 + 说明)' : 'Stage history (date + note)'}</label>
+            <span className="inj-cur-status">
+              {lang === 'zh' ? '当前:' : 'Now:'} <b>{INJURY_STATUS_LABELS[derivedStatus][lang]}</b>
+            </span>
             <button className="th-btn-ghost inj-translate" type="button" onClick={addCheckpoint}>
               {lang === 'zh' ? '+ 阶段' : '+ Stage'}
             </button>
           </div>
+          <p className="inj-hint">
+            {lang === 'zh'
+              ? '当前状态 = 康复流程里最靠后的那个阶段。补记之前经过的中间阶段不会改变当前状态;流程顺序锁定,靠后的阶段日期不能早于靠前的。'
+              : 'Current status = the furthest-along stage in the recovery flow. Backfilling earlier stages won’t change it; the flow order is locked and a later stage can’t be dated before an earlier one.'}
+          </p>
           {checkpoints.length === 0 ? (
             <p className="inj-hint">{lang === 'zh' ? '暂无阶段记录。' : 'No stages recorded yet.'}</p>
           ) : (
             <div className="inj-stages-edit">
-              {checkpoints.map((cp, i) => (
-                <div key={i} className="inj-stage-edit">
+              {checkpoints.map((cp) => (
+                <div key={cp._k} className="inj-stage-edit">
                   <select
                     className="th-input inj-stage-stage"
                     value={cp.status}
-                    onChange={(e) => setCp(i, { status: e.target.value as InjuryStatus })}
+                    onChange={(e) => setCp(cp._k, { status: e.target.value as InjuryStatus })}
                   >
                     {INJURY_STATUSES.map((s) => (
                       <option key={s} value={s}>{INJURY_STATUS_LABELS[s][lang]}</option>
                     ))}
                   </select>
-                  <input className="th-input inj-stage-date" type="date" value={cp.date} onChange={(e) => setCp(i, { date: e.target.value })} />
-                  <button className="inj-stage-del" type="button" onClick={() => removeCheckpoint(i)} aria-label={lang === 'zh' ? '删除阶段' : 'remove stage'}>×</button>
+                  <input className="th-input inj-stage-date" type="date" value={cp.date} onChange={(e) => setCp(cp._k, { date: e.target.value })} />
+                  <button className="inj-stage-del" type="button" onClick={() => removeCheckpoint(cp._k)} aria-label={lang === 'zh' ? '删除阶段' : 'remove stage'}>×</button>
                   <textarea
                     className="th-input inj-stage-note"
                     rows={2}
                     value={cp.note ?? ''}
-                    onChange={(e) => setCp(i, { note: e.target.value })}
+                    onChange={(e) => setCp(cp._k, { note: e.target.value })}
                     placeholder={lang === 'zh' ? '这一阶段的说明…' : 'note for this stage…'}
                   />
                 </div>

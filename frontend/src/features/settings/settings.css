@@ -43,7 +43,7 @@
 .set-intimacy-pill {
   padding: 3px 8px;
   font: 600 11px/1 var(--mono);
-  color: #ffe4f1;
+  color: var(--intimacy-ink);
   background: rgba(244, 114, 182, 0.22);
   border: 1px solid rgba(244, 114, 182, 0.35);
   border-radius: 999px;

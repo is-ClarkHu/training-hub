@@ -53,10 +53,25 @@ export function RehabTimeline({
             <span className="inj-stage-dot" />
             <span className="inj-stage-label">{INJURY_STATUS_LABELS[s][lang]}</span>
             {stageDate[s] && <span className="inj-stage-date">{stageDate[s]!.slice(5)}</span>}
-            {stageNote[s] && <span className="inj-stage-cpnote">{stageNote[s]}</span>}
           </div>
         ))}
       </div>
+
+      {/* Stage notes live in their own list, not crammed under each dot — long
+          notes would otherwise collide and stretch the whole progress line. */}
+      {INJURY_STAGES.some((s) => stageNote[s]) && (
+        <ul className="inj-stage-notes">
+          {INJURY_STAGES.filter((s) => stageNote[s]).map((s) => (
+            <li key={s} className="inj-stage-noteitem">
+              <span className="inj-stage-notestage">
+                {INJURY_STATUS_LABELS[s][lang]}
+                {stageDate[s] ? ` · ${stageDate[s]!.slice(5)}` : ''}
+              </span>
+              <span className="inj-stage-notetext">{stageNote[s]}</span>
+            </li>
+          ))}
+        </ul>
+      )}
 
       {relapsed && (
         <div className="inj-relapse-flag">

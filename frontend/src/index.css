@@ -22,6 +22,7 @@
   --teal: #8ab4f8;
   --lime: #8ab4f8;
   --cyan: #4fd1e0;
+  --ice: #4fd1e0;      /* rehab/ice accent — badges put dark ink on it, so keep it bright */
   --amber: #f5b544;
   --orange: #ff8a5c;
   --violet: #a78bfa;
@@ -66,6 +67,7 @@
   --teal: #3b6fd4;
   --lime: #3b6fd4;
   --cyan: #0ea5c4;
+  --ice: #22b6d0;      /* rehab/ice accent (light) — visible under dark badge text */
   --amber: #d99411;
   --orange: #e06a3a;
   --violet: #7c5cf0;
