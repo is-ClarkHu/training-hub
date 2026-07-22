@@ -42,7 +42,7 @@ import { daysSince } from '../injuries/util'
 import { sportName } from '../sports'
 import { ExerciseManager } from '../log'
 import { CategoryManager } from './CategoryManager'
-import { currentRound, cycleMemberships, liveCompletedLabels } from './rounds'
+import { currentRound, cycleMemberships, liveCompletedLabels, roundLiveSpan } from './rounds'
 import { BodyModel, type RegionView } from './BodyModel'
 import { REGIONS, regionLabel, type RegionId } from './anatomy'
 import { cycleDayTitle } from './day'
@@ -307,10 +307,11 @@ export function CycleScreen() {
             {[...rounds].reverse().map((r) => {
               const done = liveCompletedLabels(active, r, entries, assignments)
               const allDone = done.length === active.days.length
+              const span = roundLiveSpan(active, r, entries, assignments)
               return (
                 <li key={r.id} className="cyc-round-row">
                   <span className="cyc-round-row-idx">R{r.index}</span>
-                  <span className="cyc-round-row-dates">{r.started_on} → {r.ended_on ?? '…'}</span>
+                  <span className="cyc-round-row-dates">{span.first ?? r.started_on} → {r.ended_on == null ? '…' : (span.last ?? r.ended_on)}</span>
                   <span className="cyc-round-row-days">{done.join('') || '—'}</span>
                   {r.skipped ? <span className="cyc-round-badge skip">{lang === 'zh' ? '跳过' : 'skipped'}</span>
                     : allDone ? <span className="cyc-round-badge done">{lang === 'zh' ? '完成' : 'done'}</span>

@@ -34,7 +34,7 @@ import { useLanguage } from '../../i18n'
 import type { CycleRound, EntryCycleAssignment, Exercise, ExerciseSet, IntimacyCategory, OptionalTracker, Sport, SportSession, TrainingCycle, WorkoutEntry } from '../../supabase/types'
 import type { BodyPart } from '../../supabase/types'
 import { cycleDayTitle } from '../cycle/day'
-import { cycleMemberships, liveCompletedLabels, openRound } from '../cycle/rounds'
+import { cycleMemberships, liveCompletedLabels, openRound, roundLiveSpan } from '../cycle/rounds'
 import { SportSessionDialog } from '../sports'
 import { INTIMACY_CATEGORIES, intimacyCategory, intimacyLabel, intimacyVisible } from '../intimacy'
 import { exerciseName, primaryCategory } from '../log/util'
@@ -180,7 +180,8 @@ export function HistoryScreen() {
     if (!round || round.skipped) return null
     const done = liveCompletedLabels(activeCycle, round, entries, assignments)
     const remaining = activeCycle.days.map((d) => d.label).filter((l) => !done.includes(l))
-    return { round, done, remaining }
+    const first = roundLiveSpan(activeCycle, round, entries, assignments).first
+    return { round, done, remaining, first }
   }, [activeCycle, rounds, entries, assignments])
 
   // Which split day(s) + round(s) a date belongs to (active cycle only). Derived
@@ -419,7 +420,7 @@ export function HistoryScreen() {
           <ul className="hist-rounds-list">
             <li className="hist-round-row">
               <span className="hist-round-idx">R{currentRoundView.round.index}</span>
-              <span className="hist-round-dates">{currentRoundView.round.started_on} → …</span>
+              <span className="hist-round-dates">{currentRoundView.first ?? currentRoundView.round.started_on} → …</span>
               <span className="hist-round-days">{currentRoundView.done.join('') || '—'}</span>
               <span className="hist-round-badge open">{lang === 'zh' ? '进行中' : 'open'}</span>
             </li>

@@ -55,6 +55,7 @@ export {
   deleteCycleRound,
   rebuildCycleRounds,
   refreshCycleRoundsForAssignments,
+  reconcileCycleRounds,
   assignEntriesToCycleRound,
   assignEntriesToCycleTargets,
   applyEntryCycleAssignments,

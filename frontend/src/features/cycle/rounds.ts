@@ -61,6 +61,35 @@ function memberInRound(m: CycleMembership, round: CycleRound): boolean {
   return m.roundId ? m.roundId === round.id : m.date >= round.started_on && (!round.ended_on || m.date <= round.ended_on)
 }
 
+/** The live memberships that belong to `round`, restricted to the cycle's real day
+ *  labels. The single source of truth for a round's members — the metrics, the date
+ *  span, and the storage reconcile all derive from this, so what the UI shows and what
+ *  gets stored can never drift apart. */
+export function roundMembers(
+  cycle: TrainingCycle,
+  round: CycleRound,
+  entries: WorkoutEntry[],
+  assignments: EntryCycleAssignment[] = [],
+): CycleMembership[] {
+  const labels = new Set(cycle.days.map((d) => d.label))
+  return cycleMemberships(cycle, entries, assignments).filter(
+    (m) => labels.has(m.dayLabel) && memberInRound(m, round),
+  )
+}
+
+/** A round's live date span from its actual member workouts (earliest → latest).
+ *  Prefer this over the stored started_on/ended_on for display: those are scalars
+ *  frozen at close time and drift when a member is later deleted or reassigned. */
+export function roundLiveSpan(
+  cycle: TrainingCycle,
+  round: CycleRound,
+  entries: WorkoutEntry[],
+  assignments: EntryCycleAssignment[] = [],
+): { first: string | null; last: string | null } {
+  const dates = roundMembers(cycle, round, entries, assignments).map((m) => m.date).filter(Boolean).sort()
+  return { first: dates[0] ?? null, last: dates[dates.length - 1] ?? null }
+}
+
 /** Day labels a round actually covers RIGHT NOW, from live memberships —
  *  self-heals when an entry is deleted, unlike the stored `completed_labels`. */
 export function liveCompletedLabels(
@@ -158,6 +187,8 @@ export interface RoundMetrics {
   sessions: number   // distinct training dates in the round
   balance: number    // 0–100, chain coverage across the planned push/pull/legs
   chains: Record<ChainId, number>
+  firstDate: string | null  // earliest live member workout date (null = no members)
+  lastDate: string | null   // latest live member workout date
 }
 
 /** Split-agnostic round metrics — meaningful for any split (or rehab). */
@@ -168,10 +199,7 @@ export function roundMetrics(
   setCount: (entryId: string) => number,
   assignments: EntryCycleAssignment[] = [],
 ): RoundMetrics {
-  const labels = new Set(cycle.days.map((d) => d.label))
-  const inRound = cycleMemberships(cycle, entries, assignments).filter(
-    (m) => labels.has(m.dayLabel) && memberInRound(m, round),
-  )
+  const inRound = roundMembers(cycle, round, entries, assignments)
   // Derive completed days from LIVE memberships (not the stored completed_labels) so
   // deleting a day's last entry rolls the count back.
   const doneLabels = new Set(inRound.map((m) => m.dayLabel))
@@ -179,6 +207,10 @@ export function roundMetrics(
   // has several day memberships here (its sets aren't done twice).
   const roundEntries = new Map(inRound.map((m) => [m.entryId, m.date]))
   const sums = chainSums(roundRegionActivity(cycle, round, entries, setCount, assignments))
+  // Span from LIVE member dates (like the counts above), so the displayed range tracks
+  // the actual workouts — not a stored ended_on that drifts when the closing entry is
+  // later deleted or reassigned to another round.
+  const memberDates = [...roundEntries.values()].filter(Boolean).sort()
   return {
     completedDays: doneLabels.size,
     totalDays: cycle.days.length,
@@ -186,6 +218,8 @@ export function roundMetrics(
     sessions: new Set(roundEntries.values()).size,
     balance: balancePct(sums, plannedChains(cycle)),
     chains: sums,
+    firstDate: memberDates[0] ?? null,
+    lastDate: memberDates[memberDates.length - 1] ?? null,
   }
 }
 

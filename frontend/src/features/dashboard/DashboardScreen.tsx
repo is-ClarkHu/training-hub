@@ -14,7 +14,7 @@ import {
   Legend,
 } from 'chart.js'
 import { Doughnut, Bar, Line } from 'react-chartjs-2'
-import { getActiveCycle, getCycleRounds, getEntryCycleAssignments, getEntries, getExercises, getSetsByEntryIds, getSportSessions, getInjuries, getSports, getTrackerEntries } from '../../db'
+import { getActiveCycle, getCycleRounds, getEntryCycleAssignments, getEntries, getExercises, getSetsByEntryIds, getSportSessions, getInjuries, getSports, getTrackerEntries, reconcileCycleRounds } from '../../db'
 import { useLanguage } from '../../i18n'
 import {
   type Exercise,
@@ -68,8 +68,13 @@ const heartColor = (count: number): string => HEART_SHADES[Math.min(count, HEART
 
 // A round's date span for the rounds list: "07-11 → 07-18" (open round → "07-11 → …").
 const md = (iso: string): string => iso.slice(5)
-function roundDateRange(round: CycleRound): string {
-  return `${md(round.started_on)} → ${round.ended_on ? md(round.ended_on) : '…'}`
+// Uses the round's LIVE member dates (first/last) rather than the stored started_on/
+// ended_on — those are dead scalars set at close time and drift out of sync when a
+// member entry is later deleted or moved, which the rings/body model already ignore.
+function roundDateRange(round: CycleRound, first: string | null, last: string | null): string {
+  const start = md(first ?? round.started_on)
+  if (round.ended_on == null) return `${start} → …`
+  return `${start} → ${md(last ?? round.ended_on)}`
 }
 
 export function DashboardScreen() {
@@ -108,6 +113,10 @@ export function DashboardScreen() {
       setSportId((prev) => prev || sp.find((s) => s.is_default)?.id || sp[0]?.id || '')
       const cyc = await getActiveCycle()
       setActiveCycle(cyc)
+      // Heal any rounds whose stored span/labels drifted from live memberships (e.g. a
+      // round closed on a date that was later deleted). Change-guarded → no-op once
+      // consistent, so this is safe to run on every load.
+      if (cyc) await reconcileCycleRounds(cyc)
       setCycleRounds(cyc ? await getCycleRounds(cyc.id) : [])
       setAssignments(cyc ? await getEntryCycleAssignments() : [])
     })()
@@ -136,7 +145,7 @@ export function DashboardScreen() {
             value: m.balance, goal: 100, display: `${m.balance}%`,
           },
         ]
-        return { round, chains }
+        return { round, chains, first: m.firstDate, last: m.lastDate }
       })
     return { list, current: list.find((r) => r.round.ended_on == null) ?? list[0] }
   }, [activeCycle, cycleRounds, entries, setCount, lang, assignments])
@@ -404,7 +413,7 @@ export function DashboardScreen() {
               <div className="dash-round-history">
                 <span className="dash-round-hist-label">{lang === 'zh' ? '轮次列表' : 'Rounds'}</span>
                 <div className="dash-round-hist-scroll">
-                  {roundData.list.map(({ round, chains }) => (
+                  {roundData.list.map(({ round, chains, first, last }) => (
                     <div key={round.id} className="dash-round-hist-item">
                       <RoundRings
                         mini
@@ -413,7 +422,7 @@ export function DashboardScreen() {
                         active={round.id === modalRoundId}
                         onClick={() => setModalRoundId(round.id)}
                       />
-                      <span className="dash-round-dates">{roundDateRange(round)}</span>
+                      <span className="dash-round-dates">{roundDateRange(round, first, last)}</span>
                     </div>
                   ))}
                 </div>
@@ -428,7 +437,7 @@ export function DashboardScreen() {
           <div className="dash-round-modal" onClick={(e) => e.stopPropagation()}>
             <div className="dash-round-modal-head">
               <h3>Round {modalRound.round.index}
-                <small> · {modalRound.round.started_on} → {modalRound.round.ended_on ?? (lang === 'zh' ? '进行中' : 'open')}</small>
+                <small> · {modalRound.first ?? modalRound.round.started_on} → {modalRound.round.ended_on == null ? (lang === 'zh' ? '进行中' : 'open') : (modalRound.last ?? modalRound.round.ended_on)}</small>
               </h3>
               <button className="cyc-dialog-x" type="button" onClick={() => setModalRoundId(null)} aria-label="close">×</button>
             </div>

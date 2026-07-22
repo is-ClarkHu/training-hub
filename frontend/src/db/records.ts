@@ -3,6 +3,7 @@
 // SyncEngine can later upsert it to Supabase unchanged (SPEC §3).
 import { db } from './db'
 import { currentStage } from '../features/injuries/util'
+import { roundMembers } from '../features/cycle/rounds'
 import { newId, nowIso, today } from './helpers'
 import { currentUserId, supabase } from '../supabase/client'
 import { FRISBEE_FIELDS } from '../supabase/types'
@@ -627,6 +628,78 @@ export async function getEntryCycleAssignments(): Promise<EntryCycleAssignment[]
   return (await db.entry_cycle_assignments.toArray()).filter((a) => !a.deleted)
 }
 
+async function getCycleById(id: string): Promise<TrainingCycle | null> {
+  const c = await db.training_cycle.get(id)
+  return c && !c.deleted ? c : null
+}
+
+/**
+ * Bring a cycle's stored round scalars (started_on / ended_on / completed_labels) back
+ * in line with LIVE memberships — the same view the rings and body model compute from
+ * (via `roundMembers`) — so the stored values can't drift when a member entry is later
+ * edited, deleted, or reassigned to another round. Run after any mutation that can
+ * change a round's membership.
+ *
+ * - completed_labels = the day labels the round's live members currently cover.
+ * - started_on / ended_on = earliest / latest member workout date. Only the LATEST
+ *   round may sit open (ended_on = null) while incomplete; a past round is always
+ *   pinned to its last real workout so it can't greedily reclaim later dates.
+ * - `skipped` rounds keep their explicit closed state untouched.
+ *
+ * Idempotent and change-guarded — a round whose derived values already match is not
+ * rewritten, so this won't churn updated_at or generate needless sync traffic.
+ */
+export async function reconcileCycleRounds(cycleOrId: TrainingCycle | string): Promise<void> {
+  const cycle = typeof cycleOrId === 'string' ? await getCycleById(cycleOrId) : cycleOrId
+  if (!cycle) return
+  const rounds = await getCycleRounds(cycle.id)
+  if (rounds.length === 0) return
+  const entries = (await db.workout_entries.toArray()).filter((e) => !e.deleted)
+  const assignments = (await db.entry_cycle_assignments.toArray()).filter((a) => !a.deleted)
+  const labels = cycle.days.map((d) => d.label)
+  const maxIdx = rounds.reduce((m, r) => Math.max(m, r.index), 0)
+  const ts = nowIso()
+  const updates: CycleRound[] = []
+  for (const round of rounds) {
+    const members = roundMembers(cycle, round, entries, assignments)
+    const completed = labels.filter((l) => members.some((m) => m.dayLabel === l))
+    const dates = members.map((m) => m.date).filter(Boolean).sort()
+    const allDone = completed.length === labels.length && labels.length > 0
+    const started_on = dates[0] ?? round.started_on
+    const ended_on = round.skipped
+      ? round.ended_on
+      : round.index === maxIdx
+        ? (allDone ? (dates[dates.length - 1] ?? started_on) : null)
+        : (dates[dates.length - 1] ?? round.ended_on ?? started_on)
+    const changed =
+      started_on !== round.started_on ||
+      ended_on !== round.ended_on ||
+      completed.length !== round.completed_labels.length ||
+      completed.some((l, i) => l !== round.completed_labels[i])
+    if (changed) updates.push({ ...round, started_on, ended_on, completed_labels: completed, updated_at: ts })
+  }
+  if (updates.length > 0) await db.cycle_rounds.bulkPut(updates)
+}
+
+/** Reconcile every cycle a set of entries touches (via cycle_id column or M2M rows).
+ *  Cheap at this app's scale (a handful of cycles) and covers cross-cycle edits. */
+async function reconcileRoundsForEntries(entryIds: string[]): Promise<void> {
+  const cids = new Set<string>()
+  for (const id of entryIds) {
+    const e = await db.workout_entries.get(id)
+    if (e?.cycle_id) cids.add(e.cycle_id)
+    const assigns = await db.entry_cycle_assignments.where('entry_id').equals(id).toArray()
+    for (const a of assigns) if (!a.deleted && a.cycle_id) cids.add(a.cycle_id)
+  }
+  for (const cid of cids) await reconcileCycleRounds(cid)
+}
+
+/** Reconcile all cycles — for edits (date moves, label/cycle changes) where an entry
+ *  may leave one cycle's rounds and its old cycle still needs re-deriving. */
+async function reconcileAllCycles(): Promise<void> {
+  for (const c of await getCycles()) await reconcileCycleRounds(c)
+}
+
 /**
  * Keep an entry's PRIMARY assignment row (id = entry id) in step with its legacy
  * cycle_* columns. Called by every write that changes an entry's cycle target, so
@@ -693,6 +766,9 @@ export async function recordCycleDay(cycle: TrainingCycle, label: string, date: 
   const started = date < open.started_on ? date : open.started_on
   const ended = done ? (date > started ? date : started) : null
   await db.cycle_rounds.put({ ...open, started_on: started, completed_labels: completed, ended_on: ended, updated_at: nowIso() })
+  // Re-derive from live memberships so the stored span/labels match what the UI shows
+  // (and self-correct if this log's round attribution differs from the date-range view).
+  await reconcileCycleRounds(cycle)
 }
 
 /** End the open round early (skip). Returns false when nothing is open. */
@@ -700,55 +776,32 @@ export async function skipCycleRound(cycleId: string): Promise<boolean> {
   const open = await getOpenRound(cycleId)
   if (!open) return false
   await db.cycle_rounds.put({ ...open, ended_on: today(), skipped: true, updated_at: nowIso() })
+  await reconcileCycleRounds(cycleId)
   return true
 }
 
 /** Re-open a closed/skipped round (undo an accidental skip or early close). */
 export async function reopenCycleRound(id: string): Promise<void> {
   const r = await db.cycle_rounds.get(id)
-  if (r) await db.cycle_rounds.put({ ...r, skipped: false, ended_on: null, updated_at: nowIso() })
+  if (!r) return
+  await db.cycle_rounds.put({ ...r, skipped: false, ended_on: null, updated_at: nowIso() })
+  await reconcileCycleRounds(r.cycle_id)
 }
 
 /** Soft-delete a round entirely (e.g. a bogus round from bad dates). */
 export async function deleteCycleRound(id: string): Promise<void> {
   const r = await db.cycle_rounds.get(id)
-  if (r) await db.cycle_rounds.put({ ...r, deleted: true, updated_at: nowIso() })
+  if (!r) return
+  await db.cycle_rounds.put({ ...r, deleted: true, updated_at: nowIso() })
+  // Deleting the latest round promotes the previous one to "latest" — re-derive so its
+  // open/closed state and any orphaned members settle correctly.
+  await reconcileCycleRounds(r.cycle_id)
 }
 
-async function refreshCycleRoundFromAssignments(cycle: TrainingCycle, roundId: string): Promise<void> {
-  const round = await db.cycle_rounds.get(roundId)
-  if (!round || round.deleted) return
-  const labels = cycle.days.map((d) => d.label)
-  // Round membership is the ASSIGNMENT rows pointing at this round (M2M), joined to
-  // their live entries for the date. (Was: entries whose single cycle_round_id
-  // matched — which missed members that belong via a secondary assignment row.)
-  const assigns = (await db.entry_cycle_assignments.where('cycle_round_id').equals(roundId).toArray())
-    .filter((a) => !a.deleted && labels.includes(a.cycle_day_label))
-  const entries = await db.workout_entries.bulkGet([...new Set(assigns.map((a) => a.entry_id))])
-  const liveById = new Map(entries.filter((e): e is WorkoutEntry => !!e && !e.deleted).map((e) => [e.id, e]))
-  const rows = assigns
-    .filter((a) => liveById.has(a.entry_id))
-    .map((a) => ({ date: liveById.get(a.entry_id)!.date, label: a.cycle_day_label }))
-  const dates = rows.map((r) => r.date).sort()
-  const completed = labels.filter((l) => rows.some((r) => r.label === l))
-  const allDone = completed.length === labels.length && labels.length > 0
-  await db.cycle_rounds.put({
-    ...round,
-    started_on: dates[0] ?? round.started_on,
-    ended_on: allDone ? (dates[dates.length - 1] ?? round.ended_on ?? round.started_on) : null,
-    completed_labels: completed,
-    skipped: false,
-    updated_at: nowIso(),
-  })
-}
-
+/** Re-derive every round of a cycle from live memberships. Kept as a named export for
+ *  History's post-edit refresh; delegates to the shared reconcile. */
 export async function refreshCycleRoundsForAssignments(cycle: TrainingCycle): Promise<void> {
-  const ids = new Set(
-    (await db.workout_entries.toArray())
-      .filter((e) => !e.deleted && e.cycle_id === cycle.id && e.cycle_round_id)
-      .map((e) => e.cycle_round_id as string),
-  )
-  for (const id of ids) await refreshCycleRoundFromAssignments(cycle, id)
+  await reconcileCycleRounds(cycle)
 }
 
 export interface CycleEntryAssignment {
@@ -796,7 +849,7 @@ export async function assignEntriesToCycleRound(
       })
     }
   })
-  if (round) await refreshCycleRoundFromAssignments(cycle, round.id)
+  if (round) await reconcileCycleRounds(cycle)
   return round ?? null
 }
 
@@ -862,7 +915,7 @@ export async function assignEntriesToCycleTargets(
       await syncPrimaryAssignment(updated)
     }
   })
-  for (const rid of touched) await refreshCycleRoundFromAssignments(cycle, rid)
+  if (touched.size > 0) await reconcileCycleRounds(cycle)
 }
 
 // One (cycle, round, day) target for an entry. roundId null = a new round in that
@@ -943,11 +996,15 @@ export async function applyEntryCycleAssignments(
       }
     }
   })
-  // Refresh every round that gained or lost a member, across all touched cycles.
+  // Re-derive every cycle that gained or lost a member from live memberships.
+  const touchedCycles = new Set<string>()
   for (const rid of touched) {
     const r = await db.cycle_rounds.get(rid)
-    const cyc = r ? cycleById.get(r.cycle_id) : null
-    if (cyc) await refreshCycleRoundFromAssignments(cyc, rid)
+    if (r) touchedCycles.add(r.cycle_id)
+  }
+  for (const cid of touchedCycles) {
+    const cyc = cycleById.get(cid)
+    if (cyc) await reconcileCycleRounds(cyc)
   }
 }
 
@@ -1464,6 +1521,14 @@ export async function softDeleteEntry(entryId: string): Promise<void> {
     const rows = await db.sets.where('entry_id').equals(entryId).toArray()
     await db.sets.bulkPut(rows.map((s) => ({ ...s, deleted: true, updated_at: ts })))
   })
+  // The removed entry may have been a round's last cover for a day label — re-derive so
+  // completed_labels and the span roll back.
+  await reconcileRoundsForEntries([entryId])
+}
+
+/** EntryPatch keys that can change which round an entry belongs to. */
+function patchTouchesCycle(patch: EntryPatch): boolean {
+  return 'date' in patch || 'cycle_id' in patch || 'cycle_round_id' in patch || 'cycle_day_label' in patch
 }
 
 /** Field-only patch of an entry (does NOT touch its sets). Used by the History
@@ -1477,6 +1542,9 @@ export async function patchEntry(entryId: string, patch: EntryPatch): Promise<vo
   const e = await db.workout_entries.get(entryId)
   if (!e) return
   await db.workout_entries.put({ ...e, ...patch, updated_at: ts })
+  // A date/label/round change can move the entry between rounds (or in/out of a cycle),
+  // so re-derive all cycles — the old one loses it, the new one gains it.
+  if (patchTouchesCycle(patch)) await reconcileAllCycles()
 }
 
 /** Move every workout entry logged on `fromDate` to `toDate` (fix a mis-dated day).
@@ -1486,6 +1554,7 @@ export async function moveDayEntries(fromDate: string, toDate: string): Promise<
   const ts = nowIso()
   const rows = (await db.workout_entries.where('date').equals(fromDate).toArray()).filter((e) => !e.deleted)
   await db.workout_entries.bulkPut(rows.map((e) => ({ ...e, date: toDate, updated_at: ts })))
+  await reconcileRoundsForEntries(rows.map((e) => e.id))
   return rows.length
 }
 
@@ -1499,6 +1568,9 @@ export async function setDayCycleLabel(date: string, label: string | null, cycle
     await db.workout_entries.bulkPut(updated)
     for (const e of updated) await syncPrimaryAssignment(e)
   })
+  // Labels/cycle just changed for a whole day — re-derive all cycles (a cleared label
+  // pulls entries out of their old cycle's rounds).
+  await reconcileAllCycles()
   return rows.length
 }
 
@@ -1558,4 +1630,6 @@ export async function updateEntry(
     }))
     await db.sets.bulkAdd(fresh)
   })
+  // Sets changed don't move an entry, but a date/label/round edit does — re-derive then.
+  if (patchTouchesCycle(patch)) await reconcileAllCycles()
 }
