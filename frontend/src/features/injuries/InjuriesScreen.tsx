@@ -74,7 +74,7 @@ export function InjuriesScreen() {
   return (
     <div className="inj-screen">
       <ActiveInjuryBanner injuries={injuries} lang={lang} />
-      <RehabLoop lang={lang} />
+      <RehabLoop lang={lang} onMutate={reload} />
 
       <div className="inj-head">
         <span className="th-label">Injury log</span>

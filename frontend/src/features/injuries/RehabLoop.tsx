@@ -2,7 +2,7 @@
 // injury it closes the loop: assess symptoms → execute the rehab plan → observe
 // training response → advance the stage. Recovered injuries drop out (archived).
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { addInjuryAssessment, getEntries, getExercises, getInjuries, updateInjury } from '../../db'
+import { addInjuryAssessment, getEntries, getExercises, getInjuries, today, updateInjury } from '../../db'
 import type { Exercise, Injury, InjuryStatus, WorkoutEntry } from '../../supabase/types'
 import type { TranslationTarget } from '../../translation'
 import { exerciseName } from '../log/util'
@@ -15,7 +15,7 @@ import {
 
 const RESPONSE_WINDOW_DAYS = 14
 
-export function RehabLoop({ lang }: { lang: TranslationTarget }) {
+export function RehabLoop({ lang, onMutate }: { lang: TranslationTarget; onMutate?: () => void }) {
   const [injuries, setInjuries] = useState<Injury[]>([])
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [entries, setEntries] = useState<WorkoutEntry[]>([])
@@ -32,6 +32,14 @@ export function RehabLoop({ lang }: { lang: TranslationTarget }) {
     void reload()
   }, [reload])
 
+  // A mutation here also changes the injury the sibling "Injury log" list renders, so
+  // refresh our own data AND notify the parent screen — otherwise the log below stays
+  // stale until a manual reload.
+  const handleChange = useCallback(async () => {
+    await reload()
+    onMutate?.()
+  }, [reload, onMutate])
+
   const active = injuries.filter((i) => i.status !== 'recovered')
   if (loading || active.length === 0) return null
 
@@ -40,7 +48,7 @@ export function RehabLoop({ lang }: { lang: TranslationTarget }) {
       <span className="th-label">{lang === 'zh' ? '康复循环' : 'Rehab loop'}</span>
       <div className="loop-list">
         {active.map((i) => (
-          <InjuryLoopCard key={i.id} injury={i} exercises={exercises} entries={entries} lang={lang} onChange={reload} />
+          <InjuryLoopCard key={i.id} injury={i} exercises={exercises} entries={entries} lang={lang} onChange={handleChange} />
         ))}
       </div>
     </section>
@@ -103,7 +111,15 @@ function InjuryLoopCard({
 
   async function advance() {
     setBusy(true)
-    await updateInjury(injury.id, { status: nextStage(injury.status) })
+    const target = nextStage(injury.status)
+    // Carry the note box into the stage transition so "jump to next stage + why" is
+    // recorded on the checkpoint (shown in the injury-log timeline), not dropped.
+    const checkpoints = [
+      ...injury.checkpoints,
+      { status: target, date: today(), note: note.trim() || undefined },
+    ]
+    await updateInjury(injury.id, { status: target, checkpoints })
+    setNote('')
     setBusy(false)
     onChange()
   }
