@@ -37,7 +37,7 @@ import { cycleDayTitle } from '../cycle/day'
 import { cycleMemberships, liveCompletedLabels, openRound, roundLiveSpan } from '../cycle/rounds'
 import { SportSessionDialog } from '../sports'
 import { INTIMACY_CATEGORIES, intimacyCategory, intimacyLabel, intimacyVisible } from '../intimacy'
-import { exerciseName, primaryCategory } from '../log/util'
+import { exerciseName, primaryCategory, entryModule } from '../log/util'
 import {
   CircuitCard,
   EntryCard,
@@ -630,7 +630,9 @@ function ModuleChooser({
   onClose: () => void
 }) {
   const primary = primaryCategory(exercise)
-  const current = entry.module_part ?? primary
+  // Show the effective module (a stale override outside the exercise's parts is ignored),
+  // so the picker highlights what History actually groups this entry under.
+  const current = entryModule(entry, exercise)
   async function pick(p: string) {
     await patchEntry(entry.id, { module_part: p === primary ? null : p })
     onClose()
@@ -708,7 +710,13 @@ function CycleAssignDialog({
     })),
   )
   const [modules, setModules] = useState<Record<string, BodyPart | ''>>(() =>
-    Object.fromEntries(items.map((e) => [e.id, (e.module_part ?? '') as BodyPart | ''])),
+    Object.fromEntries(items.map((e) => {
+      // Only pre-fill a valid override; a stale one (part the exercise doesn't train)
+      // shows as "default" so saving clears it instead of re-persisting the bad value.
+      const ex = exById[e.exercise_id]
+      const valid = ex && e.module_part && ex.body_parts.includes(e.module_part)
+      return [e.id, (valid ? e.module_part : '') as BodyPart | '']
+    })),
   )
 
   const addTarget = (eid: string) =>

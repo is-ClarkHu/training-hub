@@ -1,6 +1,6 @@
 import type { NewSetInput } from '../../db'
 import type { ParsedNote, TranslationTarget } from '../../translation'
-import type { BodyPart, Exercise, ExerciseSet, MeasureType, SetType, SubSet } from '../../supabase/types'
+import type { BodyPart, Exercise, ExerciseSet, MeasureType, SetType, SubSet, WorkoutEntry } from '../../supabase/types'
 
 /** One sub-set's editable strings (weight×reps or duration). */
 export interface SubDraft {
@@ -223,6 +223,16 @@ export function setToDraft(s: ExerciseSet, hm = false): SetDraft {
  *  source for "主分类" so History mode-2 and any future grouping agree. */
 export function primaryCategory(ex: Exercise): BodyPart | null {
   return ex.body_parts[0] ?? null
+}
+
+/** The muscle group an entry files under for History grouping/labels. Honours the
+ *  per-occurrence `module_part` override ONLY when it's actually one of the exercise's
+ *  own body parts; a stale/contradictory override (e.g. a legacy 'chest' left on a
+ *  legs-only lift by pre-M2M code) is ignored and the exercise's primary category wins.
+ *  Single source so grouped view, circuit labels, export, and the chip picker agree. */
+export function entryModule(entry: Pick<WorkoutEntry, 'module_part'>, ex: Exercise | undefined): BodyPart | null {
+  if (ex && entry.module_part && ex.body_parts.includes(entry.module_part)) return entry.module_part
+  return ex ? primaryCategory(ex) : null
 }
 
 /** Legacy notes migrated from the old sheet sometimes carry a leading weight-unit

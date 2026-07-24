@@ -9,6 +9,7 @@ import {
   type WorkoutEntry,
 } from '../../supabase/types'
 import { categoryKeys, isMuscleCategory } from '../../categories'
+import { entryModule } from '../log/util'
 
 export function daysSince(date: string): number {
   const start = new Date(`${date}T00:00:00`)
@@ -56,7 +57,7 @@ export function bodyPartCounts(entries: WorkoutEntry[], exById: Record<string, E
   for (const e of entries) {
     const ex = exById[e.exercise_id]
     if (!ex) continue
-    const part = e.module_part ?? ex.body_parts[0]
+    const part = entryModule(e, ex)
     const i = part ? keys.indexOf(part) : -1
     if (i >= 0) counts[i] += 1
   }

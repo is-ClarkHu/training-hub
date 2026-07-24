@@ -18,7 +18,7 @@ import {
   formatHours,
   formatMetrics,
   formatSetLine,
-  primaryCategory,
+  entryModule,
 } from '../log/util'
 import { EditEntryDialog } from './EditEntryDialog'
 
@@ -39,7 +39,7 @@ export function groupByModule(
   const groups = new Map<string, WorkoutEntry[]>()
   for (const e of items) {
     const ex = exById[e.exercise_id]
-    const key = e.module_part ?? (ex ? primaryCategory(ex) : null) ?? '__none'
+    const key = entryModule(e, ex) ?? '__none'
     const arr = groups.get(key)
     if (arr) arr.push(e)
     else groups.set(key, [e])
@@ -184,7 +184,7 @@ export function CircuitCard({
   const parts = [
     ...new Set(
       members
-        .map((e) => e.module_part ?? (exById[e.exercise_id] ? primaryCategory(exById[e.exercise_id]) : null))
+        .map((e) => entryModule(e, exById[e.exercise_id]))
         .filter((p): p is string => !!p),
     ),
   ]
