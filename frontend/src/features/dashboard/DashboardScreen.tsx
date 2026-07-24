@@ -167,8 +167,31 @@ export function DashboardScreen() {
       }
       body[region] = { sets: a.sets, items: [...byEx.values()].sort((x, y) => y.sets - x.sets) }
     }
+    // Fold intimacy into the genitals region for this round's date window — the same as
+    // CycleScreen's body view, so the round modal doesn't read 0 with adult mode on.
+    // Bound by the round's live span (open round → no upper bound).
+    if (showIntimacy) {
+      const lo = modalRound.first ?? modalRound.round.started_on
+      const hi = modalRound.round.ended_on == null ? '9999-12-31' : (modalRound.last ?? modalRound.round.ended_on)
+      const rows = intimacyRows.filter((r) => r.date >= lo && r.date <= hi)
+      const total = rows.reduce((s, r) => s + r.count, 0)
+      if (total > 0) {
+        const byCat = new Map<string, { name: string; sets: number; date: string | null }>()
+        for (const row of rows) {
+          const cat = intimacyCategory(row)
+          const cur = byCat.get(cat) ?? { name: intimacyLabel(cat, lang, true), sets: 0, date: null as string | null }
+          cur.sets += row.count
+          if (!cur.date || row.date > cur.date) cur.date = row.date
+          byCat.set(cat, cur)
+        }
+        body.genitals = {
+          sets: total,
+          items: [...byCat.values()].map((it) => ({ name: it.name, sets: it.sets, day: null, date: it.date })),
+        }
+      }
+    }
     return body
-  }, [activeCycle, modalRound, entries, setCount, exById, lang, assignments])
+  }, [activeCycle, modalRound, entries, setCount, exById, lang, assignments, showIntimacy, intimacyRows])
   const recovery = useMemo(() => muscleRecovery(entries, exById), [entries, exById])
   const bpCounts = useMemo(() => bodyPartCounts(entries, exById), [entries, exById])
   const stCounts = useMemo(() => setTypeCounts(allSets), [allSets])
