@@ -46,6 +46,7 @@ export function AddExerciseDialog({
   const [measureType, setMeasureType] = useState<MeasureType>('weight_reps')
   const [durationHm, setDurationHm] = useState(false)
   const [bodyweight, setBodyweight] = useState(false)
+  const [assisted, setAssisted] = useState(false)
   const [busy, setBusy] = useState(false)
   const [hint, setHint] = useState<string | null>(null)
 
@@ -83,6 +84,7 @@ export function AddExerciseDialog({
       measure_type: measureType,
       duration_hm: durationHm,
       bodyweight,
+      assisted: measureType === 'weight_reps' ? assisted : false,
       is_custom: true,
       needs_translation: !zh || !en,
     }))
@@ -141,6 +143,12 @@ export function AddExerciseDialog({
             <option value="bodyweight">{lang === 'zh' ? '徒手健身' : 'Bodyweight'}</option>
           </select>
         </div>
+        {measureType === 'weight_reps' && (
+          <label className="log-perside">
+            <input type="checkbox" checked={assisted} onChange={(e) => setAssisted(e.target.checked)} />
+            {lang === 'zh' ? '助力器械（重量越小越强，如助力引体）' : 'Assisted (less weight = stronger, e.g. assisted pull-up)'}
+          </label>
+        )}
         {measureType === 'duration' && (
           <div className="log-field">
             <label className="th-label">{lang === 'zh' ? '时长格式' : 'Duration format'}</label>

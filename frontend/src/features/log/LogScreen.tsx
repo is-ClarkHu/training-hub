@@ -15,6 +15,7 @@ import {
   getSetsByEntryIds,
   getSports,
   getSportSessions,
+  getExerciseHistory,
   getTrackerEntries,
   logTracker,
   newId,
@@ -47,7 +48,7 @@ import { AddInjuryDialog, bodyAreaLabel } from '../injuries'
 import { ExercisePicker } from './ExercisePicker'
 import { SetEditor } from './SetEditor'
 import { AddExerciseDialog } from './AddExerciseDialog'
-import { draftsToSetInputs, emptySet, exerciseName, formatMetrics, formatSetLine, parseHours, formatHours, toNumber, type SetDraft } from './util'
+import { draftsToSetInputs, emptySet, exerciseName, exerciseSummary, formatMetrics, formatSetLine, formatSubSet, parseHours, formatHours, toNumber, type ExerciseSummary, type SetDraft } from './util'
 import './log.css'
 
 type Selection =
@@ -76,6 +77,7 @@ export function LogScreen() {
 
   // exercise form
   const [sets, setSets] = useState<SetDraft[]>([emptySet()])
+  const [exSummary, setExSummary] = useState<ExerciseSummary | null>(null)
   const [injuryMod, setInjuryMod] = useState<InjuryModified | 'none'>('none')
   const [injuryId, setInjuryId] = useState('')
   const [injuryDialog, setInjuryDialog] = useState(false)
@@ -193,6 +195,19 @@ export function LogScreen() {
     setDialog({ open: false, name: '' })
     selectExercise(ex)
   }
+
+  // PR + last-session line for the open exercise. Recomputes when the exercise or the
+  // log date changes, and after a save (logged) so a just-logged set folds in.
+  useEffect(() => {
+    if (sel?.kind !== 'exercise') { setExSummary(null); return }
+    const ex = sel.ex
+    let cancelled = false
+    void (async () => {
+      const history = await getExerciseHistory(ex.id)
+      if (!cancelled) setExSummary(exerciseSummary(history, ex.measure_type, ex.assisted, date))
+    })()
+    return () => { cancelled = true }
+  }, [sel, date, logged])
 
   // Log → injury one-step: register a new injury here and auto-link it to the
   // exercise being logged (defaults the impact to "reduced"). Fresh injuries are
@@ -462,6 +477,26 @@ export function LogScreen() {
           </div>
 
           {sel.ex.is_rehab && <RehabKnowledge ex={sel.ex} lang={lang} />}
+
+          {exSummary && (exSummary.best || exSummary.last) && (
+            <div className="log-hist">
+              {exSummary.best && (
+                <span className="log-hist-item">
+                  <b>{lang === 'zh' ? (sel.ex.assisted ? '最佳(助力最少)' : '最好') : 'PR'}</b>{' '}
+                  {formatSubSet(exSummary.best, sel.ex.measure_type, lang, sel.ex.duration_hm)}
+                  {exSummary.best.perSide ? (lang === 'zh' ? '/侧' : '/side') : ''}
+                  <span className="log-hist-date"> · {exSummary.best.date.slice(5)}</span>
+                </span>
+              )}
+              {exSummary.last && (
+                <span className="log-hist-item">
+                  <b>{lang === 'zh' ? '上次' : 'last'}</b>{' '}
+                  <span className="log-hist-date">{exSummary.last.date.slice(5)}</span>{' · '}
+                  {exSummary.last.sets.map((s) => formatSetLine(s, sel.ex.measure_type, lang, sel.ex.duration_hm)).join(' · ')}
+                </span>
+              )}
+            </div>
+          )}
 
           <SetEditor lang={lang} measureType={sel.ex.measure_type} durationHm={sel.ex.duration_hm} cardio={sel.ex.body_parts.includes('cardio')} sets={sets} onChange={setSets} />
 

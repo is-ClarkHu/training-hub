@@ -1512,6 +1512,17 @@ export async function getSetsByEntryIds(ids: string[]): Promise<Record<string, E
   return map
 }
 
+/** Per-day logged history for one exercise (newest handling is up to the caller) —
+ *  used by the Log dialog's PR + last-session line. Skips days with no live sets. */
+export async function getExerciseHistory(exerciseId: string): Promise<{ date: string; sets: ExerciseSet[] }[]> {
+  const entries = (await db.workout_entries.where('exercise_id').equals(exerciseId).toArray()).filter((e) => !e.deleted)
+  if (entries.length === 0) return []
+  const setsMap = await getSetsByEntryIds(entries.map((e) => e.id))
+  return entries
+    .map((e) => ({ date: e.date, sets: setsMap[e.id] ?? [] }))
+    .filter((d) => d.sets.length > 0)
+}
+
 /** Soft-delete an entry and its sets (tombstones for sync, §3). */
 export async function softDeleteEntry(entryId: string): Promise<void> {
   const ts = nowIso()

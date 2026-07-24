@@ -11,6 +11,7 @@ export {
   createEntryWithSets,
   getEntries,
   getSetsByEntryIds,
+  getExerciseHistory,
   softDeleteEntry,
   updateEntry,
   patchEntry,

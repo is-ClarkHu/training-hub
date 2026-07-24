@@ -28,6 +28,19 @@
 .log-round-badge { font-weight: 700; color: var(--teal); }
 .log-round-pick { margin-left: auto; }
 
+/* PR + last-session line in the exercise log modal */
+.log-hist {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 8px 12px; margin: 4px 0;
+  background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px;
+  font: 12px/1.4 var(--mono); color: var(--text);
+}
+.log-hist-item b {
+  font-weight: 700; color: var(--accent);
+  margin-right: 4px;
+}
+.log-hist-date { color: var(--text-dim); }
+
 .log-field { display: flex; flex-direction: column; }
 .log-row { display: flex; gap: 8px; }
 .log-row .th-input { flex: 1; }

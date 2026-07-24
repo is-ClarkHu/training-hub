@@ -39,6 +39,7 @@ export function EditExerciseDialog({
     setBodyParts((ps) => (ps.includes(k) ? ps.filter((p) => p !== k) : [...ps, k]))
   const [measureType, setMeasureType] = useState<MeasureType>(exercise.measure_type)
   const [perSide, setPerSide] = useState(exercise.default_per_side ?? false)
+  const [assisted, setAssisted] = useState(exercise.assisted ?? false)
   const [durationHm, setDurationHm] = useState(exercise.duration_hm ?? false)
   const [bodyweight, setBodyweight] = useState(exerciseKind(exercise) === 'bodyweight')
   const [mergeTarget, setMergeTarget] = useState('')
@@ -77,6 +78,7 @@ export function EditExerciseDialog({
       body_parts: bodyParts,
       measure_type: measureType,
       default_per_side: perSide,
+      assisted: measureType === 'weight_reps' ? assisted : false,
       duration_hm: durationHm,
       bodyweight,
       name_locked: true,
@@ -159,6 +161,13 @@ export function EditExerciseDialog({
           <input type="checkbox" checked={perSide} onChange={(e) => setPerSide(e.target.checked)} />
           {lang === 'zh' ? '默认每侧记录（录入时自动勾选）' : 'Per-side by default'}
         </label>
+
+        {measureType === 'weight_reps' && (
+          <label className="log-perside">
+            <input type="checkbox" checked={assisted} onChange={(e) => setAssisted(e.target.checked)} />
+            {lang === 'zh' ? '助力器械（重量越小越强，如助力引体）' : 'Assisted (less weight = stronger, e.g. assisted pull-up)'}
+          </label>
+        )}
 
         <div className="log-field">
           <label className="th-label">{lang === 'zh' ? '合并到(它们其实是同一个动作)' : 'Merge into (same exercise)'}</label>

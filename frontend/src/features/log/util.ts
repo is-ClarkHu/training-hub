@@ -281,3 +281,68 @@ export function formatSetLine(s: ExerciseSet, mt: MeasureType, lang: Translation
   const parts = [formatSubSet(s, mt, lang, hm), ...(s.sub_sets ?? []).map((v) => formatSubSet(v, mt, lang, hm))]
   return parts.join(' / ') + (s.per_side ? (lang === 'zh' ? '/侧' : '/side') : '') + formatMetrics(s)
 }
+
+type SubValue = { weight: number | null; reps: number | null; duration_sec: number | null }
+
+/** A single logged day of an exercise. */
+export interface ExerciseDay {
+  date: string
+  sets: ExerciseSet[]
+}
+
+export interface ExerciseSummary {
+  /** The all-time best single (sub-)set + the day it happened. */
+  best: { weight: number | null; reps: number | null; duration_sec: number | null; perSide: boolean; date: string } | null
+  /** The most recent day strictly BEFORE `beforeDate` this exercise was done. */
+  last: ExerciseDay | null
+}
+
+/**
+ * Personal best + last session for an exercise, from its logged history.
+ *
+ * The "best" ranks by the exercise's own metric: duration → longest; reps_only →
+ * most reps; weight_reps → heaviest × reps. For an ASSISTED movement (assisted
+ * pull-up/dip, `ex.assisted`) LESS weight is harder, so weight sorts the other way —
+ * the least assistance wins. Ties break on reps. Dropset sub-sets are considered too,
+ * so a heavy top of a dropset can hold the record.
+ */
+export function exerciseSummary(
+  history: ExerciseDay[],
+  mt: MeasureType,
+  assisted: boolean,
+  beforeDate: string,
+): ExerciseSummary {
+  const empty = (v: SubValue): boolean =>
+    mt === 'duration' ? v.duration_sec == null : mt === 'reps_only' ? v.reps == null : v.weight == null && v.reps == null
+  // is `a` a strictly better record than `b`?
+  const better = (a: SubValue, b: SubValue): boolean => {
+    if (mt === 'duration') return (a.duration_sec ?? -1) > (b.duration_sec ?? -1)
+    if (mt === 'reps_only') return (a.reps ?? -1) > (b.reps ?? -1)
+    const wa = a.weight, wb = b.weight
+    if (wa == null && wb == null) return (a.reps ?? -1) > (b.reps ?? -1)
+    if (wa == null) return false
+    if (wb == null) return true
+    if (wa !== wb) return assisted ? wa < wb : wa > wb
+    return (a.reps ?? -1) > (b.reps ?? -1)
+  }
+
+  let best: ExerciseSummary['best'] = null
+  for (const day of history) {
+    for (const s of day.sets) {
+      const subs: SubValue[] = [{ weight: s.weight, reps: s.reps, duration_sec: s.duration_sec }, ...(s.sub_sets ?? [])]
+      for (const sub of subs) {
+        if (empty(sub)) continue
+        if (!best || better(sub, best)) best = { ...sub, perSide: s.per_side, date: day.date }
+      }
+    }
+  }
+
+  const prior = history.filter((d) => d.date < beforeDate && d.sets.length > 0)
+  let last: ExerciseDay | null = null
+  if (prior.length > 0) {
+    const maxDate = prior.reduce((m, d) => (d.date > m ? d.date : m), prior[0].date)
+    const sets = prior.filter((d) => d.date === maxDate).flatMap((d) => d.sets).sort((a, b) => a.set_index - b.set_index)
+    last = { date: maxDate, sets }
+  }
+  return { best, last }
+}
