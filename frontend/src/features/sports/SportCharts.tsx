@@ -12,7 +12,7 @@ import {
 import { Doughnut, Bar } from 'react-chartjs-2'
 import type { Sport, SportSession } from '../../supabase/types'
 import type { TranslationTarget } from '../../translation'
-import { hoursByField, weeklyHours, attrLabel, fieldLabel, TIER_COLORS } from './util'
+import { hoursByField, weeklyHoursCount, attrLabel, fieldLabel, TIER_COLORS } from './util'
 import './sports.css'
 
 Chart.register(ArcElement, BarElement, CategoryScale, LinearScale, Tooltip, Legend)
@@ -35,7 +35,7 @@ export function SportCharts({
     return <p className="sport-empty">No sessions yet for this sport.</p>
   }
 
-  const weekly = weeklyHours(sessions)
+  const weekly = weeklyHoursCount(sessions)
   // Group hours by the sport's first select field (e.g. frisbee level), if any.
   const selectField = sport.fields?.find((f) => f.type === 'select')
   const byField = selectField ? hoursByField(sessions, selectField) : null
@@ -51,22 +51,38 @@ export function SportCharts({
                 labels: byField.labels.map((v) => attrLabel(selectField, v, lang)),
                 datasets: [{ data: byField.data, backgroundColor: TIER_COLORS, borderColor: 'transparent', borderWidth: 2 }],
               }}
-              options={{ plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, padding: 10 } } } }}
+              options={{ plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, padding: 10 } }, tooltip: { callbacks: { label: (ctx) => `${ctx.label}: ${Math.round((ctx.parsed as number) * 10) / 10}${lang === 'zh' ? ' 小时' : ' h'}` } } } }}
             />
           </div>
         </div>
       )}
 
       <div className="sport-chart">
-        <span className="th-label">{lang === 'zh' ? '每周时长' : 'Weekly hours'}</span>
+        <span className="th-label">{lang === 'zh' ? '每周时长 / 次数' : 'Weekly hours / count'}</span>
         <div className="dash-cbox">
           <Bar
-            data={{ labels: weekly.labels, datasets: [{ data: weekly.data, backgroundColor: '#8ab4f8', borderRadius: 4 }] }}
+            data={{
+              labels: weekly.labels,
+              datasets: [
+                { label: lang === 'zh' ? '时长(h)' : 'hours', data: weekly.hours, backgroundColor: '#8ab4f8', borderRadius: 4 },
+                { label: lang === 'zh' ? '次数' : 'sessions', data: weekly.count, backgroundColor: '#7dd3a0', borderRadius: 4 },
+              ],
+            }}
             options={{
-              plugins: { legend: { display: false } },
+              plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 12, padding: 10 } },
+                tooltip: {
+                  callbacks: {
+                    label: (ctx) => {
+                      const unit = ctx.datasetIndex === 0 ? (lang === 'zh' ? ' 小时' : ' h') : (lang === 'zh' ? ' 次' : ' sessions')
+                      return `${ctx.dataset.label}: ${ctx.parsed.y}${unit}`
+                    },
+                  },
+                },
+              },
               scales: {
                 x: { grid: { color: GRID }, ticks: { maxRotation: 0 } },
-                y: { grid: { color: GRID }, beginAtZero: true },
+                y: { grid: { color: GRID }, beginAtZero: true, ticks: { precision: 0 } },
               },
             }}
           />

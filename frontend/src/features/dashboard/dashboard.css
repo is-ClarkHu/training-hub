@@ -29,8 +29,12 @@
 
 /* recovery chips */
 .dash-recovery { display: flex; flex-direction: column; gap: 10px; }
-.dash-rec-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 10px; }
+/* Fixed-width tiles that wrap and stay CENTERED as a group (not piled left), so a
+ * short last row sits in the middle instead of hugging the edge. Height unchanged —
+ * only the width is fixed so rows read evenly. */
+.dash-rec-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
 .dash-rec {
+  width: 96px; flex: 0 0 auto;
   display: flex; flex-direction: column; gap: 3px; align-items: center;
   padding: 12px;
   background: linear-gradient(165deg, var(--panel2), var(--bg-panel));
@@ -44,6 +48,15 @@
 .dash-rec strong { font: 34px/1 var(--display); color: var(--text-bright); letter-spacing: 1px; }
 .dash-rec.overdue { border-color: rgba(245, 181, 68, 0.55); }
 .dash-rec.overdue strong { color: var(--amber); }
+.dash-rec.sport span { color: var(--teal); }
+
+.dash-analysis { display: flex; flex-direction: column; gap: 10px; }
+.dash-prog-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.dash-prog-toggle {
+  display: inline-flex; align-items: center; gap: 5px;
+  font: 12px/1 var(--mono); color: var(--text-dim); cursor: pointer;
+}
+.dash-prog-toggle input { accent-color: var(--accent); }
 
 /* chart cards (mirrors .card) */
 .dash-charts { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }

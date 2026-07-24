@@ -32,6 +32,25 @@ function mondayOf(d: Date): Date {
 }
 
 /** Total hours per ISO week for the last `weeks` weeks (oldest → newest). */
+/** Weekly hours AND session count, aligned to the same week labels (oldest → newest). */
+export function weeklyHoursCount(sessions: SportSession[], weeks = 8): { labels: string[]; hours: number[]; count: number[] } {
+  const thisMon = mondayOf(new Date())
+  const hours = new Array<number>(weeks).fill(0)
+  const count = new Array<number>(weeks).fill(0)
+  const labels: string[] = []
+  for (let i = 0; i < weeks; i++) {
+    const d = new Date(thisMon)
+    d.setDate(thisMon.getDate() - (weeks - 1 - i) * 7)
+    labels.push(`${d.getMonth() + 1}/${d.getDate()}`)
+  }
+  for (const s of sessions) {
+    const sm = mondayOf(new Date(`${s.date}T00:00:00`))
+    const idx = weeks - 1 - Math.round((thisMon.getTime() - sm.getTime()) / (7 * 86_400_000))
+    if (idx >= 0 && idx < weeks) { hours[idx] += s.hours; count[idx] += 1 }
+  }
+  return { labels, hours, count }
+}
+
 export function weeklyHours(sessions: SportSession[], weeks = 8): { labels: string[]; data: number[] } {
   const thisMon = mondayOf(new Date())
   const data = new Array<number>(weeks).fill(0)

@@ -9,7 +9,7 @@ import {
   type WorkoutEntry,
 } from '../../supabase/types'
 import { categoryKeys, isMuscleCategory } from '../../categories'
-import { entryModule } from '../log/util'
+import { entryModule, exerciseKind } from '../log/util'
 
 export function daysSince(date: string): number {
   const start = new Date(`${date}T00:00:00`)
@@ -67,6 +67,54 @@ export function bodyPartCounts(entries: WorkoutEntry[], exById: Record<string, E
 const SET_TYPES: SetType[] = ['normal', 'warmup', 'superset', 'dropset']
 export function setTypeCounts(sets: ExerciseSet[]): { labels: SetType[]; data: number[] } {
   return { labels: SET_TYPES, data: SET_TYPES.map((t) => sets.filter((s) => s.set_type === t).length) }
+}
+
+export type ActivityKey = 'gym' | 'bodyweight' | 'sport'
+export interface ActivityMonthly {
+  months: string[]                       // 'YYYY-MM', oldest → newest
+  count: Record<ActivityKey, number[]>   // sessions per month (one value per month)
+  volume: Record<ActivityKey, number[]>  // gym/bodyweight = working sets; sport = hours
+}
+
+/**
+ * Per-activity monthly breakdown for the activity chart: how many sessions (count) and
+ * how much volume (working sets for lifting; HOURS for sport, which has no sets) each
+ * of gym / bodyweight / sport got, split by calendar month. Feeds a stacked-by-month
+ * horizontal bar — strictly more information than the old kind pie.
+ */
+export function activityByMonth(
+  entries: WorkoutEntry[],
+  sessions: { date: string; hours: number }[],
+  exById: Record<string, Exercise>,
+  setCountOf: (id: string) => number,
+  monthsBack = 6,
+): ActivityMonthly {
+  const now = new Date()
+  const months: string[] = []
+  for (let i = monthsBack - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+  }
+  const idxOf = (date: string): number => months.indexOf(date.slice(0, 7))
+  const zeros = (): number[] => new Array(monthsBack).fill(0)
+  const count: Record<ActivityKey, number[]> = { gym: zeros(), bodyweight: zeros(), sport: zeros() }
+  const volume: Record<ActivityKey, number[]> = { gym: zeros(), bodyweight: zeros(), sport: zeros() }
+  for (const e of entries) {
+    const ex = exById[e.exercise_id]
+    if (!ex) continue
+    const i = idxOf(e.date)
+    if (i < 0) continue
+    const k: ActivityKey = exerciseKind(ex) === 'gym' ? 'gym' : 'bodyweight'
+    count[k][i] += 1
+    volume[k][i] += setCountOf(e.id)
+  }
+  for (const s of sessions) {
+    const i = idxOf(s.date)
+    if (i < 0) continue
+    count.sport[i] += 1
+    volume.sport[i] += s.hours
+  }
+  return { months, count, volume }
 }
 
 /** Entries per week for the last `weeks` weeks (oldest → newest). */

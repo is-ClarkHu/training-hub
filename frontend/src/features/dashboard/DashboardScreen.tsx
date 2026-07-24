@@ -33,7 +33,7 @@ import type { CycleRound, EntryCycleAssignment, TrainingCycle } from '../../supa
 import { ActiveInjuryBanner, bodyAreaLabel } from '../injuries'
 import { INJURY_STATUS_LABELS, daysBetween, daysSince } from '../injuries/util'
 import { SportCharts, sportName } from '../sports'
-import { ACTIVITY_COLORS, ACTIVITY_LABEL, exerciseKind, exerciseName, sortExercises } from '../log/util'
+import { ACTIVITY_LABEL, exerciseKind, exerciseName, sortExercises } from '../log/util'
 import {
   INTIMACY_CATEGORIES,
   INTIMACY_COLORS,
@@ -42,13 +42,14 @@ import {
   intimacyVisible,
 } from '../intimacy'
 import {
+  activityByMonth,
   bodyPartCounts,
   bodyweightVolume,
   intensityHeatmap,
   muscleRecovery,
-  setTypeCounts,
   totalBodyweightReps,
   weeklyEntryVolume,
+  type ActivityKey,
   type HeatCell,
 } from './stats'
 import './dashboard.css'
@@ -60,6 +61,9 @@ Chart.defaults.font.size = 11
 Chart.defaults.maintainAspectRatio = false
 const GRID = 'rgba(120, 130, 150, 0.15)'
 const TINTS = ['#8ab4f8', '#4fd1e0', '#7dd3a0', '#a78bfa', '#ff8a5c', '#f5b544', '#f472b6']
+// Sequential blue ramp for "by month" stacks — light = oldest, dark = most recent, so
+// the segments read as time (not a rainbow). Sliced to the number of months shown.
+const MONTH_RAMP = ['#dbe7fb', '#b3ccf6', '#8ab0f1', '#6295ec', '#3b78dd', '#265fbf']
 // intensity ramp 0–4: green (easy) → amber → red (hard) — less overall amber
 const HEAT = ['var(--panelhi)', 'rgba(125,211,160,.38)', 'rgba(125,211,160,.7)', 'rgba(245,181,68,.85)', '#ff5d6c']
 // Intimacy heart shade deepens with the day's total count (1 → light, 4+ → deep).
@@ -88,6 +92,10 @@ export function DashboardScreen() {
   const [intimacyRows, setIntimacyRows] = useState<OptionalTracker[]>([])
   const [showIntimacy, setShowIntimacy] = useState(false)
   const [progCategory, setProgCategory] = useState('')
+  const [progShowGym, setProgShowGym] = useState(true)
+  const [progShowBodyweight, setProgShowBodyweight] = useState(true)
+  const [actShowCount, setActShowCount] = useState(true)
+  const [actShowVolume, setActShowVolume] = useState(true)
   const [sportId, setSportId] = useState('')
   const [activeCycle, setActiveCycle] = useState<TrainingCycle | null>(null)
   const [cycleRounds, setCycleRounds] = useState<CycleRound[]>([])
@@ -193,19 +201,58 @@ export function DashboardScreen() {
     return body
   }, [activeCycle, modalRound, entries, setCount, exById, lang, assignments, showIntimacy, intimacyRows])
   const recovery = useMemo(() => muscleRecovery(entries, exById), [entries, exById])
+  // Days since each sport was last done — appended to the muscle-recovery grid so the
+  // dashboard mirrors the Cycle panel. Maps over `sports`, so a newly added sport shows
+  // up automatically.
+  const sportRecovery = useMemo(
+    () =>
+      sports.map((s) => {
+        const last = sessions
+          .filter((ss) => ss.sport_id === s.id)
+          .reduce<string | null>((m, ss) => (!m || ss.date > m ? ss.date : m), null)
+        return { id: s.id, name: sportName(s, lang), daysAgo: last ? daysSince(last) : null }
+      }),
+    [sports, sessions, lang],
+  )
   const bpCounts = useMemo(() => bodyPartCounts(entries, exById), [entries, exById])
-  const stCounts = useMemo(() => setTypeCounts(allSets), [allSets])
-  // Activity-kind split: gym vs bodyweight (from entries) + sport sessions.
-  const kindCounts = useMemo(() => {
-    let gym = 0, bw = 0
-    for (const e of entries) {
-      const ex = exById[e.exercise_id]
-      if (!ex) continue
-      if (exerciseKind(ex) === 'gym') gym++
-      else bw++
-    }
-    return { gym, bodyweight: bw, sport: sessions.length }
-  }, [entries, exById, sessions])
+  // Body-part distribution with biceps/triceps FOLDED into 手臂/Arms (they're subsets of
+  // it, so a separate slice each just double-reads the same arm work).
+  const bpDist = useMemo(() => {
+    const cats = getCategories()
+    const idxOf = (k: string) => cats.findIndex((c) => c.key === k)
+    const extra = [idxOf('biceps'), idxOf('triceps')].reduce((s, i) => s + (i >= 0 ? bpCounts[i] : 0), 0)
+    const labels: string[] = []
+    const data: number[] = []
+    cats.forEach((c, i) => {
+      if (c.key === 'biceps' || c.key === 'triceps') return
+      labels.push(categoryLabel(c.key, lang))
+      data.push(c.key === 'arms' ? bpCounts[i] + extra : bpCounts[i])
+    })
+    return { labels, data }
+  }, [bpCounts, lang])
+  // Per-activity monthly count + volume for the activity bar chart.
+  const activityMonthly = useMemo(
+    () => activityByMonth(entries, sessions, exById, setCount, 6),
+    [entries, sessions, exById, setCount],
+  )
+  // Horizontal chart: 3 activities on the y-axis, each with a "count" bar and a
+  // "volume" bar (separate stack ids → side by side), every bar stacked by month via
+  // the blue ramp. Replaces the old kind pie — same categories, far more detail.
+  const activityBars = useMemo(() => {
+    const { months, count, volume } = activityMonthly
+    const n = months.length
+    const shadeAt = (i: number) => MONTH_RAMP[Math.max(0, MONTH_RAMP.length - n) + i] ?? MONTH_RAMP[MONTH_RAMP.length - 1]
+    const mLabel = (m: string) => (lang === 'zh' ? `${Number(m.slice(5, 7))}月` : `${Number(m.slice(5, 7))}/`)
+    const keys: ActivityKey[] = ['gym', 'bodyweight', 'sport']
+    // `_mi` (month index) + `stack` let the tooltip pull the whole month's cross-section.
+    const countSets = actShowCount
+      ? months.map((m, i) => ({ label: mLabel(m), stack: 'count', _mi: i, data: keys.map((k) => count[k][i]), backgroundColor: shadeAt(i), borderWidth: 0 }))
+      : []
+    const volSets = actShowVolume
+      ? months.map((m, i) => ({ label: mLabel(m), stack: 'volume', _mi: i, data: keys.map((k) => volume[k][i]), backgroundColor: shadeAt(i), borderWidth: 0 }))
+      : []
+    return { labels: keys.map((k) => ACTIVITY_LABEL[k][lang]), datasets: [...countSets, ...volSets], monthCount: n, months, count, volume, keys }
+  }, [activityMonthly, lang, actShowCount, actShowVolume])
   const weekly = useMemo(() => weeklyEntryVolume(entries), [entries])
   const heat = useMemo(() => intensityHeatmap(entries, sessions, setCount, showIntimacy ? intimacyRows : []), [entries, sessions, setCount, intimacyRows, showIntimacy])
   // per-date detail for the heatmap tooltip
@@ -328,6 +375,9 @@ export function DashboardScreen() {
     }> = []
     let colorIdx = 0
     for (const ex of categoryExercises) {
+      // Gym / bodyweight visibility toggles.
+      const gym = exerciseKind(ex) === 'gym'
+      if ((gym && !progShowGym) || (!gym && !progShowBodyweight)) continue
       const exEntries = entries.filter((e) => e.exercise_id === ex.id).sort((a, b) => (a.date < b.date ? -1 : 1))
       const byDate = new Map<string, { primary: number | null; secondary: number | null; note: string }>()
       for (const e of exEntries) {
@@ -376,7 +426,7 @@ export function DashboardScreen() {
       }
     }
     return datasets.length ? { labels: dates.map((d) => d.slice(5)), dates, datasets, exerciseCount: datasets.length } : null
-  }, [selectedProgCategory, exById, entries, setMap, lang, categories])
+  }, [selectedProgCategory, exById, entries, setMap, lang, categories, progShowGym, progShowBodyweight])
 
   const selectedSport = sports.find((s) => s.id === sportId) ?? null
   const sportSessionsFor = sessions.filter((s) => s.sport_id === sportId)
@@ -486,6 +536,12 @@ export function DashboardScreen() {
               <strong>{r.daysAgo == null ? '—' : `${r.daysAgo}d`}</strong>
             </div>
           ))}
+          {sportRecovery.map((s) => (
+            <div key={s.id} className={`dash-rec sport ${s.daysAgo != null && s.daysAgo >= 7 ? 'overdue' : ''}`}>
+              <span>🏃 {s.name}</span>
+              <strong>{s.daysAgo == null ? '—' : `${s.daysAgo}d`}</strong>
+            </div>
+          ))}
         </div>
       </section>
 
@@ -523,19 +579,21 @@ export function DashboardScreen() {
         </section>
       )}
 
-      <div className="dash-charts">
+      <section className="dash-analysis">
+        <div className="th-sectitle">{lang === 'zh' ? '训练分析' : 'Training analysis'}</div>
+        <div className="dash-charts">
         <div className="dash-chart">
           <span className="th-label">{lang === 'zh' ? '部位分布' : 'Body-part distribution'}</span>
           <div className="dash-cbox">
-            <Doughnut data={{ labels: getCategories().map((c) => categoryLabel(c.key, lang)), datasets: [{ data: bpCounts, backgroundColor: TINTS, borderColor: 'transparent', borderWidth: 2 }] }}
-              options={{ plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, padding: 8 } } } }} />
+            <Doughnut data={{ labels: bpDist.labels, datasets: [{ data: bpDist.data, backgroundColor: TINTS, borderColor: 'transparent', borderWidth: 2 }] }}
+              options={{ plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, padding: 8 } }, tooltip: { callbacks: { label: (ctx) => `${ctx.label}: ${ctx.parsed}${lang === 'zh' ? ' 次' : ' entries'}` } } } }} />
           </div>
         </div>
         <div className="dash-chart">
           <span className="th-label">{lang === 'zh' ? '每周训练量' : 'Weekly volume'}</span>
           <div className="dash-cbox">
             <Bar data={{ labels: weekly.labels, datasets: [{ data: weekly.data, backgroundColor: '#7dd3a0', borderRadius: 4 }] }}
-              options={{ plugins: { legend: { display: false } }, scales: { x: { grid: { color: GRID }, ticks: { maxRotation: 0 } }, y: { grid: { color: GRID }, beginAtZero: true, ticks: { precision: 0 } } } }} />
+              options={{ plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => `${ctx.parsed.y}${lang === 'zh' ? ' 次训练' : ' sessions'}` } } }, scales: { x: { grid: { color: GRID }, ticks: { maxRotation: 0 } }, y: { grid: { color: GRID }, beginAtZero: true, ticks: { precision: 0 } } } }} />
           </div>
         </div>
         <div className="dash-chart">
@@ -543,34 +601,84 @@ export function DashboardScreen() {
           <div className="dash-cbox">
             {bwVol.labels.length ? (
               <Line data={{ labels: bwVol.labels, datasets: [{ data: bwVol.data, borderColor: '#4fd1e0', backgroundColor: 'rgba(79,209,224,0.12)', fill: true, tension: 0.3 }] }}
-                options={{ plugins: { legend: { display: false } }, scales: { x: { grid: { color: GRID } }, y: { grid: { color: GRID }, beginAtZero: true } } }} />
+                options={{ plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => `${ctx.parsed.y}${lang === 'zh' ? ' 次(总计)' : ' reps'}` } } }, scales: { x: { grid: { color: GRID } }, y: { grid: { color: GRID }, beginAtZero: true } } }} />
             ) : <p className="dash-empty">{lang === 'zh' ? '暂无自重数据' : 'no bodyweight data'}</p>}
           </div>
         </div>
         <div className="dash-chart">
-          <span className="th-label">{lang === 'zh' ? '组类型分布' : 'Set-type distribution'}</span>
-          <div className="dash-cbox">
-            <Doughnut data={{ labels: stCounts.labels, datasets: [{ data: stCounts.data, backgroundColor: TINTS, borderColor: 'transparent', borderWidth: 2 }] }}
-              options={{ plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, padding: 8 } } } }} />
+          <span className="th-label">{lang === 'zh' ? '训练类型(次数/组量·按月)' : 'Activity kind (count/volume · by month)'}</span>
+          <div className="dash-prog-controls">
+            <label className="dash-prog-toggle">
+              <input type="checkbox" checked={actShowCount} onChange={(e) => setActShowCount(e.target.checked)} />
+              {lang === 'zh' ? '次数' : 'Count'}
+            </label>
+            <label className="dash-prog-toggle">
+              <input type="checkbox" checked={actShowVolume} onChange={(e) => setActShowVolume(e.target.checked)} />
+              {lang === 'zh' ? '组量/时长' : 'Volume'}
+            </label>
           </div>
-        </div>
-        <div className="dash-chart">
-          <span className="th-label">{lang === 'zh' ? '训练类型' : 'Activity kind'}</span>
           <div className="dash-cbox">
-            <Doughnut
-              data={{
-                labels: [ACTIVITY_LABEL.gym[lang], ACTIVITY_LABEL.bodyweight[lang], ACTIVITY_LABEL.sport[lang]],
-                datasets: [{ data: [kindCounts.gym, kindCounts.bodyweight, kindCounts.sport], backgroundColor: [ACTIVITY_COLORS.gym, ACTIVITY_COLORS.bodyweight, ACTIVITY_COLORS.sport], borderColor: 'transparent', borderWidth: 2 }],
-              }}
-              options={{ plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, padding: 8 } } } }} />
+            <Bar
+              data={{ labels: activityBars.labels, datasets: activityBars.datasets }}
+              options={{
+                indexAxis: 'y',
+                interaction: { mode: 'dataset', intersect: true },
+                plugins: {
+                  legend: {
+                    position: 'bottom',
+                    // Datasets share a label per month (count + volume) — show each once.
+                    labels: { boxWidth: 12, padding: 8, filter: (item, data) => data.datasets.findIndex((d) => d.label === item.text) === item.datasetIndex },
+                  },
+                  tooltip: {
+                    // Dedupe to one item per hovered month-stack; the cross-section is built below.
+                    filter: (item) => item.dataIndex === 0,
+                    displayColors: false,
+                    callbacks: {
+                      title: (items) => (lang === 'zh' ? `${items[0]?.dataset.label} 明细` : `${items[0]?.dataset.label} detail`),
+                      label: () => '',
+                      afterBody: (items) => {
+                        const mi = (items[0]?.dataset as { _mi?: number } | undefined)?._mi
+                        if (mi == null) return []
+                        const { keys, count, volume } = activityBars
+                        const cu = lang === 'zh' ? '次' : ' ses'
+                        const vu = (i: number) => (i === 2 ? (lang === 'zh' ? '小时' : ' h') : (lang === 'zh' ? '组' : ' sets'))
+                        return keys.map((k, i) => `${ACTIVITY_LABEL[k][lang]}: ${count[k][mi]}${cu} · ${Math.round(volume[k][mi] * 10) / 10}${vu(i)}`)
+                      },
+                      footer: (items) => {
+                        const mi = (items[0]?.dataset as { _mi?: number } | undefined)?._mi
+                        if (mi == null) return ''
+                        const { keys, count, volume } = activityBars
+                        const cTot = keys.reduce((s, k) => s + count[k][mi], 0)
+                        const setTot = volume.gym[mi] + volume.bodyweight[mi]
+                        const hTot = Math.round(volume.sport[mi] * 10) / 10
+                        return lang === 'zh' ? `合计 ${cTot}次 · ${setTot}组 · ${hTot}小时` : `total ${cTot} ses · ${setTot} sets · ${hTot} h`
+                      },
+                    },
+                  },
+                },
+                scales: {
+                  x: { stacked: true, grid: { color: GRID }, beginAtZero: true, ticks: { precision: 0 } },
+                  y: { stacked: true, grid: { color: GRID } },
+                },
+              }} />
           </div>
         </div>
         <div className="dash-chart dash-chart-wide">
           <span className="th-label">{lang === 'zh' ? '进步曲线(按分类)' : 'Progression by category'}</span>
-          <select className="th-input dash-prog-pick" value={selectedProgCategory} onChange={(e) => setProgCategory(e.target.value)}>
-            <option value="">{lang === 'zh' ? '选择分类…' : 'pick a category…'}</option>
-            {progCategories.map((c) => (<option key={c.key} value={c.key}>{categoryLabel(c.key, lang)}</option>))}
-          </select>
+          <div className="dash-prog-controls">
+            <select className="th-input dash-prog-pick" value={selectedProgCategory} onChange={(e) => setProgCategory(e.target.value)}>
+              <option value="">{lang === 'zh' ? '选择分类…' : 'pick a category…'}</option>
+              {progCategories.map((c) => (<option key={c.key} value={c.key}>{categoryLabel(c.key, lang)}</option>))}
+            </select>
+            <label className="dash-prog-toggle">
+              <input type="checkbox" checked={progShowGym} onChange={(e) => setProgShowGym(e.target.checked)} />
+              {lang === 'zh' ? '健身房' : 'Gym'}
+            </label>
+            <label className="dash-prog-toggle">
+              <input type="checkbox" checked={progShowBodyweight} onChange={(e) => setProgShowBodyweight(e.target.checked)} />
+              {lang === 'zh' ? '徒手' : 'Bodyweight'}
+            </label>
+          </div>
           <div className="dash-prog-desc">
             {lang === 'zh' ? '左轴=重量 · 右轴=次数/时长；同分类动作叠加显示' : 'Left axis = load · right axis = reps/duration; overlays all exercises in the category'}
           </div>
@@ -584,6 +692,10 @@ export function DashboardScreen() {
                     tooltip: {
                       callbacks: {
                         title: (items) => progression.dates[items[0].dataIndex],
+                        label: (ctx) => {
+                          const unit = ctx.dataset.yAxisID === 'y' ? ' lb' : (lang === 'zh' ? ' 次/分' : ' reps/min')
+                          return `${ctx.dataset.label}: ${ctx.parsed.y}${unit}`
+                        },
                         afterLabel: (ctx) => {
                           const note = (ctx.dataset as unknown as { _notes?: string[] })._notes?.[ctx.dataIndex]
                           return note ? `  ${note}` : ''
@@ -600,7 +712,8 @@ export function DashboardScreen() {
             ) : <p className="dash-empty">{selectedProgCategory ? (lang === 'zh' ? '暂无数据' : 'no data') : (lang === 'zh' ? '选择分类查看' : 'pick a category')}</p>}
           </div>
         </div>
-      </div>
+        </div>
+      </section>
 
       {sports.length > 0 && (
         <section className="dash-sports">
