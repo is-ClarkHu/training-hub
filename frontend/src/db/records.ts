@@ -1349,6 +1349,10 @@ export async function addBodyMeasurement(m: Omit<BodyMeasurement, keyof ReturnTy
   await db.body_measurements.add(row)
   return row
 }
+export async function updateBodyMeasurement(id: string, patch: Partial<Omit<BodyMeasurement, keyof ReturnType<typeof syncFields>>>): Promise<void> {
+  const m = await db.body_measurements.get(id)
+  if (m) await db.body_measurements.put({ ...m, ...patch, updated_at: nowIso() })
+}
 export async function deleteBodyMeasurement(id: string): Promise<void> {
   const m = await db.body_measurements.get(id)
   if (m) await db.body_measurements.put({ ...m, deleted: true, updated_at: nowIso() })
@@ -1423,6 +1427,13 @@ export async function createFoodLog(
   }
   await db.food_log.add(row)
   return row
+}
+export async function updateFoodLog(
+  id: string,
+  patch: Partial<Pick<FoodLog, 'description' | 'ai_description' | 'eaten_at'>>,
+): Promise<void> {
+  const f = await db.food_log.get(id)
+  if (f) await db.food_log.put({ ...f, ...patch, updated_at: nowIso() })
 }
 export async function getFoodPhotoUrl(path: string): Promise<string | null> {
   const { data, error } = await supabase.storage.from(FOOD_BUCKET).createSignedUrl(path, 3600)

@@ -50,8 +50,20 @@ export async function summarizeFile(text: string): Promise<string> {
   return json.summary
 }
 
-/** Vision: recognize a meal photo (data URL) → short description text. */
-export async function describeFood(image: string): Promise<string> {
+/**
+ * Fire-and-forget GET to wake a cold backend (Render free tier sleeps after
+ * inactivity and takes ~30–60s to boot). Call it when the user opens a screen
+ * that is about to hit a relay endpoint so the real request lands warm.
+ */
+export function warmupBackend(): void {
+  void fetch(`${backendUrl()}/health`, { method: 'GET' }).catch(() => {})
+}
+
+/**
+ * Vision: recognize a meal photo (data URL) → short description text. An optional
+ * `hint` (the user's own note about the meal) is sent to raise accuracy.
+ */
+export async function describeFood(image: string, hint = ''): Promise<string> {
   const { data } = await supabase.auth.getSession()
   const token = data.session?.access_token
   if (!token) throw new Error('Not signed in')
@@ -59,7 +71,7 @@ export async function describeFood(image: string): Promise<string> {
   const res = await fetch(`${backendUrl()}/api/describe-food`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ image, ...aiPayload('assistant') }),
+    body: JSON.stringify({ image, hint, ...aiPayload('assistant') }),
   })
   if (!res.ok) {
     const detail = await res.text().catch(() => '')

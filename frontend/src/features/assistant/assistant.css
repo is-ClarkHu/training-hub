@@ -204,6 +204,23 @@
 .asst-food-preview { max-width: 100%; border-radius: 8px; margin: 6px 0; }
 .asst-chart { height: 150px; margin: 8px 0; }
 
+/* Inputs must never overflow the modal. textarea defaults to resize:both, whose
+   drag handle can be pulled outside the dialog — clamp it to vertical + full width. */
+.asst-modal-body .th-input { max-width: 100%; box-sizing: border-box; }
+.asst-modal-body textarea.th-input { resize: vertical; }
+
+/* CRUD: per-row search + inline edit */
+.asst-data-search { margin: 8px 0 4px; }
+.asst-row-actions { display: flex; gap: 2px; flex-shrink: 0; }
+.asst-row-actions button { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 13px; padding: 0 3px; }
+.asst-row-actions button:hover { color: var(--text); }
+.asst-data-editrow { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.asst-data-editrow .th-input { flex: 1 1 70px; min-width: 0; }
+.asst-data-editrow textarea.th-input { flex-basis: 100%; }
+.asst-edit-actions { display: flex; gap: 6px; flex-basis: 100%; }
+.asst-edit-actions button { flex: 1; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 4px; cursor: pointer; font-size: 12px; }
+.asst-edit-actions button:first-child { background: var(--accent, #4fd1e0); color: #04222a; border-color: transparent; }
+
 /* Per-room data-permission bar */
 .asst-perms { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 0 2px; }
 .asst-perms-label { font-size: 12px; color: var(--text-dim); }

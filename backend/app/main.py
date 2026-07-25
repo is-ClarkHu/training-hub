@@ -74,6 +74,7 @@ class TranslateRequest(AiConfig):
 
 class DescribeFoodRequest(AiConfig):
     image: str  # data URL of the meal photo
+    hint: str = ""  # optional free-text the user typed about the meal (raises accuracy)
 
 
 class SummarizeFileRequest(AiConfig):
@@ -206,8 +207,19 @@ def describe_food(body: DescribeFoodRequest, authorization: str = Header(default
     _user_client(_jwt(authorization))  # require a valid session
     if body.provider not in PROVIDERS:
         raise HTTPException(400, f"Unknown provider '{body.provider}'")
+    prompt = FOOD_VISION_PROMPT
+    if body.hint.strip():
+        # The user has typed what they think the meal is. Treat it as a strong hint
+        # and reconcile it with the photo — keep their names/portions unless the
+        # image clearly contradicts them; use it to disambiguate look-alikes.
+        prompt += (
+            "\n\nThe user also typed what they believe the meal contains. Treat this "
+            "as a strong hint: keep their dish names and portions unless the photo "
+            "clearly contradicts them, and use it to tell look-alike foods apart:\n"
+            + body.hint.strip()
+        )
     try:
-        desc = describe_image(body.provider, body.model, body.api_key, body.image, FOOD_VISION_PROMPT, 300)
+        desc = describe_image(body.provider, body.model, body.api_key, body.image, prompt, 300)
     except ValueError as e:
         raise HTTPException(400, str(e))
     except Exception as e:  # noqa: BLE001 — upstream/vision error
