@@ -159,17 +159,21 @@ export function CycleScreen() {
       const rows = open ? intimacyRows.filter((r) => r.date >= open.started_on) : []
       const sets = rows.reduce((sum, r) => sum + r.count, 0)
       if (sets > 0) {
-        const byCat = new Map<string, { name: string; sets: number; date: string | null }>()
+        // One item per (date, category) so the hover shows a per-date timeline, not all
+        // counts collapsed onto the latest date.
+        const byKey = new Map<string, { name: string; sets: number; date: string }>()
         for (const row of rows) {
           const cat = intimacyCategory(row)
-          const cur = byCat.get(cat) ?? { name: intimacyLabel(cat, lang, true), sets: 0, date: null }
+          const key = `${row.date}|${cat}`
+          const cur = byKey.get(key) ?? { name: intimacyLabel(cat, lang, true), sets: 0, date: row.date }
           cur.sets += row.count
-          if (!cur.date || row.date > cur.date) cur.date = row.date
-          byCat.set(cat, cur)
+          byKey.set(key, cur)
         }
         out.genitals = {
           sets,
-          items: [...byCat.values()].map((it) => ({ name: it.name, sets: it.sets, day: null, date: it.date })),
+          items: [...byKey.values()]
+            .sort((a, b) => (a.date < b.date ? 1 : -1))
+            .map((it) => ({ name: it.name, sets: it.sets, day: null, date: it.date })),
         }
       }
     }

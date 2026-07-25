@@ -184,17 +184,21 @@ export function DashboardScreen() {
       const rows = intimacyRows.filter((r) => r.date >= lo && r.date <= hi)
       const total = rows.reduce((s, r) => s + r.count, 0)
       if (total > 0) {
-        const byCat = new Map<string, { name: string; sets: number; date: string | null }>()
+        // One item per (date, category) so the hover reads as a timeline ("07-10 · 2 ·
+        // 07-15 · 1"), not everything collapsed onto the latest date.
+        const byKey = new Map<string, { name: string; sets: number; date: string }>()
         for (const row of rows) {
           const cat = intimacyCategory(row)
-          const cur = byCat.get(cat) ?? { name: intimacyLabel(cat, lang, true), sets: 0, date: null as string | null }
+          const key = `${row.date}|${cat}`
+          const cur = byKey.get(key) ?? { name: intimacyLabel(cat, lang, true), sets: 0, date: row.date }
           cur.sets += row.count
-          if (!cur.date || row.date > cur.date) cur.date = row.date
-          byCat.set(cat, cur)
+          byKey.set(key, cur)
         }
         body.genitals = {
           sets: total,
-          items: [...byCat.values()].map((it) => ({ name: it.name, sets: it.sets, day: null, date: it.date })),
+          items: [...byKey.values()]
+            .sort((a, b) => (a.date < b.date ? 1 : -1))
+            .map((it) => ({ name: it.name, sets: it.sets, day: null, date: it.date })),
         }
       }
     }
