@@ -285,8 +285,16 @@ export function DataPanel({ lang }: { lang: L }) {
                     </div>
                   </li>
                 ) : (
-                  <li key={m.id} className="asst-data-row">
-                    <span>{m.date}: {[m.weight_kg && `${m.weight_kg}kg`, m.body_fat_pct && `${m.body_fat_pct}%`, m.muscle_kg && `${m.muscle_kg}kg肌`, m.waist_cm && `${m.waist_cm}cm腰`].filter(Boolean).join(', ')}</span>
+                  <li key={m.id} className="asst-rec-card">
+                    <div className="asst-rec-main">
+                      <span className="asst-rec-date">{m.date}</span>
+                      <div className="asst-rec-chips">
+                        {m.weight_kg != null && <span className="asst-chip">{m.weight_kg} <i>kg</i></span>}
+                        {m.body_fat_pct != null && <span className="asst-chip">{m.body_fat_pct} <i>{t('%体脂', '% fat')}</i></span>}
+                        {m.muscle_kg != null && <span className="asst-chip">{m.muscle_kg} <i>{t('kg肌', 'kg musc')}</i></span>}
+                        {m.waist_cm != null && <span className="asst-chip">{m.waist_cm} <i>{t('cm腰', 'cm waist')}</i></span>}
+                      </div>
+                    </div>
                     <span className="asst-row-actions">
                       <button type="button" title={t('编辑', 'Edit')} onClick={() => setEditM(m)}>✎</button>
                       <button type="button" title={t('删除', 'Delete')} onClick={async () => { await deleteBodyMeasurement(m.id); await reload() }}>🗑</button>
@@ -338,10 +346,15 @@ export function DataPanel({ lang }: { lang: L }) {
                     </div>
                   </li>
                 ) : (
-                  <li key={s.id} className="asst-data-row">
-                    <label className={s.still_using ? '' : 'is-stale'}>
+                  <li key={s.id} className={`asst-rec-card ${s.still_using ? '' : 'is-stale'}`}>
+                    <label className="asst-rec-main asst-supp-main" title={t('还在用', 'Still using')}>
                       <input type="checkbox" checked={s.still_using} onChange={async (e) => { await updateSupplement(s.id, { still_using: e.target.checked }); await reload() }} />
-                      {s.name}{s.brand ? ` (${s.brand})` : ''}{s.dose ? ` · ${s.dose}` : ''}
+                      <span className="asst-supp-text">
+                        <span className="asst-rec-title">{s.name}{s.brand ? <em> · {s.brand}</em> : null}</span>
+                        {[s.dose, s.timing, s.frequency].filter(Boolean).length > 0 && (
+                          <span className="asst-rec-meta">{[s.dose, s.timing, s.frequency].filter(Boolean).join(' · ')}</span>
+                        )}
+                      </span>
                     </label>
                     <span className="asst-row-actions">
                       <button type="button" title={t('编辑', 'Edit')} onClick={() => setEditSup(s)}>✎</button>
@@ -383,8 +396,8 @@ export function DataPanel({ lang }: { lang: L }) {
               <p className="asst-data-hint">{t('AI 图片识别需要后端服务,线上版本暂不可用', 'AI photo recognition needs the backend — unavailable in this hosted build')}</p>
             )}
             {foodDraft.aiDesc !== undefined && (
-              <label className="asst-data-full">{t('AI 识别(可改)', 'AI recognition (editable)')}
-                <textarea className="th-input" rows={2} value={foodDraft.aiDesc} onChange={(e) => setFoodDraft({ ...foodDraft, aiDesc: e.target.value })} />
+              <label className="asst-data-full">{t('AI 识别与营养分析(可改)', 'AI recognition & nutrition (editable)')}
+                <textarea className="th-input" rows={5} value={foodDraft.aiDesc} onChange={(e) => setFoodDraft({ ...foodDraft, aiDesc: e.target.value })} />
               </label>
             )}
             {foodErr && <p className="th-error">{foodErr}</p>}
@@ -406,8 +419,17 @@ export function DataPanel({ lang }: { lang: L }) {
                     </div>
                   </li>
                 ) : (
-                  <li key={f.id} className="asst-data-row">
-                    <span>{f.eaten_at.slice(0, 10)}: {f.description || f.ai_description}{f.ai_description && f.description ? ` · AI:${f.ai_description}` : ''}{f.photo_path ? ' 📷' : ''}</span>
+                  <li key={f.id} className="asst-rec-card">
+                    <div className="asst-rec-main">
+                      <div className="asst-rec-head">
+                        <span className="asst-rec-date">{f.eaten_at.slice(0, 10)}</span>
+                        {f.photo_path && <span className="asst-tag">📷</span>}
+                      </div>
+                      {f.description && <span className="asst-rec-text">{f.description}</span>}
+                      {f.ai_description && (
+                        <span className="asst-rec-ai"><span className="asst-ai-tag">AI</span>{f.ai_description}</span>
+                      )}
+                    </div>
                     <span className="asst-row-actions">
                       <button type="button" title={t('编辑', 'Edit')} onClick={() => setEditFood(f)}>✎</button>
                       <button type="button" title={t('删除', 'Delete')} onClick={async () => { await deleteFoodLog(f.id); await reload() }}>🗑</button>

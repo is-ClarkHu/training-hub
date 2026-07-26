@@ -197,10 +197,50 @@
 .asst-data-full { margin: 6px 0; }
 .asst-data .th-input { font-size: 13px; padding: 6px 8px; }
 .asst-data-noteadd { display: flex; gap: 6px; margin: 6px 0; }
+/* Legacy plain row (still used by Notes) */
 .asst-data-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 13px; }
 .asst-data-row label { display: flex; align-items: center; gap: 6px; }
 .asst-data-row label.is-stale { opacity: 0.5; text-decoration: line-through; }
 .asst-data-row button { background: none; border: none; color: var(--text-dim); cursor: pointer; }
+
+/* Record cards — measurements / supplements / food list rows */
+.asst-rec-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+}
+.asst-rec-card.is-stale { opacity: 0.55; }
+.asst-rec-main { display: flex; flex-direction: column; gap: 5px; min-width: 0; flex: 1; }
+.asst-rec-head { display: flex; align-items: center; gap: 6px; }
+.asst-rec-date { font-size: 11px; font-weight: 600; letter-spacing: 0.02em; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.asst-rec-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.asst-chip {
+  display: inline-flex; align-items: baseline; gap: 3px;
+  padding: 2px 8px; border-radius: 999px;
+  background: var(--accent-soft); color: var(--text);
+  font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums;
+}
+.asst-chip i { font-style: normal; font-size: 10px; font-weight: 500; color: var(--text-dim); }
+.asst-rec-title { font-size: 13px; font-weight: 600; color: var(--text); }
+.asst-rec-title em { font-style: normal; font-weight: 400; color: var(--text-dim); }
+.asst-rec-meta { font-size: 11px; color: var(--text-dim); }
+.asst-rec-text { font-size: 13px; line-height: 1.4; color: var(--text); white-space: pre-wrap; word-break: break-word; }
+.asst-rec-ai { font-size: 12px; line-height: 1.5; color: var(--text-dim); white-space: pre-wrap; word-break: break-word; }
+.asst-ai-tag {
+  display: inline-block; margin-right: 5px; padding: 0 5px;
+  border-radius: 4px; background: var(--violet); color: var(--on-accent);
+  font-size: 9px; font-weight: 700; letter-spacing: 0.04em; vertical-align: 1px;
+}
+.asst-tag { font-size: 11px; }
+.asst-supp-main { flex-direction: row; align-items: flex-start; gap: 8px; cursor: pointer; }
+.asst-supp-main input[type='checkbox'] { margin-top: 2px; flex-shrink: 0; }
+.asst-supp-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+
 .asst-food-preview { max-width: 100%; border-radius: 8px; margin: 6px 0; }
 .asst-chart { height: 150px; margin: 8px 0; }
 

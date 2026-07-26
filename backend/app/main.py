@@ -196,9 +196,16 @@ def translate(body: TranslateRequest, authorization: str = Header(default="")) -
 
 # ── food photo recognition (P6c) ─────────────────────────────
 FOOD_VISION_PROMPT = (
-    "Identify this meal from the photo. In one or two short sentences, describe the "
-    "foods and rough portions factually. Reply in the user's likely language "
-    "(Chinese if the dish looks Chinese). No preamble, just the description."
+    "You are a nutrition assistant. Identify the meal from the photo and give a "
+    "brief, practical analysis. Reply in the user's likely language (Chinese if the "
+    "dish looks Chinese). Use this compact layout, translating the labels into that "
+    "language:\n"
+    "- Foods: the items with rough portions\n"
+    "- Calories: estimated total kcal (a range is fine)\n"
+    "- Protein / Carbs / Fat: rough grams each\n"
+    "- Note: one short practical line (e.g. protein adequacy, balance, or a tip)\n"
+    "Estimates are approximate but give concrete numbers anyway. No disclaimers, no "
+    "preamble — just the four lines."
 )
 
 
