@@ -1,6 +1,6 @@
 // resolve() — the three-tier translation resolver (SPEC §5.1):
 //   1. local dictionary cache hit  → return it
-//   2. miss + online               → call /api/translate, cache, return
+//   2. miss + online               → browser-direct LLM call, cache, return
 //   3. miss + offline              → return the source as a temporary fallback,
 //                                     flagged needsTranslation for later cleanup
 //

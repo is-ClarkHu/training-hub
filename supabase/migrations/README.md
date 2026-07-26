@@ -21,7 +21,7 @@ more users later needs no schema change — RLS already isolates data.
 ### Core schema & training modules
 | File | Adds |
 |---|---|
-| `20260624120000_init_schema` | Base §4 schema (exercises, workout_entries, sets, sports, sport_sessions, profile, injuries, training_cycle, optional_trackers, translation_dictionary) + empty Phase-2 `chat_messages`/`insights`. RLS via a per-table owner-policy loop. |
+| `20260624120000_init_schema` | Base §4 schema (exercises, workout_entries, sets, sports, sport_sessions, profile, injuries, training_cycle, optional_trackers, translation_dictionary) + empty `chat_messages`/`insights` (used later by the assistant). RLS via a per-table owner-policy loop. |
 | `20260706120000_injury_v2` | Injuries as events (7-stage status, bilingual area/note, laterality/type/scenario, checkpoints, attachments). |
 | `20260706130000_rehab_library` | Rehab-exercise fields on `exercises`. |
 | `20260706140000_rehab_loop` | Per-injury rehab plan + symptom assessments. |
@@ -42,6 +42,13 @@ more users later needs no schema change — RLS already isolates data.
 | `20260710150000_chatroom_memory` | `chatroom_summaries` (rolling, `covered_through` watermark), `chatroom_memories` (shareable/pinned), `chatroom_memory_access` (cross-room read grants). |
 | `20260710160000_profile_modules` | Pre-fillable data modules: `basics`, `body_measurements`, `notes`, `supplements`, `training_env`, `medical_background` (high-sensitivity). |
 | `20260710170000_food_and_files` | `food_log` (+`ai_description`), `public_files` (`content`+`summary`), `chatroom_file_access`; private `food-photos` & `public-files` Storage buckets + folder RLS. |
+| `20260711120000_chatroom_ai` | Per-room AI provider/model override (`chatrooms.provider`/`model`; NULL = global Settings default). |
+
+### Cycle ↔ entry assignment
+| File | Adds |
+|---|---|
+| `20260715180000_cycle_entry_assignment` | Assign a workout entry to a specific cycle round. |
+| `20260718120000_entry_cycle_assignments` | Many-to-many entry↔cycle assignments (supersedes the single-column link). |
 
 ## Storage buckets
 `injury-photos`, `food-photos`, `public-files` — all private, one folder per user

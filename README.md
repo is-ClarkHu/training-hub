@@ -1,10 +1,15 @@
 # training-hub
 
-Offline-first, bilingual (中 / EN) PWA for strength & frisbee training — per-set
-logging, progression analytics, injury & rehab tracking, training cycles, and a
-memory-aware, multi-chatroom **AI coach**. Local-first (Dexie/IndexedDB) with
-Supabase for sync / auth / storage; a small FastAPI backend relays LLM calls so API
-keys stay in the browser. Bilingual down to the **data**, not just the UI.
+A bilingual (中 / EN) training PWA — per-set strength logging, progression
+analytics, injury & rehab tracking, training cycles, and a memory-aware,
+multi-chatroom **AI coach**. Backed by Supabase (Postgres / Auth / Storage / RLS),
+with a small FastAPI relay for the LLM-powered features. Bilingual down to the
+**data**, not just the UI.
+
+The client keeps a local Dexie/IndexedDB cache as its working copy, so the UI is
+instant and survives a flaky connection, then syncs to Supabase in the background —
+but this is an online, cloud-synced app: sign-in, sync, and every AI feature need
+the network.
 
 ## Features
 
@@ -14,17 +19,20 @@ keys stay in the browser. Bilingual down to the **data**, not just the UI.
   per-sport mini-charts.
 - **Injuries** — injury-as-event log with a rehab library, plan and symptom timeline.
 - **Cycle** — training-loop editor with per-muscle recovery spacing.
-- **Bilingual (中/EN) data** — not just labels: exercise/sport names are translated
-  and cached via an AI dictionary (Supabase Edge Function), with a manual override.
-- **Offline-first PWA** — Dexie/IndexedDB is the instant source of truth; a background
-  SyncEngine reconciles with Supabase (last-write-wins). Installable, works offline.
+- **Bilingual (中/EN) data** — not just labels: exercise / sport names are translated
+  and cached in a local dictionary via a browser-direct AI call (your key, no backend),
+  with a manual override.
+- **Cloud sync + installable PWA** — Supabase is the source of truth; a background
+  SyncEngine reconciles the local cache (last-write-wins). Installable to the home
+  screen.
 - **AI assistant** — multiple chatrooms, each with:
   - a **permission matrix** deciding which of your data it may read (enforced backend-
     side at read time, not just in the UI);
   - **rolling memory** + savable memory units + opt-in **cross-room** memory sharing;
   - a **per-room model** (DeepSeek / OpenAI / Anthropic / Gemini / …);
-  - pre-fillable **data modules**: basics & measurement trends, food (with photo
-    recognition), supplements, training environment, notes, medical background, and
+  - pre-fillable **data modules** with typed inputs and full add / edit / search:
+    basics & measurement trends, food (photo recognition **+ calorie / macro
+    estimate**), supplements, training environment, notes, medical background, and
     uploaded reference files (summarized for context).
   - Sensitivity tiers: medical is high-sensitivity (opt-in per room); the intimacy
     tracker is **hard-isolated** and never reaches the AI.
@@ -53,6 +61,34 @@ cp .env.example .env           # fill SUPABASE_URL + SUPABASE_KEY (anon)
 ```
 
 Then log in, and add an LLM API key under **Settings → AI** to use the assistant.
+Point the frontend at a deployed relay with `VITE_ASSISTANT_API_URL`; without it, the
+AI features that need the backend are disabled off non-localhost origins (they show an
+explanatory notice instead of failing).
+
+## What needs the backend
+
+The relay is only for LLM calls that must run server-side. Everything else — logging,
+History, Cycle, Injuries, Dashboard, export, Supabase sync, the installable PWA — runs
+on the static frontend + Supabase alone.
+
+| Feature | Path | Needs relay? |
+| --- | --- | --- |
+| AI chat | `/api/assistant` | **Yes** — reads your data and enforces the per-room permission matrix server-side |
+| Food photo → recognition + nutrition | `/api/describe-food` | **Yes** (vision) |
+| Reference-file summary | `/api/summarize-file` | **Yes** |
+| Translation dictionary | — | **No** — runs browser-direct from Settings → AI (touches no user data) |
+
+`/api/translate` and `supabase/functions/translate` are legacy — translation moved
+browser-direct and no longer calls them.
+
+## Deployment
+
+- **Frontend** → static host (e.g. GitHub Pages). `.github/workflows/deploy.yml` builds
+  on push to `main`; set `BASE_PATH` for a project-path host and the `VITE_*` secrets
+  (Supabase URL / anon key, and `VITE_ASSISTANT_API_URL` for the relay).
+- **Backend** → any container/PaaS. `render.yaml` is a Render blueprint (free tier
+  sleeps when idle, ~1 min cold start — the UI shows a "waking up" hint). Set
+  `SUPABASE_URL` / `SUPABASE_KEY` (anon) and `FRONTEND_ORIGIN` for CORS.
 
 ## Multi-user
 
@@ -68,11 +104,12 @@ their own LLM keys in Settings → AI.
 ```
 training-hub/
 ├── frontend/          React + Vite + TS PWA (see frontend/src/README.md)
+├── backend/           FastAPI relay: /api/assistant, /api/describe-food, /api/summarize-file
 ├── supabase/
 │   ├── migrations/    SQL schema + RLS policies — source of truth (see its README)
-│   └── functions/     Edge Function for /api/translate
-├── backend/           FastAPI relay: /api/assistant, /api/translate, food vision, file summary
+│   └── functions/     translate — legacy Edge Function (translation now runs browser-direct)
 ├── migration/         one-time legacy CSV → app importer (personal, optional)
+├── render.yaml        Render blueprint for the backend relay
 ├── docs/              design docs — GITIGNORED (private)
 └── raw_data/          personal legacy data, read-only — GITIGNORED
 ```
@@ -80,8 +117,9 @@ training-hub/
 ## Privacy
 
 No credentials or API keys are committed. All `.env*` files, `docs/`, `raw_data/`,
-and virtualenvs are gitignored; LLM keys are provided at runtime and live only in the
-user's browser. The Supabase anon key is browser-safe (`VITE_`-exposed) by design.
+`data/`, and virtualenvs are gitignored; LLM keys are provided at runtime and live only
+in the user's browser. The Supabase anon key is browser-safe (`VITE_`-exposed) by
+design.
 
 ## License
 

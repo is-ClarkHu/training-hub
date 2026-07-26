@@ -36,7 +36,7 @@ export default defineConfig({
       manifest: {
         name: 'training-hub',
         short_name: 'training-hub',
-        description: 'Offline-first strength & sport training log',
+        description: 'Bilingual strength & sport training log with an AI coach',
         theme_color: '#0c151c',
         background_color: '#0c151c',
         display: 'standalone',
