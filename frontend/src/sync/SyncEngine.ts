@@ -8,6 +8,7 @@
 import { supabase, currentUserId } from '../supabase/client'
 import { db } from '../db'
 import type { TableName } from '../supabase/types'
+import { tms, isNewer, afterCursor } from './cursor'
 
 // Push respects FK order (exercises/injuries before entries; entries before sets;
 // sports before sport_sessions). Pull order is irrelevant (Dexie has no FKs).
@@ -42,9 +43,25 @@ const TABLES: TableName[] = [
 ]
 
 const EPOCH = '1970-01-01T00:00:00.000Z'
-const wmKey = (uid: string, table: string, kind: 'push' | 'pull') => `th.sync.${uid}.${table}.${kind}`
-const getWm = (uid: string, t: string, k: 'push' | 'pull') => localStorage.getItem(wmKey(uid, t, k)) ?? EPOCH
-const setWm = (uid: string, t: string, k: 'push' | 'pull', v: string) => localStorage.setItem(wmKey(uid, t, k), v)
+type Kind = 'push' | 'pull'
+// The sync cursor is the composite (updated_at, id), not updated_at alone. A bare
+// updated_at watermark with `.gt(updated_at)` silently DROPS rows that share the
+// boundary timestamp — likely whenever a bulk op (cascade delete, legacy import)
+// stamps many rows the same millisecond, or a page break lands inside such a tie.
+// (updated_at, id) is a strict total order, so paging/resuming never skips a tie.
+const wmKey = (uid: string, table: string, kind: Kind) => `th.sync.${uid}.${table}.${kind}`
+const wmIdKey = (uid: string, table: string, kind: Kind) => `th.sync.${uid}.${table}.${kind}.id`
+const getWm = (uid: string, t: string, k: Kind) => localStorage.getItem(wmKey(uid, t, k)) ?? EPOCH
+const getWmId = (uid: string, t: string, k: Kind) => localStorage.getItem(wmIdKey(uid, t, k)) ?? ''
+const setWm = (uid: string, t: string, k: Kind, ts: string, id: string) => {
+  // Write the id first: if we crash between the two, an id ahead of its timestamp
+  // only re-includes rows (harmless, idempotent) — never skips them.
+  localStorage.setItem(wmIdKey(uid, t, k), id)
+  localStorage.setItem(wmKey(uid, t, k), ts)
+}
+
+// Composite-cursor comparison helpers (tms/isNewer/afterCursor) live in ./cursor,
+// where they are unit-tested against the keyset pagination model.
 
 function errorMessage(e: unknown): string {
   if (e instanceof Error) return e.message
@@ -79,9 +96,10 @@ const COLUMN_DEFAULTS: Record<string, unknown> = {
 }
 
 async function pushTable(uid: string, table: TableName): Promise<number> {
-  const since = getWm(uid, table, 'push')
+  const sinceTs = getWm(uid, table, 'push')
+  const sinceId = getWmId(uid, table, 'push')
   const all = (await db.table(table).toArray()) as Row[]
-  const rows = all.filter((r) => r.updated_at > since)
+  const rows = all.filter((r) => afterCursor(r.updated_at, r.id, sinceTs, sinceId))
   if (rows.length === 0) return 0
   const payload: Row[] = rows.map((r) => ({ ...r, user_id: uid })) // stamp owner for RLS
   const union = new Set<string>()
@@ -98,38 +116,68 @@ async function pushTable(uid: string, table: TableName): Promise<number> {
   // Within each group apply oldest edit first: a "rename A→D then C→A" chain must
   // free the name before it is reused. Edit order (updated_at) is a valid order
   // because the rename guard forbids ever holding two live rows with one name.
-  const byTime = (a: Row, b: Row) => (a.updated_at < b.updated_at ? -1 : a.updated_at > b.updated_at ? 1 : 0)
+  const byTime = (a: Row, b: Row) => (tms(a.updated_at) < tms(b.updated_at) ? -1 : tms(a.updated_at) > tms(b.updated_at) ? 1 : 0)
   const dels = payload.filter((r) => r.deleted === true).sort(byTime)
   const lives = payload.filter((r) => r.deleted !== true).sort(byTime)
   for (const group of [dels, lives]) {
     for (let i = 0; i < group.length; i += 500) {
       const { error } = await supabase.from(table).upsert(group.slice(i, i + 500), { onConflict: 'id' })
-      if (error) throw error
+      if (error) throw error // watermark not advanced → whole diff re-pushed next pass (upsert is idempotent)
     }
   }
-  setWm(uid, table, 'push', rows.reduce((m, r) => (r.updated_at > m ? r.updated_at : m), since))
+  // Advance to the composite-max of what we pushed, only after every batch succeeded.
+  const max = rows.reduce((m, r) => (afterCursor(r.updated_at, r.id, m.updated_at, m.id) ? r : m), rows[0])
+  setWm(uid, table, 'push', max.updated_at, max.id)
   return rows.length
 }
 
+const PAGE = 1000
+
 async function pullTable(uid: string, table: TableName): Promise<number> {
-  const since = getWm(uid, table, 'pull')
-  const { data, error } = await supabase
-    .from(table)
-    .select('*')
-    .gt('updated_at', since)
-    .order('updated_at', { ascending: true })
-    .limit(1000)
-  if (error) throw error
-  const remote = (data ?? []) as Row[]
-  if (remote.length === 0) return 0
-  await db.transaction('rw', db.table(table), async () => {
-    for (const r of remote) {
-      const local = (await db.table(table).get(r.id)) as Row | undefined
-      if (!local || r.updated_at > local.updated_at) await db.table(table).put(r) // last-write-wins
+  let cursorTs = getWm(uid, table, 'pull')
+  let cursorId = getWmId(uid, table, 'pull')
+  let total = 0
+  // Keyset pagination: keep pulling pages until one comes back short. Each page is
+  // ordered by (updated_at, id) and fetched with a composite `>` cursor, so a table
+  // with >PAGE changed rows drains fully in one call and a tie split across a page
+  // boundary is never skipped.
+  for (;;) {
+    let q = supabase
+      .from(table)
+      .select('*')
+      .order('updated_at', { ascending: true })
+      .order('id', { ascending: true })
+      .limit(PAGE)
+    if (cursorId === '') {
+      // Fresh or legacy (pre-composite) watermark with no id yet. `id.gt.''` would
+      // make Postgres cast '' to uuid and error, so use `>=` on the timestamp: it
+      // re-includes rows exactly at the boundary (LWW makes the re-apply a no-op)
+      // and thereby recovers any ties the old `.gt(updated_at)` cursor had skipped.
+      q = q.gte('updated_at', cursorTs)
+    } else {
+      // (updated_at > cursorTs) OR (updated_at == cursorTs AND id > cursorId)
+      q = q.or(`updated_at.gt.${cursorTs},and(updated_at.eq.${cursorTs},id.gt.${cursorId})`)
     }
-  })
-  setWm(uid, table, 'pull', remote.reduce((m, r) => (r.updated_at > m ? r.updated_at : m), since))
-  return remote.length
+    const { data, error } = await q
+    if (error) throw error
+    const remote = (data ?? []) as Row[]
+    if (remote.length === 0) break
+    await db.transaction('rw', db.table(table), async () => {
+      for (const r of remote) {
+        const local = (await db.table(table).get(r.id)) as Row | undefined
+        if (!local || isNewer(r.updated_at, local.updated_at)) await db.table(table).put(r) // last-write-wins
+      }
+    })
+    // Advance the cursor only after this page is committed to Dexie; a throw above
+    // leaves it where the last good page ended, so the pull safely resumes there.
+    const last = remote[remote.length - 1]
+    cursorTs = last.updated_at
+    cursorId = last.id
+    setWm(uid, table, 'pull', cursorTs, cursorId)
+    total += remote.length
+    if (remote.length < PAGE) break
+  }
+  return total
 }
 
 export interface SyncResult {
