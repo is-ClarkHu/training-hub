@@ -39,9 +39,9 @@ the network.
 
 ## Quick start
 
-Bring your own Supabase project and your own LLM API keys (kept in the browser, never
-on the server). Full walkthrough — including auth and the assistant backend — in
-**[SETUP.md](SETUP.md)**.
+Bring your own Supabase project and your own LLM API keys — the backend sends them
+only with the active request and never logs or persists them. Full walkthrough —
+including auth and the assistant backend — in **[SETUP.md](SETUP.md)**.
 
 ```bash
 # 1. Supabase: create a project, then apply every file in
@@ -117,9 +117,9 @@ training-hub/
 ## Privacy
 
 No credentials or API keys are committed. All `.env*` files, `docs/`, `raw_data/`,
-`data/`, and virtualenvs are gitignored; LLM keys are provided at runtime and live only
-in the user's browser. The Supabase anon key is browser-safe (`VITE_`-exposed) by
-design.
+`data/`, and virtualenvs are gitignored. User-supplied API keys are sent only with the
+active request and are never logged or persisted by the backend. The Supabase anon key
+is browser-safe (`VITE_`-exposed) by design.
 
 ## License
 
