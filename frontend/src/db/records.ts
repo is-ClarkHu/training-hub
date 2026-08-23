@@ -3,7 +3,7 @@
 // SyncEngine can later upsert it to Supabase unchanged (SPEC §3).
 import { db } from './db'
 import { currentStage } from '../features/injuries/util'
-import { roundMembers } from '../features/cycle/rounds'
+import { nextRoundIndex, roundForDate, roundMembers } from '../features/cycle/rounds'
 import { newId, nowIso, today } from './helpers'
 import { currentUserId, supabase } from '../supabase/client'
 import { FRISBEE_FIELDS } from '../supabase/types'
@@ -146,6 +146,7 @@ export interface NewEntryInput {
   note_tags?: string[]
   cycle_day_label?: string | null
   cycle_id?: string | null
+  cycle_round_id?: string | null
   injury_modified?: InjuryModified | null
   injury_id?: string | null
 }
@@ -162,6 +163,7 @@ export async function createEntryWithSets(
     note_tags: [],
     cycle_day_label: null,
     cycle_id: null,
+    cycle_round_id: null,
     injury_modified: null,
     injury_id: null,
     needs_review: false,
@@ -645,6 +647,13 @@ async function getCycleById(id: string): Promise<TrainingCycle | null> {
  *   round may sit open (ended_on = null) while incomplete; a past round is always
  *   pinned to its last real workout so it can't greedily reclaim later dates.
  * - `skipped` rounds keep their explicit closed state untouched.
+ * - GHOST rounds are dropped: a trailing round with no live members left is a
+ *   leftover from a mis-tagged log (or one whose entries were all moved elsewhere).
+ *   Left in place it becomes "the current round" everywhere — an empty body model,
+ *   empty rings — while the real, still-unfinished round sits closed behind it.
+ *   Deleting it promotes that round back to open (it is then the latest, and
+ *   incomplete). Explicitly skipped rounds are kept (deliberate history), and a
+ *   cycle always keeps at least one round.
  *
  * Idempotent and change-guarded — a round whose derived values already match is not
  * rewritten, so this won't churn updated_at or generate needless sync traffic.
@@ -652,16 +661,29 @@ async function getCycleById(id: string): Promise<TrainingCycle | null> {
 export async function reconcileCycleRounds(cycleOrId: TrainingCycle | string): Promise<void> {
   const cycle = typeof cycleOrId === 'string' ? await getCycleById(cycleOrId) : cycleOrId
   if (!cycle) return
-  const rounds = await getCycleRounds(cycle.id)
+  let rounds = await getCycleRounds(cycle.id)   // index ascending
   if (rounds.length === 0) return
   const entries = (await db.workout_entries.toArray()).filter((e) => !e.deleted)
   const assignments = (await db.entry_cycle_assignments.toArray()).filter((a) => !a.deleted)
   const labels = cycle.days.map((d) => d.label)
-  const maxIdx = rounds.reduce((m, r) => Math.max(m, r.index), 0)
   const ts = nowIso()
+
+  const membersOf = new Map<string, ReturnType<typeof roundMembers>>()
+  for (const r of rounds) membersOf.set(r.id, roundMembers(cycle, r, entries, assignments))
+
+  const ghosts: CycleRound[] = []
+  while (rounds.length > 1) {
+    const last = rounds[rounds.length - 1]
+    if (last.skipped || (membersOf.get(last.id)?.length ?? 0) > 0) break
+    ghosts.push({ ...last, deleted: true, updated_at: ts })
+    rounds = rounds.slice(0, -1)
+  }
+  if (ghosts.length > 0) await db.cycle_rounds.bulkPut(ghosts)
+
+  const maxIdx = rounds.reduce((m, r) => Math.max(m, r.index), 0)
   const updates: CycleRound[] = []
   for (const round of rounds) {
-    const members = roundMembers(cycle, round, entries, assignments)
+    const members = membersOf.get(round.id) ?? []
     const completed = labels.filter((l) => members.some((m) => m.dayLabel === l))
     const dates = members.map((m) => m.date).filter(Boolean).sort()
     const allDone = completed.length === labels.length && labels.length > 0
@@ -735,40 +757,59 @@ export async function getOpenRound(cycleId: string): Promise<CycleRound | null> 
 }
 
 /**
- * Record that a cycle day was logged: open a round if none is in progress, mark
+ * The round a workout on `date` belongs to, creating one only when there is nothing
+ * to put it in. Resolution (shared with the UI via the pure `roundForDate`): the
+ * round whose span covers the date — so a back-dated log lands in the round it was
+ * actually performed in — else the open round, else a brand-new round.
+ *
+ * Callers log the entry with `round.id` in `cycle_round_id` instead of leaving round
+ * membership to be re-guessed from date ranges later, and `isNew` lets the UI say
+ * "this starts R5" BEFORE the user commits to it.
+ */
+export async function ensureCycleRound(
+  cycle: TrainingCycle,
+  date: string,
+): Promise<{ round: CycleRound; isNew: boolean }> {
+  const rounds = await getCycleRounds(cycle.id)
+  const existing = roundForDate(rounds, date)
+  if (existing) return { round: existing, isNew: false }
+  const round: CycleRound = {
+    ...syncFields(),
+    cycle_id: cycle.id,
+    index: nextRoundIndex(rounds),
+    started_on: date,
+    ended_on: null,
+    completed_labels: [],
+    skipped: false,
+  }
+  await db.cycle_rounds.add(round)
+  return { round, isNew: true }
+}
+
+/**
+ * Record that a cycle day was logged: resolve (or open) the round for that date, mark
  * the label done, and auto-close the round once every day label is covered.
  * Idempotent per (round, label) — logging the same day twice won't double-count.
  */
-export async function recordCycleDay(cycle: TrainingCycle, label: string, date: string): Promise<void> {
+export async function recordCycleDay(cycle: TrainingCycle, label: string, date: string): Promise<CycleRound | null> {
   const labels = cycle.days.map((d) => d.label)
-  if (!labels.includes(label)) return
-  const rounds = await getCycleRounds(cycle.id)
-  let open = rounds.filter((r) => r.ended_on == null).sort((a, b) => b.index - a.index)[0]
-  if (!open) {
-    const maxIdx = rounds.reduce((m, r) => Math.max(m, r.index), 0)
-    open = {
-      ...syncFields(),
-      cycle_id: cycle.id,
-      index: maxIdx + 1,
-      started_on: date,
-      ended_on: null,
-      completed_labels: [],
-      skipped: false,
-    }
-    await db.cycle_rounds.add(open)
+  if (!labels.includes(label)) return null
+  const { round } = await ensureCycleRound(cycle, date)
+  if (!round.completed_labels.includes(label)) {
+    const completed = [...round.completed_labels, label]
+    const done = labels.every((l) => completed.includes(l))
+    // Days can be logged out of chronological order (back-dated entries), so clamp the
+    // round span: start = earliest date seen, end (when done) = the later of start/date.
+    // Prevents a reversed "2026-07-09 → 2026-06-15" range. A round that was already
+    // closed (back-dated log) keeps its close date.
+    const started = date < round.started_on ? date : round.started_on
+    const ended = done ? (date > started ? date : started) : round.ended_on ?? null
+    await db.cycle_rounds.put({ ...round, started_on: started, completed_labels: completed, ended_on: ended, updated_at: nowIso() })
   }
-  if (open.completed_labels.includes(label)) return
-  const completed = [...open.completed_labels, label]
-  const done = labels.every((l) => completed.includes(l))
-  // Days can be logged out of chronological order (back-dated entries), so clamp the
-  // round span: start = earliest date seen, end (when done) = the later of start/date.
-  // Prevents a reversed "2026-07-09 → 2026-06-15" range.
-  const started = date < open.started_on ? date : open.started_on
-  const ended = done ? (date > started ? date : started) : null
-  await db.cycle_rounds.put({ ...open, started_on: started, completed_labels: completed, ended_on: ended, updated_at: nowIso() })
   // Re-derive from live memberships so the stored span/labels match what the UI shows
   // (and self-correct if this log's round attribution differs from the date-range view).
   await reconcileCycleRounds(cycle)
+  return round
 }
 
 /** End the open round early (skip). Returns false when nothing is open. */

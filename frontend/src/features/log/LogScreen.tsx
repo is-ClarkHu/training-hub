@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from 'react'
 import {
   createEntryWithSets,
   createSportSession,
+  ensureCycleRound,
   getActiveCycle,
   getCycles,
   getCycleRounds,
@@ -32,19 +33,24 @@ import { parseNote, noteTagLabel } from '../../translation'
 import { useLanguage } from '../../i18n'
 import { useUndo } from '../../undo'
 import { fieldLabel } from '../sports'
-import { currentRound } from '../cycle/rounds'
-import { cycleDayOptionLabel } from '../cycle/day'
+import { currentRound, nextRoundIndex, roundForDate } from '../cycle/rounds'
+import { cycleDayOptionLabel, cycleDayTitle, dayMatchScore, suggestCycleDay } from '../cycle/day'
 import { INTIMACY_CATEGORIES, intimacyLabel, intimacyVisible } from '../intimacy'
 import type {
   CycleRound,
   Exercise,
+  ExerciseSet,
   IntimacyCategory,
   Injury,
   InjuryModified,
   Sport,
+  SportSession,
   TrainingCycle,
+  WorkoutEntry,
 } from '../../supabase/types'
 import { AddInjuryDialog, bodyAreaLabel } from '../injuries'
+import { EditEntryDialog } from '../history/EditEntryDialog'
+import { SportSessionDialog } from '../sports'
 import { ExercisePicker } from './ExercisePicker'
 import { SetEditor } from './SetEditor'
 import { AddExerciseDialog } from './AddExerciseDialog'
@@ -56,7 +62,21 @@ type Selection =
   | { kind: 'sport'; sport: Sport }
   | null
 
-interface LoggedItem { id: string; name: string; detail: string; tagKeys: string[]; kind: 'exercise' | 'sport' | 'intimacy'; realId: string; group?: string }
+// A row in "logged this session". Carries the underlying record so the row can open
+// the same edit dialogs History uses — fixing a just-logged set (or its split) is the
+// most common thing you do right after saving, and it used to mean leaving the tab.
+interface LoggedItem {
+  id: string
+  name: string
+  detail: string
+  tagKeys: string[]
+  kind: 'exercise' | 'sport' | 'intimacy'
+  realId: string
+  group?: string
+  entry?: WorkoutEntry
+  sets?: ExerciseSet[]
+  session?: SportSession
+}
 
 export function LogScreen() {
   const { lang } = useLanguage()
@@ -67,11 +87,14 @@ export function LogScreen() {
   const [activeInjuries, setActiveInjuries] = useState<Injury[]>([])
   const [cycles, setCycles] = useState<TrainingCycle[]>([])
   const [roundsByCycle, setRoundsByCycle] = useState<Record<string, CycleRound[]>>({})
+  const [activeCycleId, setActiveCycleId] = useState('')
   const [cycleSel, setCycleSel] = useState('') // "cycleId::label" — a day from any cycle
+  const [dayAuto, setDayAuto] = useState(false) // day was aimed from the exercise, not picked
 
   const [sel, setSel] = useState<Selection>(null)
   const [dialog, setDialog] = useState<{ open: boolean; name: string }>({ open: false, name: '' })
   const [logged, setLogged] = useState<LoggedItem[]>([])
+  const [editing, setEditing] = useState<LoggedItem | null>(null)
   const [circuitSel, setCircuitSel] = useState<Set<string>>(new Set())
   const [saving, setSaving] = useState(false)
 
@@ -103,7 +126,12 @@ export function LogScreen() {
       const pairs = await Promise.all(cs.map(async (c) => [c.id, await getCycleRounds(c.id)] as const))
       const byCycle = Object.fromEntries(pairs)
       setRoundsByCycle(byCycle)
-      // Default the picker to the active cycle's next day (old behaviour).
+      setActiveCycleId(active?.id ?? '')
+      // Seed the picker with the active cycle's next owed day so "today's plan" has
+      // something to show. It is only a starting point: picking an exercise re-aims
+      // the day at what that exercise actually trains (`aimCycleDay`). Leaving it
+      // fixed is what filed back workouts under the chest day — which completed that
+      // day, closed the round, and silently opened the next one.
       if (active && active.days.length > 0) {
         const rv = currentRound(active, byCycle[active.id] ?? [])
         if (rv.nextLabel) setCycleSel(`${active.id}::${rv.nextLabel}`)
@@ -133,6 +161,7 @@ export function LogScreen() {
         name: ex ? exerciseName(ex, lang) : '(deleted)',
         detail: ex ? esets.map((s) => formatSetLine(s, ex.measure_type, lang, ex.duration_hm)).join(' · ') : '',
         tagKeys: e.note_tags, group: e.superset_group ?? undefined,
+        entry: e, sets: esets,
       })
     }
     for (const s of ss.filter((x) => x.date === date)) {
@@ -143,6 +172,7 @@ export function LogScreen() {
         name: sp ? (lang === 'zh' ? sp.name_zh : sp.name_en) || sp.name_zh : 'sport',
         detail: `${formatHours(s.hours)}${attrSummary ? ' · ' + attrSummary : ''}${formatMetrics(s)}${s.injury ? ' · injury' : ''}`,
         tagKeys: s.note_tags,
+        session: s,
       })
     }
     if (intimacyVisible()) {
@@ -162,9 +192,35 @@ export function LogScreen() {
   useEffect(() => { void loadToday() }, [loadToday])
   const selCycle = cycleSel ? cycles.find((c) => c.id === cycleSel.split('::')[0]) ?? null : null
   const selLabel = cycleSel ? cycleSel.split('::')[1] : ''
+  const selDay = selCycle?.days.find((d) => d.label === selLabel) ?? null
   const roundView = selCycle && selCycle.days.length > 0 ? currentRound(selCycle, roundsByCycle[selCycle.id] ?? []) : null
 
+  // Which round this log will land in — resolved exactly the way the write does
+  // (`ensureCycleRound`), so the screen can say "this starts R5" before you commit.
+  const targetRound = selCycle ? roundForDate(roundsByCycle[selCycle.id] ?? [], date) : null
+  const opensNewRound = !!selCycle && !!selLabel && !targetRound
+  const newRoundIndex = selCycle ? nextRoundIndex(roundsByCycle[selCycle.id] ?? []) : 0
+  // The picked day trains nothing this exercise does — the mis-file that used to
+  // quietly burn a round. `suggestedLabel` offers the day that does, when there is one.
+  const suggestedLabel = sel?.kind === 'exercise' && selCycle ? suggestCycleDay(selCycle, sel.ex, roundView?.remaining ?? []) : null
+  const dayMismatch = !!selDay && sel?.kind === 'exercise' && dayMatchScore(selDay, sel.ex) <= 0
+
   const parsed = parseNote(note)
+
+  /** Aim the cycle day at the day that actually trains this exercise (null = free
+   *  training). Runs on selection only, so a manual pick inside the modal sticks. */
+  function aimCycleDay(ex: Exercise) {
+    const cycle = selCycle ?? cycles.find((c) => c.id === activeCycleId) ?? null
+    if (!cycle || cycle.days.length === 0) return
+    const rv = currentRound(cycle, roundsByCycle[cycle.id] ?? [])
+    const label = suggestCycleDay(cycle, ex, rv.remaining)
+    setCycleSel(label ? `${cycle.id}::${label}` : '')
+    setDayAuto(!!label)
+  }
+  function pickCycleDay(value: string) {
+    setCycleSel(value)
+    setDayAuto(false)
+  }
 
   function resetForms() {
     setSets([emptySet()])
@@ -180,6 +236,7 @@ export function LogScreen() {
     setSel({ kind: 'exercise', ex })
     resetForms()
     if (ex.default_per_side) setSets([{ ...emptySet(), per_side: true }]) // learned default (§ per-side)
+    aimCycleDay(ex)
   }
   function selectSport(sport: Sport) {
     setSel({ kind: 'sport', sport })
@@ -238,13 +295,24 @@ export function LogScreen() {
     if (sel?.kind !== 'exercise') return
     const setInputs = buildSets()
     if (setInputs.length === 0) return
-    setSaving(true)
-    const exName = exerciseName(sel.ex, lang)
     // Tagging a cycle day advances THAT cycle's current round (§6B) — days can
     // come from any cycle (multiple splits/day). Kept inside withUndo so undo
     // also rewinds the round.
     const roundCycle = selCycle && selLabel ? selCycle : null
-    const { undo } = await withUndo(['workout_entries', 'sets', 'cycle_rounds'], async () => {
+    // Starting a round is never a side effect: say so and let the user back out.
+    if (roundCycle && opensNewRound) {
+      const ok = confirm(lang === 'zh'
+        ? `上一轮已结束，保存这条会开启新一轮 R${newRoundIndex}。继续?`
+        : `The last round is finished — saving this starts round R${newRoundIndex}. Continue?`)
+      if (!ok) return
+    }
+    setSaving(true)
+    const exName = exerciseName(sel.ex, lang)
+    const { undo } = await withUndo(['workout_entries', 'sets', 'cycle_rounds', 'entry_cycle_assignments'], async () => {
+      // Resolve (or open) the round FIRST and stamp it on the entry, instead of
+      // leaving membership to be re-guessed from date ranges later — a date can sit
+      // inside two rounds' spans, which is how one workout ended up counted twice.
+      const round = roundCycle ? (await ensureCycleRound(roundCycle, date)).round : null
       const res = await createEntryWithSets(
         {
           date,
@@ -254,6 +322,7 @@ export function LogScreen() {
           note_tags: parsed.tagKeys,
           cycle_day_label: roundCycle ? selLabel : null,
           cycle_id: roundCycle?.id ?? null,
+          cycle_round_id: round?.id ?? null,
           // rehab moves link straight to the injury they rehab (no modified flag);
           // strength lifts only link when marked reduced/paused.
           injury_modified: sel.ex.is_rehab ? null : injuryMod === 'none' ? null : injuryMod,
@@ -341,6 +410,20 @@ export function LogScreen() {
     await loadToday()
   }
 
+  // Intimacy rows have no shared edit dialog (History owns that one); everything else
+  // opens the same modal History uses.
+  function canEditLogged(item: LoggedItem): boolean {
+    if (item.kind === 'exercise') return !!item.entry && exercises.some((e) => e.id === item.entry!.exercise_id)
+    if (item.kind === 'sport') return !!item.session
+    return false
+  }
+
+  async function afterEdit() {
+    setEditing(null)
+    await loadToday()
+    await reloadRounds()
+  }
+
   async function deleteLogged(item: LoggedItem) {
     const tables = item.kind === 'exercise' ? ['workout_entries', 'sets'] : item.kind === 'sport' ? ['sport_sessions'] : ['optional_trackers']
     const { undo } = await withUndo(tables, async () => {
@@ -365,8 +448,8 @@ export function LogScreen() {
         {cycles.some((c) => c.days.length > 0) && (
           <div className="log-field">
             <label className="th-label" htmlFor="log-cd">{lang === 'zh' ? '循环日' : 'Cycle day'}</label>
-            <select id="log-cd" className="th-input log-cycleday" value={cycleSel} onChange={(e) => setCycleSel(e.target.value)}>
-              <option value="">—</option>
+            <select id="log-cd" className="th-input log-cycleday" value={cycleSel} onChange={(e) => pickCycleDay(e.target.value)}>
+              <option value="">{lang === 'zh' ? '自由训练 · 不计入分化' : 'Free training · no split'}</option>
               {cycles.filter((c) => c.days.length > 0).map((c) => (
                 <optgroup key={c.id} label={c.name}>
                   {c.days.map((d) => (
@@ -387,10 +470,10 @@ export function LogScreen() {
           <span className="log-round-state">
             {roundView.open
               ? (lang === 'zh' ? `还差 ${roundView.remaining.join(' / ') || '—'}` : `remaining: ${roundView.remaining.join(' / ') || '—'}`)
-              : (lang === 'zh' ? '新一轮待开始' : 'new round')}
+              : (lang === 'zh' ? `新一轮 R${newRoundIndex} 待开始` : `R${newRoundIndex} not started yet`)}
           </span>
           {roundView.nextLabel && selLabel !== roundView.nextLabel && (
-            <button type="button" className="hist-link log-round-pick" onClick={() => setCycleSel(`${selCycle.id}::${roundView.nextLabel}`)}>
+            <button type="button" className="hist-link log-round-pick" onClick={() => pickCycleDay(`${selCycle.id}::${roundView.nextLabel}`)}>
               {lang === 'zh' ? `选 ${roundView.nextLabel} 天` : `pick day ${roundView.nextLabel}`}
             </button>
           )}
@@ -477,6 +560,59 @@ export function LogScreen() {
           </div>
 
           {sel.ex.is_rehab && <RehabKnowledge ex={sel.ex} lang={lang} />}
+
+          {/* Where this lift will be filed. It lives INSIDE the modal because on a
+              phone the header picker is off-screen while you enter sets — which is
+              how a back workout kept landing on the chest day. */}
+          {cycles.some((c) => c.days.length > 0) && (
+            <div className={`log-field log-entry-cycle ${dayMismatch || opensNewRound ? 'warn' : ''}`}>
+              <label className="th-label" htmlFor="log-entry-cd">
+                {lang === 'zh' ? '归入分化' : 'Counts toward'}
+                {selCycle && selLabel && (
+                  <span className="log-entry-round">
+                    {targetRound ? `R${targetRound.index}` : lang === 'zh' ? `新一轮 R${newRoundIndex}` : `new R${newRoundIndex}`}
+                  </span>
+                )}
+                {dayAuto && !dayMismatch && (
+                  <span className="log-entry-auto">{lang === 'zh' ? '按动作自动选择' : 'auto-picked'}</span>
+                )}
+              </label>
+              <select id="log-entry-cd" className="th-input" value={cycleSel} onChange={(e) => pickCycleDay(e.target.value)}>
+                <option value="">{lang === 'zh' ? '自由训练 · 不计入分化' : 'Free training · no split'}</option>
+                {cycles.filter((c) => c.days.length > 0).map((c) => (
+                  <optgroup key={c.id} label={c.name}>
+                    {c.days.map((d) => (
+                      <option key={`${c.id}::${d.label}`} value={`${c.id}::${d.label}`}>
+                        {cycleDayOptionLabel(d, lang)}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+              {dayMismatch && selDay && (
+                <p className="log-warn">
+                  {lang === 'zh'
+                    ? `「${exerciseName(sel.ex, lang)}」不练 ${selDay.label} · ${cycleDayTitle(selDay, lang)}。`
+                    : `“${exerciseName(sel.ex, lang)}” isn’t part of ${selDay.label} · ${cycleDayTitle(selDay, lang)}.`}
+                  {suggestedLabel && suggestedLabel !== selLabel && (
+                    <button type="button" className="hist-link" onClick={() => pickCycleDay(`${selCycle!.id}::${suggestedLabel}`)}>
+                      {lang === 'zh' ? `改为 ${suggestedLabel}` : `use ${suggestedLabel}`}
+                    </button>
+                  )}
+                  <button type="button" className="hist-link" onClick={() => pickCycleDay('')}>
+                    {lang === 'zh' ? '不计入分化' : 'no split'}
+                  </button>
+                </p>
+              )}
+              {opensNewRound && (
+                <p className="log-warn">
+                  {lang === 'zh'
+                    ? `⚠ 上一轮已结束 — 保存会开启新一轮 R${newRoundIndex}。`
+                    : `⚠ The last round is finished — saving starts round R${newRoundIndex}.`}
+                </p>
+              )}
+            </div>
+          )}
 
           {exSummary && (exSummary.best || exSummary.last) && (
             <div className="log-hist">
@@ -606,15 +742,23 @@ export function LogScreen() {
               </button>
             )}
           </div>
-          <p className="log-session-hint">{lang === 'zh' ? '勾选交替做的动作 → 合并为循环' : 'tick alternating moves → merge into a circuit'}</p>
+          <p className="log-session-hint">{lang === 'zh' ? '点一条可修改(组数/日期/分化) · 勾选交替做的动作 → 合并为循环' : 'tap a row to edit (sets/date/split) · tick alternating moves → merge into a circuit'}</p>
           <ul className="log-session-list">
             {logged.map((item) => (
               <li key={item.id} className={`log-session-item ${item.group ? 'grouped' : ''}`}>
                 {item.kind === 'exercise' && (
                   <input type="checkbox" className="log-session-check" checked={circuitSel.has(item.id)} onChange={() => toggleCircuit(item.id)} aria-label="circuit" />
                 )}
-                <span className="log-session-name">{item.name}</span>
-                <span className="log-session-detail">{item.detail}</span>
+                <button
+                  type="button"
+                  className="log-session-open"
+                  onClick={() => setEditing(item)}
+                  disabled={!canEditLogged(item)}
+                  title={canEditLogged(item) ? (lang === 'zh' ? '修改这条' : 'edit this entry') : undefined}
+                >
+                  <span className="log-session-name">{item.name}</span>
+                  <span className="log-session-detail">{item.detail}</span>
+                </button>
                 {item.group && <span className="log-tagchip sm">⛓ {lang === 'zh' ? '循环' : 'circuit'}</span>}
                 {item.tagKeys.map((k) => (<span key={k} className="log-tagchip sm">{noteTagLabel(k, lang)}</span>))}
                 <button className="hist-link danger log-session-del" type="button" onClick={() => void deleteLogged(item)}>{lang === 'zh' ? '删除' : 'delete'}</button>
@@ -632,6 +776,28 @@ export function LogScreen() {
 
       {injuryDialog && (
         <AddInjuryDialog lang={lang} onSaved={onInjuryCreated} onClose={() => setInjuryDialog(false)} />
+      )}
+
+      {editing?.kind === 'exercise' && editing.entry && (
+        <EditEntryDialog
+          entry={editing.entry}
+          exercise={exercises.find((e) => e.id === editing.entry!.exercise_id)!}
+          allExercises={exercises}
+          sets={editing.sets ?? []}
+          lang={lang}
+          onChanged={afterEdit}
+          onClose={() => setEditing(null)}
+        />
+      )}
+
+      {editing?.kind === 'sport' && editing.session && (
+        <SportSessionDialog
+          lang={lang}
+          sport={sports.find((s) => s.id === editing.session!.sport_id)}
+          session={editing.session}
+          onSaved={() => void afterEdit()}
+          onClose={() => setEditing(null)}
+        />
       )}
     </div>
   )

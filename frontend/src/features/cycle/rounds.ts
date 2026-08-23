@@ -15,7 +15,29 @@ export interface RoundView {
 
 /** The open (in-progress) round for a cycle, or null. */
 export function openRound(rounds: CycleRound[]): CycleRound | null {
-  return rounds.filter((r) => r.ended_on == null).sort((a, b) => b.index - a.index)[0] ?? null
+  return rounds.filter((r) => !r.deleted && r.ended_on == null).sort((a, b) => b.index - a.index)[0] ?? null
+}
+
+/** The index a freshly-opened round would get. Shown in the "new round" pickers so
+ *  you always know which round you are about to create (R5, not just "new"). */
+export function nextRoundIndex(rounds: CycleRound[]): number {
+  return rounds.filter((r) => !r.deleted).reduce((m, r) => Math.max(m, r.index), 0) + 1
+}
+
+/**
+ * The round a workout on `date` belongs to: the round whose span covers that date
+ * (latest one, if several do), else the open round, else null = a new round is needed.
+ *
+ * Back-dated logs land in the round they were actually performed in rather than in
+ * whatever round happens to be open now — and the caller can tell, BEFORE writing,
+ * whether saving is about to start a new round.
+ */
+export function roundForDate(rounds: CycleRound[], date: string): CycleRound | null {
+  const live = rounds.filter((r) => !r.deleted)
+  const covering = live
+    .filter((r) => date >= r.started_on && (!r.ended_on || date <= r.ended_on))
+    .sort((a, b) => b.index - a.index)[0]
+  return covering ?? openRound(live)
 }
 
 // One entry's membership in a cycle: (round, day) it belongs to. An entry can have

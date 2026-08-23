@@ -48,6 +48,7 @@ import {
 
   type LoopInfo,
 } from './rows'
+import { EntryTargets, initialTargets, type UITarget } from './EntryTargets'
 import { ExportDialog } from './ExportDialog'
 import { ReviewFlow } from './ReviewFlow'
 import './history.css'
@@ -661,8 +662,6 @@ function ModuleChooser({
 }
 
 
-interface UITarget { cycleId: string; roundId: string | null; dayLabel: string }
-
 // Assign a day's entries to cycle memberships. Each entry can carry SEVERAL targets,
 // each a (split, round, day) — so one lift can count toward two splits, and different
 // lifts of the day can go to different splits/rounds (M2M, §6B).
@@ -690,24 +689,10 @@ function CycleAssignDialog({
   onClose: () => void
 }) {
   const countSets = useMemo(() => (id: string) => setCountOf(setMap, id), [setMap])
-  const firstCycle = cycles[0]?.id ?? ''
-  // A round to default a fresh target to: the split's latest still-open round, else new.
-  const latestOpenOf = (cycleId: string) =>
-    [...(roundsByCycle[cycleId] ?? [])].sort((a, b) => b.index - a.index).find((r) => !r.ended_on && !r.skipped)?.id ?? null
 
   // Per-entry list of targets, seeded from the entry's existing assignments.
   const [targets, setTargets] = useState<Record<string, UITarget[]>>(() =>
-    Object.fromEntries(items.map((e) => {
-      const rows = assignments
-        .filter((a) => !a.deleted && a.entry_id === e.id)
-        .map((a) => ({ cycleId: a.cycle_id, roundId: a.cycle_round_id, dayLabel: a.cycle_day_label }))
-      // Fallback for an entry tagged via its legacy columns but not yet in the
-      // assignment table (e.g. logged before the M2M migration populated it).
-      if (rows.length === 0 && e.cycle_id && e.cycle_day_label) {
-        rows.push({ cycleId: e.cycle_id, roundId: e.cycle_round_id ?? null, dayLabel: e.cycle_day_label })
-      }
-      return [e.id, rows]
-    })),
+    Object.fromEntries(items.map((e) => [e.id, initialTargets(e, assignments)])),
   )
   const [modules, setModules] = useState<Record<string, BodyPart | ''>>(() =>
     Object.fromEntries(items.map((e) => {
@@ -718,13 +703,6 @@ function CycleAssignDialog({
       return [e.id, (valid ? e.module_part : '') as BodyPart | '']
     })),
   )
-
-  const addTarget = (eid: string) =>
-    setTargets((t) => ({ ...t, [eid]: [...t[eid], { cycleId: firstCycle, roundId: latestOpenOf(firstCycle), dayLabel: '' }] }))
-  const removeTarget = (eid: string, i: number) =>
-    setTargets((t) => ({ ...t, [eid]: t[eid].filter((_, j) => j !== i) }))
-  const patchTarget = (eid: string, i: number, patch: Partial<UITarget>) =>
-    setTargets((t) => ({ ...t, [eid]: t[eid].map((tg, j) => (j === i ? { ...tg, ...patch } : tg)) }))
 
   async function save() {
     const byEntry: Record<string, { cycleId: string; roundId: string | null; dayLabel: string }[]> = {}
@@ -750,8 +728,8 @@ function CycleAssignDialog({
 
         <p className="hist-assign-lead">
           {lang === 'zh'
-            ? '每个动作可以归到多个分化 — 同一动作能同时算进不同分化的容量。'
-            : 'Each exercise can belong to several splits — one lift can count toward more than one.'}
+            ? '每个动作可以归到多个分化 — 同一动作能同时算进不同分化的容量。不加任何分化 = 自由训练。'
+            : 'Each exercise can belong to several splits — one lift can count toward more than one. No split at all = free training.'}
         </p>
 
         {cycles.length === 0 ? (
@@ -760,7 +738,6 @@ function CycleAssignDialog({
           <div className="hist-assign-list">
             {items.map((e) => {
               const ex = exById[e.exercise_id]
-              const tgs = targets[e.id]
               return (
                 <div key={e.id} className="hist-assign-entry-block">
                   <div className="hist-assign-entry-head">
@@ -772,30 +749,13 @@ function CycleAssignDialog({
                     </select>
                   </div>
 
-                  {tgs.length === 0 && <p className="hist-assign-none">{lang === 'zh' ? '未归类' : 'not assigned'}</p>}
-                  {tgs.map((tg, i) => {
-                    const rs = [...(roundsByCycle[tg.cycleId] ?? [])].sort((a, b) => b.index - a.index)
-                    const days = cycles.find((c) => c.id === tg.cycleId)?.days ?? []
-                    return (
-                      <div key={i} className="hist-assign-target">
-                        <select className="th-input" value={tg.cycleId} onChange={(ev) => patchTarget(e.id, i, { cycleId: ev.target.value, roundId: latestOpenOf(ev.target.value), dayLabel: '' })}>
-                          {cycles.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                        </select>
-                        <select className="th-input" value={tg.roundId ?? ''} onChange={(ev) => patchTarget(e.id, i, { roundId: ev.target.value || null })}>
-                          <option value="">{lang === 'zh' ? '新一轮' : 'New'}</option>
-                          {rs.map((r) => <option key={r.id} value={r.id}>R{r.index}</option>)}
-                        </select>
-                        <select className="th-input" value={tg.dayLabel} onChange={(ev) => patchTarget(e.id, i, { dayLabel: ev.target.value })}>
-                          <option value="">{lang === 'zh' ? '选日' : 'day'}</option>
-                          {days.map((d) => <option key={d.label} value={d.label}>{d.label} · {cycleDayTitle(d, lang)}</option>)}
-                        </select>
-                        <button type="button" className="hist-assign-x" onClick={() => removeTarget(e.id, i)} aria-label="remove" title={lang === 'zh' ? '移除' : 'remove'}>×</button>
-                      </div>
-                    )
-                  })}
-                  <button type="button" className="hist-assign-add" onClick={() => addTarget(e.id)}>
-                    + {lang === 'zh' ? '添加分化' : 'Add split'}
-                  </button>
+                  <EntryTargets
+                    cycles={cycles}
+                    roundsByCycle={roundsByCycle}
+                    targets={targets[e.id]}
+                    lang={lang}
+                    onChange={(next) => setTargets((t) => ({ ...t, [e.id]: next }))}
+                  />
                 </div>
               )
             })}

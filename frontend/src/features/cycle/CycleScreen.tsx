@@ -15,6 +15,7 @@ import {
   getSportSessions,
   getTrackerEntries,
   setActiveCycle,
+  reconcileCycleRounds,
   skipCycleRound,
   reopenCycleRound,
   deleteCycleRound,
@@ -89,6 +90,10 @@ export function CycleScreen() {
     setSportSessions(ss)
     setShowIntimacy(visible)
     setIntimacyRows(intimacy)
+    // Self-heal round scalars before reading them: a round emptied by a later
+    // re-assignment must not keep posing as the current round (empty body model /
+    // empty loop) while the real unfinished round sits closed behind it.
+    for (const c of cs) await reconcileCycleRounds(c)
     const pairs = await Promise.all(cs.map(async (c) => [c.id, await getCycleRounds(c.id)] as const))
     setRoundsByCycle(Object.fromEntries(pairs))
     setAssignments(await getEntryCycleAssignments())

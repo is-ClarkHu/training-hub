@@ -11,7 +11,7 @@ import {
   type MeasureType,
 } from '../../supabase/types'
 import { useCategories, categoryLabel } from '../../categories'
-import type { TranslationTarget } from '../../translation'
+import { suggestExercise, type TranslationTarget } from '../../translation'
 import { exerciseKind, sortExercises } from './util'
 import './log.css'
 
@@ -45,6 +45,23 @@ export function EditExerciseDialog({
   const [mergeTarget, setMergeTarget] = useState('')
   const [usage, setUsage] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
+  const [hint, setHint] = useState<string | null>(null)
+
+  // Same optional auto-translate helper the add dialog has: rename one side, fill the
+  // other from it. Renaming here used to leave the other language stale with no way
+  // to regenerate it short of deleting and re-creating the exercise.
+  async function onSuggest(from: 'zh' | 'en') {
+    const src = (from === 'zh' ? nameZh : nameEn).trim()
+    if (!src) return
+    setBusy(true)
+    setHint(null)
+    const s = await suggestExercise(src)
+    if (from === 'zh') { if (s.name_en) setNameEn(s.name_en) } else if (s.name_zh) setNameZh(s.name_zh)
+    if (s.needsTranslation) {
+      setHint(lang === 'zh' ? '自动翻译暂不可用(离线或未配置),手动填另一名即可。' : 'Auto-translate unavailable (offline or not configured). Fill the other name manually.')
+    }
+    setBusy(false)
+  }
 
   useEffect(() => {
     void exerciseUsage(exercise.id).then(setUsage)
@@ -122,6 +139,18 @@ export function EditExerciseDialog({
             <label className="th-label">English</label>
             <input className="th-input" value={nameEn} onChange={(e) => setNameEn(e.target.value)} />
           </div>
+        </div>
+        <div className="log-field">
+          <label className="th-label">{lang === 'zh' ? '自动翻译(可选)' : 'Auto-translate (optional)'}</label>
+          <div className="log-row">
+            <button className="th-btn-ghost log-suggest" type="button" onClick={() => void onSuggest('zh')} disabled={busy || !nameZh.trim()}>
+              {busy ? '…' : lang === 'zh' ? '中 → English' : 'ZH → EN'}
+            </button>
+            <button className="th-btn-ghost log-suggest" type="button" onClick={() => void onSuggest('en')} disabled={busy || !nameEn.trim()}>
+              {busy ? '…' : lang === 'zh' ? 'English → 中' : 'EN → ZH'}
+            </button>
+          </div>
+          {hint && <p className="log-hint">{hint}</p>}
         </div>
         <div className="log-field">
           <label className="th-label">{lang === 'zh' ? '部位(可多选)' : 'Body parts (multi)'}</label>

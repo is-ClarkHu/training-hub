@@ -50,6 +50,7 @@ export {
   getCycleRounds,
   getEntryCycleAssignments,
   getOpenRound,
+  ensureCycleRound,
   recordCycleDay,
   skipCycleRound,
   reopenCycleRound,
