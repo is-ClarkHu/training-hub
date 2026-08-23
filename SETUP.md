@@ -138,6 +138,27 @@ request after a nap is slow (~30–60s cold start) — the UI shows a "waking up
 > except chat / food-photo / file-summary (incl. AI translation, which is browser-direct)
 > works without it.
 
+## 6. Demo account (optional) 🔑
+
+A public, self-resetting demo account (for a résumé/portfolio link). The seeder signs
+in **as the demo user** with the anon key — no service_role — and only touches that
+user's own rows (RLS) + storage folders.
+
+1. Supabase → Authentication → Users → create the demo account (email + password).
+2. GitHub → repo Settings → Secrets → add `DEMO_EMAIL` and `DEMO_PASSWORD`. (The
+   workflow reuses the existing `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` secrets.)
+3. Enable/run the **Seed demo account** workflow (`.github/workflows/seed-demo.yml`);
+   it re-seeds daily at 00:00 China time and on manual dispatch.
+4. Put the URL + credentials in the README's **Live demo** section.
+
+Local dry run (prints row counts, no network) or a real one-off seed:
+```bash
+cd frontend && npm ci
+npm run seed:demo                                  # dry run
+SUPABASE_URL=… SUPABASE_ANON_KEY=… DEMO_EMAIL=… DEMO_PASSWORD=… npm run seed:demo
+```
+What it covers: `frontend/scripts/seed-demo/README.md`.
+
 ---
 
 ## What only you can do (🔑)

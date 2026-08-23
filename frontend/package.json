@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "test": "vitest run",
+    "seed:demo": "node --experimental-strip-types scripts/seed-demo/seed.ts",
     "preview": "vite preview"
   },
   "dependencies": {

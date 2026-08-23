@@ -11,6 +11,22 @@ instant and survives a flaky connection, then syncs to Supabase in the backgroun
 but this is an online, cloud-synced app: sign-in, sync, and every AI feature need
 the network.
 
+## Live demo
+
+Try it with the read-only-ish demo account — **re-seeded automatically every day**, so
+every screen is populated (15 weeks of training with PRs, an in-progress cycle, 4 injury
+recovery stories, a food log with AI nutrition estimates, 3 AI chatrooms with different
+data permissions, and more):
+
+- **URL:** `https://is-clarkhu.github.io/training-hub/`
+- **Email:** `demo@training-hub.app` · **Password:** `demo-training-hub`
+
+> The account resets nightly, so feel free to poke around — any edits are wiped on the
+> next daily seed. (Replace the address/credentials above with your own.) The AI chat's
+> live replies need an LLM key in Settings → AI, but the seeded transcripts, memory,
+> summaries, and per-room permissions are all viewable without one. How it's built:
+> [`frontend/scripts/seed-demo/`](frontend/scripts/seed-demo/README.md).
+
 ## Features
 
 - **Log / History / Dashboard** — per-set logging (supersets, note tags), reverse-

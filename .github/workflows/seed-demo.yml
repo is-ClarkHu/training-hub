@@ -1,0 +1,34 @@
+name: Seed demo account
+
+# Re-initializes the public demo account once a day so it always looks current
+# (last workout = today, in-progress cycle, fresh food log…). Also runnable manually.
+on:
+  schedule:
+    - cron: '0 16 * * *' # 00:00 China time (UTC+8) daily
+  workflow_dispatch: {}
+
+concurrency:
+  group: seed-demo
+  cancel-in-progress: false
+
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install deps
+        working-directory: frontend
+        run: npm ci
+      - name: Seed the demo account
+        working-directory: frontend
+        env:
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          DEMO_EMAIL: ${{ secrets.DEMO_EMAIL }}
+          DEMO_PASSWORD: ${{ secrets.DEMO_PASSWORD }}
+        run: node --experimental-strip-types scripts/seed-demo/seed.ts
