@@ -22,7 +22,7 @@ data permissions, and more):
 - **Email:** `demo@training-hub.app` · **Password:** `demo-training-hub`
 
 > The account resets nightly, so feel free to poke around — any edits are wiped on the
-> next daily seed. (Replace the address/credentials above with your own.) The AI chat's
+> next daily seed. The AI chat's
 > live replies need an LLM key in Settings → AI, but the seeded transcripts, memory,
 > summaries, and per-room permissions are all viewable without one. How it's built:
 > [`frontend/scripts/seed-demo/`](frontend/scripts/seed-demo/README.md).
