@@ -3,7 +3,7 @@
 // the same session opened a fresh one — which then became the "current" round
 // everywhere (empty body model, empty rings) even after the entries were moved back.
 import { describe, it, expect } from 'vitest'
-import { nextRoundIndex, openRound, roundForDate } from './rounds'
+import { nextRoundIndex, openRound, roundComplete, roundForDate, targetRoundFor } from './rounds'
 import { dayMatchScore, suggestCycleDay } from './day'
 import type { CycleDay, CycleRound, Exercise, TrainingCycle } from '../../supabase/types'
 
@@ -80,5 +80,36 @@ describe('suggestCycleDay — aim the split day at the exercise being logged', (
   })
   it('flags no match for a day that trains nothing the exercise does', () => {
     expect(dayMatchScore(day('C', ['legs'], ['quads']), ex(['back']))).toBe(0)
+  })
+})
+
+describe('targetRoundFor — a round only advances when it is finished or skipped', () => {
+  const owed = (i: number, started: string, ended: string | null) =>
+    round(i, started, ended, { completed_labels: ['B', 'C', 'D'] })      // A still owed
+  const full = (i: number, started: string, ended: string) =>
+    round(i, started, ended, { completed_labels: ['A', 'B', 'C', 'D'] })
+
+  it('hands a later workout to the unfinished latest round instead of opening a new one', () => {
+    // R4 closed early with A still owed, and nobody pressed skip.
+    expect(targetRoundFor(SPLIT, [owed(4, '2026-08-01', '2026-08-10')], '2026-08-20')?.index).toBe(4)
+  })
+  it('opens a new round once every day is covered', () => {
+    expect(targetRoundFor(SPLIT, [full(4, '2026-08-01', '2026-08-10')], '2026-08-20')).toBeNull()
+  })
+  it('opens a new round after an explicit skip', () => {
+    const skipped = round(4, '2026-08-01', '2026-08-10', { completed_labels: ['B'], skipped: true })
+    expect(targetRoundFor(SPLIT, [skipped], '2026-08-20')).toBeNull()
+  })
+  it('still prefers the round whose span covers a back-dated workout', () => {
+    const rounds = [full(4, '2026-08-01', '2026-08-10'), owed(5, '2026-08-12', null)]
+    expect(targetRoundFor(SPLIT, rounds, '2026-08-05')?.index).toBe(4)
+    expect(targetRoundFor(SPLIT, rounds, '2026-08-30')?.index).toBe(5)
+  })
+  it('needs a first round when the cycle has none', () => {
+    expect(targetRoundFor(SPLIT, [], '2026-08-20')).toBeNull()
+  })
+  it('roundComplete counts only the cycle\'s own labels', () => {
+    expect(roundComplete(SPLIT, round(1, 'x', null, { completed_labels: ['A', 'B', 'C', 'D'] }))).toBe(true)
+    expect(roundComplete(SPLIT, round(1, 'x', null, { completed_labels: ['A', 'B', 'C'] }))).toBe(false)
   })
 })

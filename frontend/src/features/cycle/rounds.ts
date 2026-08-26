@@ -40,6 +40,37 @@ export function roundForDate(rounds: CycleRound[], date: string): CycleRound | n
   return covering ?? openRound(live)
 }
 
+/** Every day label covered. The ONLY automatic reason a round ends — everything else
+ *  requires the explicit skip button. Reads the reconciled `completed_labels` scalar,
+ *  which `reconcileCycleRounds` keeps derived from live memberships. */
+export function roundComplete(cycle: TrainingCycle, round: CycleRound): boolean {
+  const labels = cycle.days.map((d) => d.label)
+  return labels.length > 0 && labels.every((l) => round.completed_labels.includes(l))
+}
+
+/** The latest round of a cycle (highest index), ignoring soft-deleted ones. */
+export function latestRound(rounds: CycleRound[]): CycleRound | null {
+  return rounds.filter((r) => !r.deleted).sort((a, b) => a.index - b.index).slice(-1)[0] ?? null
+}
+
+/**
+ * The round a workout on `date` should be recorded in — null only when starting a new
+ * round is genuinely correct.
+ *
+ * A round advances for exactly two reasons: it COMPLETED (every day covered) or you
+ * explicitly SKIPPED it. Logging is not one of them. So when no round's span covers
+ * the date, an unfinished latest round takes the workout (reopening if something had
+ * closed it) rather than a fresh round being conjured up behind it — which is how a
+ * split with one owed day left could accumulate R5, R6, R7…
+ */
+export function targetRoundFor(cycle: TrainingCycle, rounds: CycleRound[], date: string): CycleRound | null {
+  const covering = roundForDate(rounds, date)
+  if (covering) return covering
+  const latest = latestRound(rounds)
+  if (latest && !latest.skipped && !roundComplete(cycle, latest)) return latest
+  return null
+}
+
 // One entry's membership in a cycle: (round, day) it belongs to. An entry can have
 // SEVERAL of these (many-to-many, §6B). Carries the entry's date + exercise so the
 // round functions don't need to re-join.

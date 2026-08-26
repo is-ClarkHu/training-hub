@@ -3,7 +3,7 @@
 // SyncEngine can later upsert it to Supabase unchanged (SPEC §3).
 import { db } from './db'
 import { currentStage } from '../features/injuries/util'
-import { nextRoundIndex, roundForDate, roundMembers } from '../features/cycle/rounds'
+import { nextRoundIndex, roundForDate, roundMembers, targetRoundFor } from '../features/cycle/rounds'
 import { newId, nowIso, today } from './helpers'
 import { currentUserId, supabase } from '../supabase/client'
 import { FRISBEE_FIELDS } from '../supabase/types'
@@ -671,14 +671,19 @@ export async function reconcileCycleRounds(cycleOrId: TrainingCycle | string): P
   const membersOf = new Map<string, ReturnType<typeof roundMembers>>()
   for (const r of rounds) membersOf.set(r.id, roundMembers(cycle, r, entries, assignments))
 
+  const empty = (r: CycleRound) => (membersOf.get(r.id)?.length ?? 0) === 0 && !r.skipped
   const ghosts: CycleRound[] = []
-  while (rounds.length > 1) {
-    const last = rounds[rounds.length - 1]
-    if (last.skipped || (membersOf.get(last.id)?.length ?? 0) > 0) break
-    ghosts.push({ ...last, deleted: true, updated_at: ts })
-    rounds = rounds.slice(0, -1)
+  if (rounds.some(empty)) {
+    const kept = rounds.filter((r) => !empty(r))
+    // Keep the newest round if that would wipe the cycle's history entirely, so a
+    // freshly-created (still empty) cycle doesn't lose its R1.
+    const survivors = kept.length > 0 ? kept : rounds.slice(-1)
+    for (const r of rounds) if (!survivors.includes(r)) ghosts.push({ ...r, deleted: true, updated_at: ts })
+    // Renumber what's left contiguously: with the ghosts gone, R1, R2, R4 would be
+    // a lie about how many passes you actually made.
+    rounds = survivors.map((r, i) => (r.index === i + 1 ? r : { ...r, index: i + 1, updated_at: ts }))
+    if (ghosts.length > 0) await db.cycle_rounds.bulkPut(ghosts)
   }
-  if (ghosts.length > 0) await db.cycle_rounds.bulkPut(ghosts)
 
   const maxIdx = rounds.reduce((m, r) => Math.max(m, r.index), 0)
   const updates: CycleRound[] = []
@@ -693,7 +698,9 @@ export async function reconcileCycleRounds(cycleOrId: TrainingCycle | string): P
       : round.index === maxIdx
         ? (allDone ? (dates[dates.length - 1] ?? started_on) : null)
         : (dates[dates.length - 1] ?? round.ended_on ?? started_on)
+    const stored = await db.cycle_rounds.get(round.id)
     const changed =
+      round.index !== stored?.index ||
       started_on !== round.started_on ||
       ended_on !== round.ended_on ||
       completed.length !== round.completed_labels.length ||
@@ -770,9 +777,26 @@ export async function ensureCycleRound(
   cycle: TrainingCycle,
   date: string,
 ): Promise<{ round: CycleRound; isNew: boolean }> {
-  const rounds = await getCycleRounds(cycle.id)
-  const existing = roundForDate(rounds, date)
-  if (existing) return { round: existing, isNew: false }
+  let rounds = await getCycleRounds(cycle.id)
+  const covering = roundForDate(rounds, date)
+  if (covering) return { round: covering, isNew: false }
+
+  // Nothing covers the date. Before conjuring a round, re-derive the cycle so the
+  // decision is made on live data (a round that only LOOKS finished because its last
+  // entry was deleted must not push the workout into a new one), then hand the
+  // workout to the latest unfinished round — reopening it if something closed it.
+  await reconcileCycleRounds(cycle)
+  rounds = await getCycleRounds(cycle.id)
+  const unfinished = targetRoundFor(cycle, rounds, date)
+  if (unfinished) {
+    if (unfinished.ended_on) {
+      const reopened = { ...unfinished, ended_on: null, updated_at: nowIso() }
+      await db.cycle_rounds.put(reopened)
+      return { round: reopened, isNew: false }
+    }
+    return { round: unfinished, isNew: false }
+  }
+
   const round: CycleRound = {
     ...syncFields(),
     cycle_id: cycle.id,

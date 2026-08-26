@@ -33,7 +33,7 @@ import { parseNote, noteTagLabel } from '../../translation'
 import { useLanguage } from '../../i18n'
 import { useUndo } from '../../undo'
 import { fieldLabel } from '../sports'
-import { currentRound, nextRoundIndex, roundForDate } from '../cycle/rounds'
+import { currentRound, nextRoundIndex, targetRoundFor } from '../cycle/rounds'
 import { cycleDayOptionLabel, cycleDayTitle, dayMatchScore, suggestCycleDay } from '../cycle/day'
 import { INTIMACY_CATEGORIES, intimacyLabel, intimacyVisible } from '../intimacy'
 import type {
@@ -193,16 +193,19 @@ export function LogScreen() {
   const selCycle = cycleSel ? cycles.find((c) => c.id === cycleSel.split('::')[0]) ?? null : null
   const selLabel = cycleSel ? cycleSel.split('::')[1] : ''
   const selDay = selCycle?.days.find((d) => d.label === selLabel) ?? null
-  const roundView = selCycle && selCycle.days.length > 0 ? currentRound(selCycle, roundsByCycle[selCycle.id] ?? []) : null
-
   // Which round this log will land in — resolved exactly the way the write does
-  // (`ensureCycleRound`), so the screen can say "this starts R5" before you commit.
-  const targetRound = selCycle ? roundForDate(roundsByCycle[selCycle.id] ?? [], date) : null
+  // (`ensureCycleRound` → `targetRoundFor`), so the hint, the warning and the write can
+  // never disagree about whether saving starts a new round.
+  const selRounds = selCycle ? roundsByCycle[selCycle.id] ?? [] : []
+  const targetRound = selCycle && selCycle.days.length > 0 ? targetRoundFor(selCycle, selRounds, date) : null
   const opensNewRound = !!selCycle && !!selLabel && !targetRound
-  const newRoundIndex = selCycle ? nextRoundIndex(roundsByCycle[selCycle.id] ?? []) : 0
+  const newRoundIndex = selCycle ? nextRoundIndex(selRounds) : 0
+  const dayLabels = selCycle?.days.map((d) => d.label) ?? []
+  const roundDone = targetRound ? dayLabels.filter((l) => targetRound.completed_labels.includes(l)) : []
+  const roundRemaining = dayLabels.filter((l) => !roundDone.includes(l))
   // The picked day trains nothing this exercise does — the mis-file that used to
   // quietly burn a round. `suggestedLabel` offers the day that does, when there is one.
-  const suggestedLabel = sel?.kind === 'exercise' && selCycle ? suggestCycleDay(selCycle, sel.ex, roundView?.remaining ?? []) : null
+  const suggestedLabel = sel?.kind === 'exercise' && selCycle ? suggestCycleDay(selCycle, sel.ex, roundRemaining) : null
   const dayMismatch = !!selDay && sel?.kind === 'exercise' && dayMatchScore(selDay, sel.ex) <= 0
 
   const parsed = parseNote(note)
@@ -212,8 +215,10 @@ export function LogScreen() {
   function aimCycleDay(ex: Exercise) {
     const cycle = selCycle ?? cycles.find((c) => c.id === activeCycleId) ?? null
     if (!cycle || cycle.days.length === 0) return
-    const rv = currentRound(cycle, roundsByCycle[cycle.id] ?? [])
-    const label = suggestCycleDay(cycle, ex, rv.remaining)
+    const rounds = roundsByCycle[cycle.id] ?? []
+    const target = targetRoundFor(cycle, rounds, date)
+    const owed = cycle.days.map((d) => d.label).filter((l) => !target?.completed_labels.includes(l))
+    const label = suggestCycleDay(cycle, ex, owed)
     setCycleSel(label ? `${cycle.id}::${label}` : '')
     setDayAuto(!!label)
   }
@@ -302,8 +307,8 @@ export function LogScreen() {
     // Starting a round is never a side effect: say so and let the user back out.
     if (roundCycle && opensNewRound) {
       const ok = confirm(lang === 'zh'
-        ? `上一轮已结束，保存这条会开启新一轮 R${newRoundIndex}。继续?`
-        : `The last round is finished — saving this starts round R${newRoundIndex}. Continue?`)
+        ? `上一轮已练完(或已跳过)，保存这条会开启新一轮 R${newRoundIndex}。继续?`
+        : `The last round is complete (or was skipped) — saving this starts round R${newRoundIndex}. Continue?`)
       if (!ok) return
     }
     setSaving(true)
@@ -464,17 +469,17 @@ export function LogScreen() {
         )}
       </header>
 
-      {roundView && selCycle && (
+      {selCycle && selCycle.days.length > 0 && (
         <div className="log-round-hint">
-          <span className="log-round-badge">{selCycle.name} · Round {roundView.index}</span>
+          <span className="log-round-badge">{selCycle.name} · Round {targetRound ? targetRound.index : newRoundIndex}</span>
           <span className="log-round-state">
-            {roundView.open
-              ? (lang === 'zh' ? `还差 ${roundView.remaining.join(' / ') || '—'}` : `remaining: ${roundView.remaining.join(' / ') || '—'}`)
-              : (lang === 'zh' ? `新一轮 R${newRoundIndex} 待开始` : `R${newRoundIndex} not started yet`)}
+            {targetRound
+              ? (lang === 'zh' ? `还差 ${roundRemaining.join(' / ') || '—'}` : `remaining: ${roundRemaining.join(' / ') || '—'}`)
+              : (lang === 'zh' ? `上一轮已收尾 · 新一轮 R${newRoundIndex} 待开始` : `last round wrapped up · R${newRoundIndex} not started`)}
           </span>
-          {roundView.nextLabel && selLabel !== roundView.nextLabel && (
-            <button type="button" className="hist-link log-round-pick" onClick={() => pickCycleDay(`${selCycle.id}::${roundView.nextLabel}`)}>
-              {lang === 'zh' ? `选 ${roundView.nextLabel} 天` : `pick day ${roundView.nextLabel}`}
+          {roundRemaining[0] && selLabel !== roundRemaining[0] && (
+            <button type="button" className="hist-link log-round-pick" onClick={() => pickCycleDay(`${selCycle.id}::${roundRemaining[0]}`)}>
+              {lang === 'zh' ? `选 ${roundRemaining[0]} 天` : `pick day ${roundRemaining[0]}`}
             </button>
           )}
         </div>
@@ -607,8 +612,8 @@ export function LogScreen() {
               {opensNewRound && (
                 <p className="log-warn">
                   {lang === 'zh'
-                    ? `⚠ 上一轮已结束 — 保存会开启新一轮 R${newRoundIndex}。`
-                    : `⚠ The last round is finished — saving starts round R${newRoundIndex}.`}
+                    ? `⚠ 上一轮已练完(或已跳过) — 保存会开启新一轮 R${newRoundIndex}。`
+                    : `⚠ The last round is complete (or was skipped) — saving starts round R${newRoundIndex}.`}
                 </p>
               )}
             </div>
