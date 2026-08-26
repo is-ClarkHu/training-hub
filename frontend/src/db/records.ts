@@ -98,7 +98,15 @@ export async function updateExercise(
   patch: Partial<Pick<Exercise, 'name_zh' | 'name_en' | 'body_parts' | 'measure_type' | 'assisted' | 'name_locked' | 'needs_translation' | 'default_per_side' | 'duration_hm' | 'bodyweight' | 'is_rehab' | 'rehab_purpose_zh' | 'rehab_purpose_en' | 'rehab_cues_zh' | 'rehab_cues_en' | 'rehab_dosage'>>,
 ): Promise<void> {
   const e = await db.exercises.get(id)
-  if (e) await db.exercises.put({ ...e, ...patch, updated_at: nowIso() })
+  if (!e) return
+  const next = { ...e, ...patch, updated_at: nowIso() }
+  // Filling in the missing language clears "待翻译" (and blanking one raises it again).
+  // The flag used to be write-once at creation, so translating an exercise later left
+  // it flagged forever. Callers can still set it explicitly to override.
+  if (('name_zh' in patch || 'name_en' in patch) && !('needs_translation' in patch)) {
+    next.needs_translation = !next.name_zh?.trim() || !next.name_en?.trim()
+  }
+  await db.exercises.put(next)
 }
 
 export async function softDeleteExercise(id: string): Promise<void> {

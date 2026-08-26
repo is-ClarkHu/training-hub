@@ -15,6 +15,7 @@ import {
   displayNote,
   exerciseKind,
   exerciseName,
+  exerciseNeedsTranslation,
   formatHours,
   formatMetrics,
   formatSetLine,
@@ -293,7 +294,7 @@ export function EntryCard({
   const needsAttention =
     entry.needs_review ||
     entry.needs_translation ||
-    (exercise ? exercise.needs_translation || !exercise.name_en || !exercise.name_zh : false)
+    exerciseNeedsTranslation(exercise)
 
   const name = exercise ? exerciseName(exercise, lang) : '(deleted exercise)'
   // Hidden during select mode so the ⇄ chip doesn't collide with the checkbox.
@@ -305,7 +306,7 @@ export function EntryCard({
         <span className="hist-badge injury">{entry.injury_modified === 'paused' ? (lang === 'zh' ? '因伤暂停' : 'paused') : (lang === 'zh' ? '因伤减量' : 'reduced')}</span>
       )}
       {entry.needs_review && <span className="hist-badge review">{lang === 'zh' ? '待复核' : 'review'}</span>}
-      {(entry.needs_translation || (exercise && (exercise.needs_translation || !exercise.name_en || !exercise.name_zh))) && (
+      {(entry.needs_translation || exerciseNeedsTranslation(exercise)) && (
         <span className="hist-badge translate">{lang === 'zh' ? '待翻译' : 'translate'}</span>
       )}
     </>

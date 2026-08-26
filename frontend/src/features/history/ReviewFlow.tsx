@@ -6,7 +6,7 @@ import { useState } from 'react'
 import { patchEntry } from '../../db'
 import type { Exercise, ExerciseSet, WorkoutEntry } from '../../supabase/types'
 import { noteTagLabel } from '../../translation'
-import { ACTIVITY_COLORS, displayNote, exerciseKind, exerciseName, formatSetLine } from '../log/util'
+import { ACTIVITY_COLORS, displayNote, exerciseKind, exerciseName, exerciseNeedsTranslation, formatSetLine } from '../log/util'
 import { EditEntryDialog } from './EditEntryDialog'
 
 export function ReviewFlow({
@@ -67,7 +67,7 @@ export function ReviewFlow({
   const name = exercise ? exerciseName(exercise, lang) : '(deleted exercise)'
   const flags: string[] = []
   if (entry.needs_review) flags.push(lang === 'zh' ? '待复核' : 'review')
-  if (entry.needs_translation || (exercise && (exercise.needs_translation || !exercise.name_en || !exercise.name_zh))) {
+  if (entry.needs_translation || exerciseNeedsTranslation(exercise)) {
     flags.push(lang === 'zh' ? '待翻译' : 'translate')
   }
 

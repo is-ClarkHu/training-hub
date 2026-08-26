@@ -225,6 +225,18 @@ export function primaryCategory(ex: Exercise): BodyPart | null {
   return ex.body_parts[0] ?? null
 }
 
+/**
+ * Whether an exercise still misses a language — the honest source for the "待翻译"
+ * badge. The stored `needs_translation` flag is a DEAD scalar: every writer sets it
+ * exactly when a name is blank, but nothing used to clear it, so a legacy-imported
+ * movement stayed flagged forever no matter how many times you translated it.
+ * `updateExercise` now keeps the stored flag in step; this is what the UI reads.
+ */
+export function exerciseNeedsTranslation(ex: Exercise | undefined | null): boolean {
+  if (!ex) return false
+  return !ex.name_zh?.trim() || !ex.name_en?.trim()
+}
+
 /** The muscle group an entry files under for History grouping/labels. Honours the
  *  per-occurrence `module_part` override ONLY when it's actually one of the exercise's
  *  own body parts; a stale/contradictory override (e.g. a legacy 'chest' left on a

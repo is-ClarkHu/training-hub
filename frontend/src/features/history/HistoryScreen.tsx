@@ -37,7 +37,7 @@ import { cycleDayTitle } from '../cycle/day'
 import { cycleMemberships, liveCompletedLabels, openRound, roundLiveSpan } from '../cycle/rounds'
 import { SportSessionDialog } from '../sports'
 import { INTIMACY_CATEGORIES, intimacyCategory, intimacyLabel, intimacyVisible } from '../intimacy'
-import { exerciseName, primaryCategory, entryModule } from '../log/util'
+import { exerciseName, exerciseNeedsTranslation, primaryCategory, entryModule } from '../log/util'
 import {
   CircuitCard,
   EntryCard,
@@ -100,7 +100,7 @@ export function HistoryScreen() {
 
   const flagged = useCallback((e: WorkoutEntry): boolean => {
     const ex = exById[e.exercise_id]
-    return e.needs_review || e.needs_translation || (ex ? ex.needs_translation || !ex.name_en || !ex.name_zh : false)
+    return e.needs_review || e.needs_translation || exerciseNeedsTranslation(ex)
   }, [exById])
 
   const reload = useCallback(async () => {
