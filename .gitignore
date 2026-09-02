@@ -9,7 +9,10 @@ raw_data/
 raw-data/
 # Migration output (derived from raw_data — also private)
 migration/out/
-data/
+# Local-only data drop at the repo root. Anchored with a leading slash: a bare
+# `data/` matches at ANY depth, which silently swallowed the demo seeder's
+# scripts/seed-demo/data/ and made the daily seed workflow fail on every run.
+/data/
 # Secrets / env (anon key is browser-safe via VITE_*, but never commit .env files)
 .env
 .env.*

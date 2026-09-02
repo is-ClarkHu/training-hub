@@ -125,8 +125,18 @@ async function main(): Promise<void> {
   const email = process.env.DEMO_EMAIL
   const password = process.env.DEMO_PASSWORD
 
-  if (!url || !key || !email || !password) {
-    console.log('DRY RUN (set SUPABASE_URL / SUPABASE_ANON_KEY / DEMO_EMAIL / DEMO_PASSWORD to seed).\n')
+  const missing = Object.entries({ SUPABASE_URL: url, SUPABASE_ANON_KEY: key, DEMO_EMAIL: email, DEMO_PASSWORD: password })
+    .filter(([, v]) => !v)
+    .map(([k]) => k)
+
+  if (missing.length > 0) {
+    // On CI a missing secret must FAIL. Falling through to the dry run there is a
+    // silent no-op: the job reports success every night while the demo account
+    // quietly goes stale, which is worse than the red X.
+    if (process.env.CI) {
+      throw new Error(`missing ${missing.join(', ')} — add them as repo secrets (see scripts/seed-demo/README.md)`)
+    }
+    console.log(`DRY RUN (missing ${missing.join(', ')} — set them to seed for real).\n`)
     console.log('Rows that WOULD be written:')
     for (const [t, r] of Object.entries(tables)) console.log(`  ${t.padEnd(24)} ${r.length}`)
     console.log(`  ${'TOTAL'.padEnd(24)} ${total}`)
