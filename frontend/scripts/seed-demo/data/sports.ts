@@ -30,7 +30,7 @@ export function sportSessionRows(): Record<string, unknown>[] {
     rows.push({
       id: rid(), date: ymd(d), sport_id: SPORTS.frisbee.id,
       hours: round(rand(1.5, 3), 0.5), attributes: { level },
-      injury: false, note_raw: level === 'major' ? '联赛日,全场跑动大' : '常规训练局',
+      injury: false, note_raw: level === 'major' ? 'League day — lots of running' : 'Regular pickup session',
       note_tags: [], calories: Math.round(rand(600, 1100)), bpm: Math.round(rand(140, 165)),
     })
   }
@@ -40,7 +40,7 @@ export function sportSessionRows(): Record<string, unknown>[] {
     rows.push({
       id: rid(), date: ymd(d), sport_id: SPORTS.running.id,
       hours: round(rand(0.5, 1.2), 0.25), attributes: {},
-      injury: false, note_raw: pick(['轻松跑', '节奏跑 5km', '间歇 8×400m']),
+      injury: false, note_raw: pick(['Easy run', 'Tempo run 5km', 'Intervals 8×400m']),
       note_tags: [], calories: Math.round(rand(300, 650)), bpm: Math.round(rand(150, 175)),
     })
   }
@@ -50,7 +50,7 @@ export function sportSessionRows(): Record<string, unknown>[] {
     rows.push({
       id: rid(), date: ymd(d), sport_id: SPORTS.gym.id,
       hours: round(rand(1, 2), 0.5), attributes: {},
-      injury: false, note_raw: pick(['倒立/手倒立练习', '吊环基础', '前水平进阶']),
+      injury: false, note_raw: pick(['Handstand practice', 'Rings basics', 'Front-lever progression']),
       note_tags: [], calories: Math.round(rand(400, 700)), bpm: Math.round(rand(120, 150)),
     })
   }

@@ -16,7 +16,7 @@ interface Cycle {
 }
 
 const OLD: Cycle = {
-  id: rid(), name: '推 / 拉 / 腿 (PPL)', active: false, display_mode: 'circle', weeks: [0, 1, 2, 3, 4, 5, 6],
+  id: rid(), name: 'Push / Pull / Legs (PPL)', active: false, display_mode: 'circle', weeks: [0, 1, 2, 3, 4, 5, 6],
   supersets: [['triceps_pushdown', 'lateral_raise']],
   days: [
     { label: 'A', title_zh: '推', title_en: 'Push', body_parts: ['chest', 'shoulders', 'triceps'], keys: ['bench', 'incline_db', 'ohp', 'lateral_raise', 'triceps_pushdown', 'dips'] },
@@ -25,7 +25,7 @@ const OLD: Cycle = {
   ],
 }
 const CUR: Cycle = {
-  id: rid(), name: '上肢 / 下肢分化', active: true, display_mode: 'body', weeks: [7, 8, 9, 10, 11, 12, 13, 14],
+  id: rid(), name: 'Upper / Lower split', active: true, display_mode: 'body', weeks: [7, 8, 9, 10, 11, 12, 13, 14],
   supersets: [['hammer_curl', 'skullcrusher']],
   days: [
     { label: 'A', title_zh: '上肢', title_en: 'Upper', body_parts: ['chest', 'back', 'shoulders', 'arms'], keys: ['bench', 'barbell_row', 'db_shoulder', 'lat_pulldown', 'hammer_curl', 'skullcrusher'] },
@@ -43,7 +43,7 @@ const BASE_W: Record<string, number> = {
 const BASE_REPS: Record<string, number> = { pullup: 6, pushup: 20, dips: 8, hanging_leg_raise: 10, ab_wheel: 8, band_pullapart: 15 }
 const BASE_SEC: Record<string, number> = { plank: 45, treadmill: 1500, rowing: 600, stairmaster: 600, assault_bike: 300, jumprope: 180, dynamic_stretch: 300 }
 const COMPOUND = new Set(['bench', 'deadlift', 'squat', 'ohp', 'barbell_row', 'front_squat', 'rdl', 'leg_press'])
-const FAILURE_NOTE = () => pick(['最后一组力竭', 'to failure', '有点吃力,状态好', '控制离心'])
+const FAILURE_NOTE = () => pick(['last set to failure', 'to failure', 'tough but felt strong', 'slow eccentric'])
 
 function setsFor(ex: SeedExercise, entryId: string, wk: number, group: string | null): Row[] {
   const rows: Row[] = []

@@ -230,7 +230,7 @@ export function CycleScreen() {
   }
 
   async function addDefaultSplit() {
-    const { undo } = await withUndo(['training_cycle'], () => createDefaultSplitCycle())
+    const { undo } = await withUndo(['training_cycle'], () => createDefaultSplitCycle(lang))
     await reload()
     push(lang === 'zh' ? '已创建四分化循环' : 'Added 4-split cycle', async () => { await undo(); await reload() })
   }

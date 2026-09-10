@@ -28,10 +28,10 @@ const STORIES: Story[] = [
     noteEn: 'Patellar-tendon pain below the kneecap after a running-volume spike; worse on stairs. Resolved with isometric loading + graded return.',
     checkpoints: [
       { status: 'newly_occurred', daysAgo: 98 }, { status: 'observing', daysAgo: 92 },
-      { status: 'treating', daysAgo: 84, note: '开始西班牙深蹲等长' }, { status: 'rehab_training', daysAgo: 63 },
-      { status: 'returning', daysAgo: 42 }, { status: 'recovered', daysAgo: 28, note: '无痛完成深蹲' },
+      { status: 'treating', daysAgo: 84, note: 'Started Spanish-squat isometrics' }, { status: 'rehab_training', daysAgo: 63 },
+      { status: 'returning', daysAgo: 42 }, { status: 'recovered', daysAgo: 28, note: 'Full-depth squat, pain-free' },
     ],
-    pains: [{ daysAgo: 98, pain: 7 }, { daysAgo: 84, pain: 6, note: '上楼仍痛' }, { daysAgo: 63, pain: 4 }, { daysAgo: 42, pain: 2 }, { daysAgo: 28, pain: 1 }],
+    pains: [{ daysAgo: 98, pain: 7 }, { daysAgo: 84, pain: 6, note: 'Still painful going upstairs' }, { daysAgo: 63, pain: 4 }, { daysAgo: 42, pain: 2 }, { daysAgo: 28, pain: 1 }],
     rehabKeys: ['spanish_squat', 'terminal_knee_ext'],
   },
   {
@@ -40,11 +40,11 @@ const STORIES: Story[] = [
     noteZh: '飞盘联赛落地踩到对方脚,外侧韧带 I–II 度扭伤。消肿后开始本体感觉训练。',
     noteEn: 'Rolled the ankle landing on an opponent at a frisbee league game — grade I–II lateral ligament sprain. Proprioception work after swelling settled.',
     checkpoints: [
-      { status: 'newly_occurred', daysAgo: 35, note: 'RICE, 冰敷' }, { status: 'observing', daysAgo: 32 },
-      { status: 'treating', daysAgo: 28 }, { status: 'rehab_training', daysAgo: 18, note: '字母操 + 提踵' },
+      { status: 'newly_occurred', daysAgo: 35, note: 'RICE, icing' }, { status: 'observing', daysAgo: 32 },
+      { status: 'treating', daysAgo: 28 }, { status: 'rehab_training', daysAgo: 18, note: 'Ankle alphabet + calf raises' },
       { status: 'returning', daysAgo: 7 },
     ],
-    pains: [{ daysAgo: 35, pain: 6 }, { daysAgo: 28, pain: 5 }, { daysAgo: 18, pain: 3 }, { daysAgo: 7, pain: 2, note: '慢跑无痛' }],
+    pains: [{ daysAgo: 35, pain: 6 }, { daysAgo: 28, pain: 5 }, { daysAgo: 18, pain: 3 }, { daysAgo: 7, pain: 2, note: 'Easy jogging, pain-free' }],
     rehabKeys: ['ankle_alphabet', 'calf_raise_rehab'],
     logRehab: true,
   },
@@ -55,7 +55,7 @@ const STORIES: Story[] = [
     noteEn: 'Anterior pinching after bench/overhead pressing, painful through the overhead arc. Deloaded pressing and added scapular-stability work.',
     checkpoints: [
       { status: 'newly_occurred', daysAgo: 49 }, { status: 'observing', daysAgo: 44 },
-      { status: 'treating', daysAgo: 35 }, { status: 'rehab_training', daysAgo: 21, note: '肩胛俯卧撑 + 弹力带' },
+      { status: 'treating', daysAgo: 35 }, { status: 'rehab_training', daysAgo: 21, note: 'Scap push-ups + band work' },
     ],
     pains: [{ daysAgo: 49, pain: 5 }, { daysAgo: 35, pain: 4 }, { daysAgo: 21, pain: 3 }, { daysAgo: 5, pain: 2 }],
     rehabKeys: ['scap_pushup', 'band_pullapart'],
@@ -68,7 +68,7 @@ const STORIES: Story[] = [
     noteEn: 'Tweaked the lower back lifting a box with poor form. Recovered with anti-rotation core work; returned to deadlifts.',
     checkpoints: [
       { status: 'newly_occurred', daysAgo: 77 }, { status: 'treating', daysAgo: 70 },
-      { status: 'rehab_training', daysAgo: 60, note: '鸟狗式' }, { status: 'recovered', daysAgo: 49 },
+      { status: 'rehab_training', daysAgo: 60, note: 'Bird-dog progression' }, { status: 'recovered', daysAgo: 49 },
     ],
     pains: [{ daysAgo: 77, pain: 5 }, { daysAgo: 63, pain: 3 }, { daysAgo: 49, pain: 1 }],
     rehabKeys: ['bird_dog'],
@@ -90,7 +90,7 @@ export function buildInjuries(): BuiltInjuries {
       id: injuryId, body_area: s.en, body_area_zh: s.zh, body_area_en: s.en, body_part: s.part,
       laterality: s.laterality, injury_type: s.type, scenario: s.scenario,
       started_on: ago(s.startedDaysAgo), status: s.status, resolved_on: s.resolvedDaysAgo == null ? null : ago(s.resolvedDaysAgo),
-      severity: s.severity, note_raw: s.noteZh, note_zh: s.noteZh, note_en: s.noteEn,
+      severity: s.severity, note_raw: s.noteEn, note_zh: s.noteZh, note_en: s.noteEn,
       checkpoints: s.checkpoints.map((c) => ({ status: c.status, date: ago(c.daysAgo), note: c.note })),
       attachments: [], rehab_plan_exercise_ids: s.rehabKeys.map((k) => exByKey[k].id),
       assessments: s.pains.map((p) => ({ date: ago(p.daysAgo), pain: p.pain, note: p.note })),
@@ -103,7 +103,7 @@ export function buildInjuries(): BuiltInjuries {
           const eid = rid()
           entries.push({
             id: eid, date: ymd(d), exercise_id: ex.id, is_superset: false, superset_group: null,
-            note_raw: '康复训练', note_tags: ['injury'], cycle_day_label: null, cycle_id: null, cycle_round_id: null,
+            note_raw: 'Rehab session', note_tags: ['injury'], cycle_day_label: null, cycle_id: null, cycle_round_id: null,
             module_part: null, sort_order: Date.parse(atTime(d, 8, ki * 5)), injury_modified: 'reduced', injury_id: injuryId,
             needs_review: false, needs_translation: false,
           })

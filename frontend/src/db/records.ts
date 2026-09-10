@@ -616,14 +616,17 @@ export async function softDeleteCycle(id: string): Promise<void> {
 // The classic 4-split template (§6B): A 胸+腹 / B 背+二头 / C 腿+腹 / D 肩+三头.
 // Created active; body_parts reference the default categories (biceps/triceps
 // were added for this split). Titles stay empty — the UI renders the parts.
-export async function createDefaultSplitCycle(): Promise<TrainingCycle> {
+// `name` is a single (non-bilingual) column, so the caller passes the UI language
+// and we write the name in it — otherwise an English user ends up with a cycle
+// literally called '4-Split · 四分化'.
+export async function createDefaultSplitCycle(lang: 'zh' | 'en' = 'en'): Promise<TrainingCycle> {
   const days: CycleDay[] = [
     { label: 'A', title: '', body_parts: ['chest', 'core'], regions: ['chest', 'abs'], exercise_ids: [] },
     { label: 'B', title: '', body_parts: ['back', 'biceps'], regions: ['back', 'biceps', 'forearms'], exercise_ids: [] },
     { label: 'C', title: '', body_parts: ['legs', 'core'], regions: ['glutes', 'quads', 'hamstrings', 'calves', 'adductors', 'abs'], exercise_ids: [] },
     { label: 'D', title: '', body_parts: ['shoulders', 'triceps'], regions: ['shoulders', 'triceps'], exercise_ids: [] },
   ]
-  return createCycle({ name: '4-Split · 四分化', days, active: true, display_mode: 'body' })
+  return createCycle({ name: lang === 'zh' ? '四分化' : '4-Split', days, active: true, display_mode: 'body' })
 }
 
 // ── cycle rounds (§6B) ───────────────────────────────
