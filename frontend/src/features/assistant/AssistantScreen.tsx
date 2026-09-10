@@ -152,7 +152,7 @@ export function AssistantScreen() {
   async function onSetRoomAi(provider: string) {
     if (!activeRoom) return
     if (provider === '') await updateChatroomAi(activeRoom.id, null, null)
-    else await updateChatroomAi(activeRoom.id, provider, null) // model defaults per provider
+    else await updateChatroomAi(activeRoom.id, provider, null) // null model = that provider's tier (Settings → AI)
     await refreshRooms()
   }
 
