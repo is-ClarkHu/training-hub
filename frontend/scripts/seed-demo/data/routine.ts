@@ -1,8 +1,10 @@
-// The 15-week training engine. Generates two cycles (an older COMPLETED Push/Pull/
-// Legs cycle and the CURRENT in-progress Upper/Lower cycle), their rounds, and the
-// workout_entries + sets + entry_cycle_assignments for ~3 sessions/week. Weight rises
-// ~1.2%/week so PR detection and previous-session comparisons light up; warm-up sets,
-// a superset, a dropset, per-side sets, reps-only and duration/cardio all appear.
+// The 15-week training engine. Generates THREE cycles the user grew through —
+// Push/Pull/Legs → Upper/Lower → the CURRENT in-progress 5-day split — plus their
+// rounds and the workout_entries + sets + entry_cycle_assignments behind them.
+// Weight rises ~1.2%/week so PR detection and previous-session comparisons light up;
+// warm-up sets, a superset, a dropset, per-side sets, reps-only and duration/cardio
+// all appear. Session days per week follow the split (3-day splits run Mon/Wed/Fri,
+// the 5-day one Mon–Wed + Fri/Sat).
 import { rid, TODAY, addDays, ymd, atTime, rand, round, pick } from '../util.ts'
 import { exByKey, type SeedExercise } from './exercises.ts'
 
@@ -10,13 +12,33 @@ type Row = Record<string, unknown>
 export interface Built { cycles: Row[]; rounds: Row[]; entries: Row[]; sets: Row[]; assignments: Row[] }
 
 interface Day { label: string; title_zh: string; title_en: string; body_parts: string[]; keys: string[] }
+
+// Category → body-model regions. MIRRORS DEFAULT_CATEGORY_REGIONS in
+// src/features/cycle/anatomy.ts — a cycle day with no `regions` lights NOTHING on
+// the body model (roundRegionActivity skips it), which is why every day below
+// carries them.
+const CATEGORY_REGIONS: Record<string, string[]> = {
+  chest: ['chest'],
+  back: ['back'],
+  shoulders: ['shoulders'],
+  legs: ['glutes', 'quads', 'hamstrings', 'calves', 'adductors'],
+  arms: ['biceps', 'triceps', 'forearms'],
+  biceps: ['biceps', 'forearms'],
+  triceps: ['triceps'],
+  core: ['abs'],
+  cardio: [],
+  warmup: [],
+  sports: [],
+}
+const regionsFor = (parts: string[]): string[] =>
+  [...new Set(parts.flatMap((p) => CATEGORY_REGIONS[p] ?? []))]
 interface Cycle {
   id: string; name: string; active: boolean; display_mode: 'body' | 'circle'
   weeks: number[]; days: Day[]; supersets: [string, string][]
 }
 
 const OLD: Cycle = {
-  id: rid(), name: 'Push / Pull / Legs (PPL)', active: false, display_mode: 'circle', weeks: [0, 1, 2, 3, 4, 5, 6],
+  id: rid(), name: 'Push / Pull / Legs (PPL)', active: false, display_mode: 'circle', weeks: [0, 1, 2, 3, 4],
   supersets: [['triceps_pushdown', 'lateral_raise']],
   days: [
     { label: 'A', title_zh: '推', title_en: 'Push', body_parts: ['chest', 'shoulders', 'triceps'], keys: ['bench', 'incline_db', 'ohp', 'lateral_raise', 'triceps_pushdown', 'dips'] },
@@ -24,8 +46,8 @@ const OLD: Cycle = {
     { label: 'C', title_zh: '腿', title_en: 'Legs', body_parts: ['legs', 'core'], keys: ['squat', 'rdl', 'leg_press', 'leg_curl', 'calf_raise', 'plank'] },
   ],
 }
-const CUR: Cycle = {
-  id: rid(), name: 'Upper / Lower split', active: true, display_mode: 'body', weeks: [7, 8, 9, 10, 11, 12, 13, 14],
+const MID: Cycle = {
+  id: rid(), name: 'Upper / Lower split', active: false, display_mode: 'body', weeks: [5, 6, 7, 8, 9],
   supersets: [['hammer_curl', 'skullcrusher']],
   days: [
     { label: 'A', title_zh: '上肢', title_en: 'Upper', body_parts: ['chest', 'back', 'shoulders', 'arms'], keys: ['bench', 'barbell_row', 'db_shoulder', 'lat_pulldown', 'hammer_curl', 'skullcrusher'] },
@@ -82,14 +104,30 @@ function setsFor(ex: SeedExercise, entryId: string, wk: number, group: string | 
   return rows
 }
 
+// The current block: a 5-day body-part split. It's the one on the body model, so
+// its five days between them cover every region the figure can light.
+const CUR: Cycle = {
+  id: rid(), name: '5-day split', active: true, display_mode: 'body', weeks: [10, 11, 12, 13, 14],
+  supersets: [['barbell_curl', 'triceps_pushdown']],
+  days: [
+    { label: 'A', title_zh: '胸', title_en: 'Chest', body_parts: ['chest'], keys: ['bench', 'incline_db', 'cable_fly', 'dips', 'pushup'] },
+    { label: 'B', title_zh: '背', title_en: 'Back', body_parts: ['back'], keys: ['deadlift', 'barbell_row', 'lat_pulldown', 'seated_row', 'pullup'] },
+    { label: 'C', title_zh: '腿', title_en: 'Legs', body_parts: ['legs', 'core'], keys: ['squat', 'rdl', 'leg_press', 'leg_curl', 'calf_raise', 'hanging_leg_raise'] },
+    { label: 'D', title_zh: '肩', title_en: 'Shoulders', body_parts: ['shoulders', 'core'], keys: ['ohp', 'db_shoulder', 'lateral_raise', 'face_pull', 'cable_crunch'] },
+    { label: 'E', title_zh: '手臂 + 有氧', title_en: 'Arms + cardio', body_parts: ['arms', 'biceps', 'triceps', 'cardio'], keys: ['barbell_curl', 'triceps_pushdown', 'hammer_curl', 'skullcrusher', 'treadmill'] },
+  ],
+}
+
 export function buildTraining(): Built {
   const cycles: Row[] = []; const rounds: Row[] = []; const entries: Row[] = []; const sets: Row[] = []; const assignments: Row[] = []
-  const dayOffset = [0, 2, 4] // Mon/Wed/Fri within the week
+  // Which weekdays a split trains: 3 days → Mon/Wed/Fri, 5 days → Mon–Wed + Fri/Sat.
+  const OFFSETS: Record<number, number[]> = { 3: [0, 2, 4], 5: [0, 1, 2, 4, 5] }
   const weekStart = (w: number) => addDays(TODAY, -(14 - w) * 7 - 4)
   const todayStr = ymd(TODAY)
 
-  for (const cyc of [OLD, CUR]) {
-    cycles.push({ id: cyc.id, name: cyc.name, active: cyc.active, display_mode: cyc.display_mode, days: cyc.days.map((d) => ({ label: d.label, title: `${d.title_zh} / ${d.title_en}`, title_zh: d.title_zh, title_en: d.title_en, body_parts: d.body_parts, exercise_ids: d.keys.map((k) => exByKey[k].id) })) })
+  for (const cyc of [OLD, MID, CUR]) {
+    const dayOffset = OFFSETS[cyc.days.length] ?? [0, 2, 4]
+    cycles.push({ id: cyc.id, name: cyc.name, active: cyc.active, display_mode: cyc.display_mode, days: cyc.days.map((d) => ({ label: d.label, title: `${d.title_zh} / ${d.title_en}`, title_zh: d.title_zh, title_en: d.title_en, body_parts: d.body_parts, regions: regionsFor(d.body_parts), exercise_ids: d.keys.map((k) => exByKey[k].id) })) })
 
     cyc.weeks.forEach((w, wi) => {
       const roundId = rid()
