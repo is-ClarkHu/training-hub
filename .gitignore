@@ -1,6 +1,8 @@
 # --- training-hub project (see SPEC §11 / §14) ---
 # macOS Finder metadata — local-only
 .DS_Store
+# JetBrains IDE project settings — local-only
+.idea/
 # Private build brief — never commit
 SPEC.md
 docs/

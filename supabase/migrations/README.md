@@ -2,7 +2,9 @@
 
 SQL migrations define every table in the app. Apply them **in filename order**
 (`YYYYMMDDHHMMSS_name.sql`) — Supabase dashboard → SQL editor, or `supabase db push`.
-Filenames of already-applied migrations must never change.
+Filenames of already-applied migrations must never change, and neither must their
+bodies: adding a column inside an applied file's `create table if not exists` is a
+silent no-op against the live database. New column → new migration file.
 
 > Not to be confused with `../../migration/` (root) + `frontend/src/migration/*` —
 > that is the one-time **legacy CSV → app** data importer (historical workout data),
@@ -49,6 +51,7 @@ more users later needs no schema change — RLS already isolates data.
 |---|---|
 | `20260715180000_cycle_entry_assignment` | Assign a workout entry to a specific cycle round. |
 | `20260718120000_entry_cycle_assignments` | Many-to-many entry↔cycle assignments (supersedes the single-column link). |
+| `20260909120000_food_file_ai_columns` | Adds `food_log.ai_description` + `public_files.summary` — declared in `20260710170000` but never applied, because they were added inside an already-run `create table if not exists`. |
 
 ## Storage buckets
 `injury-photos`, `food-photos`, `public-files` — all private, one folder per user

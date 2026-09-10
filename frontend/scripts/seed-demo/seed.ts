@@ -20,13 +20,14 @@ import { translationRows } from './data/translations.ts'
 
 type Row = Record<string, unknown>
 
-// Every user-data table, in a safe insert order (no cross-table FKs beyond user_id,
-// so order is cosmetic — parents before children for readability). Wipe walks the
-// same list in reverse.
+// Every user-data table, in a safe insert order: parents before children, because
+// real cross-table FKs exist (sets.entry_id, workout_entries.exercise_id and
+// .injury_id, sport_sessions.sport_id). Wipe walks the same list in reverse, so this
+// order also has to be a safe delete order read backwards.
 const INSERT_ORDER = [
-  'exercises', 'sports', 'training_cycle', 'cycle_rounds',
+  'exercises', 'sports', 'injuries', 'training_cycle', 'cycle_rounds',
   'workout_entries', 'sets', 'entry_cycle_assignments', 'sport_sessions',
-  'injuries', 'basics', 'body_measurements', 'notes', 'supplements', 'training_env',
+  'basics', 'body_measurements', 'notes', 'supplements', 'training_env',
   'medical_background', 'food_log', 'public_files',
   'chatrooms', 'chat_messages', 'chatroom_summaries', 'chatroom_memories',
   'chatroom_memory_access', 'chatroom_file_access',
