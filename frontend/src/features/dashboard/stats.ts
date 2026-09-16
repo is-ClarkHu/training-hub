@@ -140,64 +140,159 @@ export function e1RM(weight: number, reps: number): number {
   return Math.round(weight * (1 + reps / 30))
 }
 
-// ── intensity heatmap (§8 signature) ─────────────────────────
-type DaySession = { attributes?: Record<string, string>; hours?: number }
+// ── daily intensity calendar (§8 signature) ──────────────────
 
-// Sport intensity from its level (frisbee: toss/casual/club/major); sports without a
-// level field fall back to a rough duration estimate.
-const LEVEL_INTENSITY: Record<string, number> = { toss: 1, casual: 2, club: 3, major: 4 }
-function sportIntensity(s: DaySession): number {
-  const lvl = s.attributes?.level
-  if (lvl && lvl in LEVEL_INTENSITY) return LEVEL_INTENSITY[lvl]
-  const h = s.hours ?? 0
-  return h >= 3 ? 4 : h >= 1.5 ? 2 : 1
+export interface CalendarSession {
+  date: string
+  sport_id: string
+  hours: number
+  attributes?: Record<string, string>
 }
 
-/** Daily intensity 0–4, ADDITIVE and capped at 4: training from set count
- *  (<6 → 1 · 6–16 → 2 · >16 → 3) PLUS the day's hardest sport (toss→1 … major→4).
- *  So a casual frisbee (2) + a light bodyweight session (<6 sets → 1) = 3. Intimacy
- *  is NOT training and is marked separately (HeatCell.intimacy). */
-export function dayIntensity(daySets: number, sessions: DaySession[]): number {
-  if (daySets === 0 && sessions.length === 0) return 0
-  const training = daySets === 0 ? 0 : daySets < 6 ? 1 : daySets <= 16 ? 2 : 3
-  const sport = sessions.length ? Math.max(...sessions.map(sportIntensity)) : 0
-  return Math.min(4, training + sport)
+/** Load per hour of sport, by the session's declared level (frisbee: toss…major).
+ *  Calibrated against lifting, where one working set scores 1: two hours of club
+ *  play ≈ a 12-set gym session. Sports with no level field sit in the middle. */
+const SPORT_LOAD_PER_HOUR: Record<string, number> = { toss: 2, casual: 4, club: 6, major: 8 }
+const SPORT_LOAD_DEFAULT = 4
+
+/** Load at or above which a day is unconditionally level 4 — roughly a very hard
+ *  day: ~24 working sets, or 3h of major-level sport. Absolute on purpose: the
+ *  1–3 cut points below are relative, but the top of the scale must never drift.
+ *  Calibrated on the real backups (median day ≈ 12, p90 ≈ 17–21, max 48): at 24,
+ *  5–9% of trained days earn a 4, so the top shade stays a genuine outlier. */
+export const MAX_DAY_LOAD = 24
+
+/** A day's training load: one point per working set, plus each sport session's
+ *  hours weighted by its level. Continuous and ADDITIVE across sessions, so two
+ *  casual games outrank one, and a lift after a game still moves the number.
+ *  (The old score was `min(4, trainingTier + hardestSport)`, which pinned every
+ *  hard day to the same 4 — no contrast left exactly where it mattered most.) */
+export function dayLoad(daySets: number, sessions: Pick<CalendarSession, 'hours' | 'attributes'>[]): number {
+  const sport = sessions.reduce((sum, s) => {
+    const lvl = s.attributes?.level
+    const perHour = (lvl && SPORT_LOAD_PER_HOUR[lvl]) || SPORT_LOAD_DEFAULT
+    return sum + (s.hours ?? 0) * perHour
+  }, 0)
+  return daySets + sport
 }
 
-export interface HeatCell { date: string; level: number; intimacy?: number } // total intimacy count that day (undefined = none)
+/** Cut points for levels 1|2 and 2|3: the 33rd/67th percentile of every ORDINARY
+ *  training day in history (load > 0, below MAX_DAY_LOAD). Monster days are left
+ *  out of the ranking rather than clamped into it — a handful of 40-set weekends
+ *  would otherwise shift the distribution and re-shade months of past history.
+ *  Too little history to rank meaningfully → thirds of the absolute scale. */
+function levelCuts(loads: number[]): [number, number] {
+  const ordinary = loads.filter((l) => l > 0 && l < MAX_DAY_LOAD).sort((a, b) => a - b)
+  if (ordinary.length < 5) return [MAX_DAY_LOAD / 3, (MAX_DAY_LOAD * 2) / 3]
+  const at = (p: number): number => ordinary[Math.min(ordinary.length - 1, Math.floor(p * ordinary.length))]
+  return [at(1 / 3), at(2 / 3)]
+}
 
-/** Weekday(row) × week(col) grid of daily intensity, most recent `weeks` weeks. */
-export function intensityHeatmap(
-  entries: WorkoutEntry[],
-  sessions: (DaySession & { date: string })[],
-  setCountOf: (entryId: string) => number,
-  intimacy: OptionalTracker[] = [],
-  weeks = 18,
-): HeatCell[][] {
-  const eByDate: Record<string, WorkoutEntry[]> = {}
-  for (const e of entries) (eByDate[e.date] ??= []).push(e)
-  const sByDate: Record<string, DaySession[]> = {}
-  for (const s of sessions) (sByDate[s.date] ??= []).push(s)
-  const iByDate: Record<string, OptionalTracker[]> = {}
-  for (const r of intimacy) (iByDate[r.date] ??= []).push(r)
+function levelFor(load: number, [c1, c2]: [number, number]): number {
+  if (load <= 0) return 0
+  if (load >= MAX_DAY_LOAD) return 4
+  return load <= c1 ? 1 : load <= c2 ? 2 : 3
+}
 
-  const thisMon = mondayOf(new Date())
-  const cols: HeatCell[][] = []
-  for (let w = 0; w < weeks; w++) {
-    const monday = new Date(thisMon)
-    monday.setDate(thisMon.getDate() - (weeks - 1 - w) * 7)
-    const col: HeatCell[] = []
-    for (let d = 0; d < 7; d++) {
-      const day = new Date(monday)
-      day.setDate(monday.getDate() + d)
-      const iso = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`
-      const intimCount = (iByDate[iso] ?? []).reduce((s, r) => s + (r.count ?? 0), 0)
-      const daySets = (eByDate[iso] ?? []).reduce((sum, e) => sum + setCountOf(e.id), 0)
-      col.push({ date: iso, level: dayIntensity(daySets, sByDate[iso] ?? []), intimacy: intimCount || undefined })
-    }
-    cols.push(col)
+export interface DayCell {
+  date: string
+  /** 0–4, or null for a date that hasn't happened yet — a future square is blank,
+   *  not a rest day, which the old grid had no way to say. */
+  level: number | null
+  load: number
+  strength: { part: BodyPart; sets: number }[] // one tag per body part, heaviest first
+  sports: { sportId: string; hours: number }[]
+  intimacy?: number                            // total count that day (undefined = none)
+}
+
+export interface CalendarMonth {
+  month: string    // 'YYYY-MM'
+  leading: number  // blank cells before day 1 (Monday = 0)
+  days: DayCell[]
+}
+
+/** Every 'YYYY-MM' from the earliest date through `today`, oldest → newest. */
+function monthSpan(dates: string[], today: string): string[] {
+  const first = dates.length ? dates.reduce((a, b) => (a < b ? a : b)).slice(0, 7) : today.slice(0, 7)
+  const out: string[] = []
+  const [y, m] = first.split('-').map(Number)
+  for (let d = new Date(y, m - 1, 1); ; d.setMonth(d.getMonth() + 1)) {
+    const key = isoOf(d).slice(0, 7)
+    out.push(key)
+    if (key >= today.slice(0, 7)) return out
   }
-  return cols
+}
+
+function isoOf(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/** Calendar-month grids of daily load, each day carrying the tags that earned it.
+ *  Returns EVERY month from the first logged day through today (oldest → newest);
+ *  month navigation is a window onto this array. Computing the whole span at once
+ *  is what keeps the cut points — and therefore the shading of any given day —
+ *  identical no matter which months are on screen. `months` overrides the span. */
+export function intensityCalendar({
+  entries, exById, setCountOf, sessions, intimacy = [], include, months, today,
+}: {
+  entries: WorkoutEntry[]
+  exById: Record<string, Exercise>
+  setCountOf: (entryId: string) => number
+  sessions: CalendarSession[]
+  intimacy?: OptionalTracker[]
+  include?: { strength?: boolean; sport?: boolean }
+  months?: string[]
+  today?: string
+}): CalendarMonth[] {
+  const todayIso = today ?? isoOf(new Date())
+
+  const strength: Record<string, Record<BodyPart, number>> = {}
+  if (include?.strength !== false) {
+    for (const e of entries) {
+      const part = entryModule(e, exById[e.exercise_id])
+      const sets = setCountOf(e.id)
+      if (!part || !sets) continue
+      const day = (strength[e.date] ??= {})
+      day[part] = (day[part] ?? 0) + sets
+    }
+  }
+  const sportByDate: Record<string, CalendarSession[]> = {}
+  if (include?.sport !== false) for (const s of sessions) (sportByDate[s.date] ??= []).push(s)
+  const intimByDate: Record<string, number> = {}
+  for (const r of intimacy) intimByDate[r.date] = (intimByDate[r.date] ?? 0) + (r.count ?? 0)
+
+  const loadOf = (date: string): number =>
+    dayLoad(Object.values(strength[date] ?? {}).reduce((a, b) => a + b, 0), sportByDate[date] ?? [])
+
+  const trained = new Set([...Object.keys(strength), ...Object.keys(sportByDate)])
+  const cuts = levelCuts([...trained].map(loadOf))
+
+  // A filtered-out category still defines the span — hiding sport shouldn't make
+  // whole months vanish from the pager, it should just empty their squares.
+  const span = months ?? monthSpan(
+    [...entries.map((e) => e.date), ...sessions.map((s) => s.date)].filter((d) => d <= todayIso),
+    todayIso,
+  )
+
+  return span.map((month) => {
+    const [y, m] = month.split('-').map(Number)
+    const days: DayCell[] = []
+    for (let d = 1, total = new Date(y, m, 0).getDate(); d <= total; d++) {
+      const date = `${month}-${String(d).padStart(2, '0')}`
+      const load = loadOf(date)
+      days.push({
+        date,
+        level: date > todayIso ? null : levelFor(load, cuts),
+        load,
+        strength: Object.entries(strength[date] ?? {})
+          .map(([part, sets]) => ({ part, sets }))
+          .sort((a, b) => b.sets - a.sets || a.part.localeCompare(b.part)),
+        sports: (sportByDate[date] ?? []).map((s) => ({ sportId: s.sport_id, hours: s.hours })),
+        intimacy: intimByDate[date] || undefined,
+      })
+    }
+    return { month, leading: (new Date(y, m - 1, 1).getDay() + 6) % 7, days }
+  })
 }
 
 /** Bodyweight-volume trend: total reps_only reps per session date (oldest → newest). */

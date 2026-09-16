@@ -80,40 +80,116 @@
 .dash-cbox-tall > canvas { max-height: 340px; }
 
 /* intensity heatmap */
-.dash-heat-sec { display: flex; flex-direction: column; gap: 12px; }
-.dash-sub { font-style: normal; font-weight: 400; color: var(--faint); font: 11px var(--mono); }
-.dash-heat {
-  display: flex; gap: 8px;
-  padding: 22px;
+/* ── daily intensity calendar (§8 signature) ───────────────────────────────
+   Replaces the GitHub-style 7×18 grid: squares are big enough to name what you
+   actually did, so reading the panel never depends on a hover that phones don't
+   have. Intensity is double-encoded — neutral fill lightness (legible under the
+   tag text, and theme-agnostic via --text) plus a saturated dot by the date. */
+.dash-cal-sec { display: flex; flex-direction: column; gap: 12px; }
+
+.cal-filters { display: inline-flex; gap: 6px; margin-left: 10px; vertical-align: middle; }
+.cal-chip {
+  padding: 3px 10px;
+  border: 1px solid var(--border); border-radius: 999px;
+  background: transparent; color: var(--faint);
+  font: 11px var(--mono); cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.cal-chip.on.strength { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.cal-chip.on.sport { color: var(--orange); border-color: color-mix(in srgb, var(--orange) 45%, transparent); background: color-mix(in srgb, var(--orange) 12%, transparent); }
+
+.dash-cal {
+  container-type: inline-size;
+  display: flex; flex-direction: column; gap: 14px;
+  padding: 18px;
   background: linear-gradient(165deg, var(--panel2), var(--bg-panel));
   border: 1px solid var(--border);
   border-radius: 18px;
-  overflow-x: auto;
 }
-.dash-heat-days { display: flex; flex-direction: column; gap: 5px; }
-.dash-heat-days span { height: 16px; font: 10px/16px var(--mono); color: var(--faint); }
-.dash-heat-days-spacer { height: 13px; }
-.dash-heat-cols { display: flex; flex-direction: column; gap: 5px; }
-.dash-heat-months { display: flex; gap: 5px; height: 13px; }
-.dash-heat-month { width: 16px; font: 10px/13px var(--mono); color: var(--muted, #8b93a3); white-space: nowrap; overflow: visible; }
-.dash-heat-grid { display: flex; gap: 5px; }
-.dash-heat-col { display: flex; flex-direction: column; gap: 5px; }
-.dash-heat-cell {
+
+.cal-nav { display: flex; align-items: center; justify-content: center; gap: 14px; }
+.cal-range { font: 12px var(--mono); color: var(--text-dim); }
+.cal-pg {
+  display: grid; place-items: center;
+  width: 26px; height: 26px;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--panelhi); color: var(--text);
+  font-size: 15px; line-height: 1; cursor: pointer;
+}
+.cal-pg:disabled { opacity: 0.3; cursor: default; }
+
+.cal-months { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 18px; }
+.cal-month { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.cal-mtitle { font: 700 12px var(--mono); color: var(--text); }
+.cal-wd, .cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.cal-wd span { font: 10px var(--sans); color: var(--faint); text-align: center; }
+.cal-grid { grid-auto-rows: minmax(62px, auto); }
+
+.cal-day {
   position: relative;
-  width: 16px; height: 16px; border-radius: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.03);
-  transition: transform 0.12s;
+  display: flex; flex-direction: column; gap: 2px;
+  min-width: 0; padding: 4px 4px 5px; overflow: hidden;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: transparent; color: inherit;
+  text-align: left; cursor: pointer;
+  transition: border-color 0.12s, box-shadow 0.12s;
 }
-.dash-heat-cell:hover { transform: scale(1.3); box-shadow: 0 0 0 1.5px var(--text); }
-/* injury day — red ring */
-.dash-heat-cell.inj { box-shadow: inset 0 0 0 2px var(--danger); }
-.dash-heat-cell.inj:hover { box-shadow: inset 0 0 0 2px var(--danger), 0 0 0 1.5px var(--text); }
-/* intimacy day — pink heart in the corner (NOT counted as training intensity;
-   the shade deepens with the day's count — colour set inline). */
-.dash-heat-heart {
-  position: absolute; top: -3px; right: -1px;
-  font-size: 9px; line-height: 1; pointer-events: none;
-  text-shadow: 0 0 1.5px rgba(0, 0, 0, 0.6);
+.cal-day:hover:not(:disabled) { border-color: var(--text-dim); }
+.cal-day.on { border-color: var(--text); box-shadow: 0 0 0 1px var(--text); }
+/* a day that hasn't happened yet is blank, NOT a rest day */
+.cal-day.future { border-style: dashed; opacity: 0.4; cursor: default; }
+.cal-day.inj::after {
+  content: ''; position: absolute; inset: 0;
+  border-radius: 8px; box-shadow: inset 0 0 0 1.5px var(--danger);
+  pointer-events: none;
+}
+
+.cal-dnum { display: flex; align-items: center; gap: 4px; font: 10px/1 var(--mono); color: var(--faint); }
+.cal-dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+
+.cal-tag {
+  display: flex; align-items: baseline; gap: 4px;
+  min-width: 0; padding: 1px 4px; border-radius: 4px;
+  font: 10px/1.4 var(--mono); white-space: nowrap;
+}
+/* the name yields, the amount never does */
+.cal-tag b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 400; }
+.cal-tag i { flex: none; font-style: normal; opacity: 0.75; }
+.cal-tag.strength { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
+.cal-tag.sport { background: color-mix(in srgb, var(--orange) 16%, transparent); color: var(--orange); }
+.cal-tag.intimacy { background: color-mix(in srgb, var(--intimacy-accent) 18%, transparent); color: var(--intimacy-accent); }
+.cal-more { padding-left: 4px; font: 9px var(--mono); color: var(--faint); }
+.cal-heart { position: absolute; top: 2px; right: 3px; font-size: 9px; line-height: 1; pointer-events: none; }
+
+/* detail panel — the squares summarise, this names the movements */
+.cal-detail {
+  display: flex; flex-direction: column; gap: 8px;
+  min-height: 62px; padding: 10px 12px;
+  background: var(--panelhi); border: 1px solid var(--border); border-radius: 12px;
+}
+.cal-dt-head { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; font: 11px var(--mono); }
+.cal-dt-head strong { color: var(--cyan); font-weight: 700; }
+.cal-dt-lvl { display: inline-flex; align-items: center; gap: 5px; color: var(--text-dim); }
+.cal-dt-inj { font-weight: 700; color: var(--danger); }
+.cal-dt-body { display: flex; flex-wrap: wrap; gap: 5px; }
+.cal-dt-body .cal-tag { font-size: 11px; }
+.cal-dt-empty { font: 11px var(--mono); color: var(--faint); }
+
+.cal-legend { display: flex; align-items: center; justify-content: flex-end; gap: 5px; font: 10px var(--mono); color: var(--faint); }
+.cal-lg {
+  display: grid; place-items: center;
+  width: 16px; height: 16px;
+  border: 1px solid var(--border); border-radius: 4px;
+}
+.cal-lg i { width: 6px; height: 6px; border-radius: 50%; }
+
+/* narrow — one month, tighter squares; the detail panel carries the rest. Keyed to
+   the panel's own width, not the viewport, so it holds inside any dashboard column. */
+@container (max-width: 520px) {
+  .dash-cal { padding: 12px; }
+  .cal-grid { grid-auto-rows: minmax(54px, auto); gap: 3px; }
+  .cal-day { padding: 3px 3px 4px; border-radius: 6px; }
+  .cal-tag { font-size: 9px; padding: 1px 3px; }
 }
 
 /* sports section */
@@ -171,24 +247,6 @@
   /* Keep the intimacy header from splitting its title and total awkwardly. */
   .dash-intimacy-head { flex-wrap: wrap; }
 }
-
-/* heatmap tooltip */
-.dash-heat { position: relative; }
-.dash-heat-tip {
-  position: fixed;
-  pointer-events: none;
-  z-index: 100;
-  max-width: 260px;
-  padding: 10px 12px;
-  background: var(--bg-panel);
-  border: 1px solid var(--faint);
-  border-radius: 10px;
-  box-shadow: var(--shadow);
-}
-.dash-heat-tip .tdate { font: 11px var(--mono); color: var(--cyan); margin-bottom: 3px; }
-.dash-heat-tip .tint { font: 11px var(--mono); color: var(--accent); margin-bottom: 5px; }
-.dash-heat-tip .tbody { font: 11.5px/1.45 var(--sans); color: var(--text); }
-.dash-heat-tip .tinj { margin-top: 5px; font: 700 11px var(--mono); color: var(--danger); }
 
 /* injury & rehab overview (§6A dashboard) */
 .dash-injury { display: flex; flex-direction: column; gap: 10px; }

@@ -1,7 +1,7 @@
 // Dashboard (SPEC §8) — replicates the legacy workout_dashboard.html coverage:
 // KPI strip, intensity heatmap (signature), per-body-part progression, weekly
 // volume, bodyweight trend, distributions, and per-sport charts. Fully bilingual.
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Chart,
   ArcElement,
@@ -45,12 +45,13 @@ import {
   activityByMonth,
   bodyPartCounts,
   bodyweightVolume,
-  intensityHeatmap,
+  intensityCalendar,
   muscleRecovery,
   totalBodyweightReps,
   weeklyEntryVolume,
   type ActivityKey,
-  type HeatCell,
+  type CalendarMonth,
+  type DayCell,
 } from './stats'
 import './dashboard.css'
 
@@ -64,8 +65,24 @@ const TINTS = ['#8ab4f8', '#4fd1e0', '#7dd3a0', '#a78bfa', '#ff8a5c', '#f5b544',
 // Sequential blue ramp for "by month" stacks — light = oldest, dark = most recent, so
 // the segments read as time (not a rainbow). Sliced to the number of months shown.
 const MONTH_RAMP = ['#dbe7fb', '#b3ccf6', '#8ab0f1', '#6295ec', '#3b78dd', '#265fbf']
-// intensity ramp 0–4: green (easy) → amber → red (hard) — less overall amber
-const HEAT = ['var(--panelhi)', 'rgba(125,211,160,.38)', 'rgba(125,211,160,.7)', 'rgba(245,181,68,.85)', '#ff5d6c']
+// Calendar squares carry tag text, so intensity can't own the whole background:
+// the fill is a neutral ramp (readable under text, and theme-agnostic via --text)
+// and the saturated single-hue ramp goes on the dot beside the date. Two channels
+// — fill lightness AND dot depth — so the scale survives colour-blindness.
+const LEVEL_FILL = [
+  'transparent',
+  'color-mix(in srgb, var(--text) 5%, transparent)',
+  'color-mix(in srgb, var(--text) 10%, transparent)',
+  'color-mix(in srgb, var(--text) 16%, transparent)',
+  'color-mix(in srgb, var(--text) 24%, transparent)',
+]
+const LEVEL_DOT = [
+  'transparent',
+  'color-mix(in srgb, var(--cyan) 30%, transparent)',
+  'color-mix(in srgb, var(--cyan) 55%, transparent)',
+  'color-mix(in srgb, var(--cyan) 80%, transparent)',
+  'var(--cyan)',
+]
 // Intimacy heart shade deepens with the day's total count (1 → light, 4+ → deep).
 const HEART_SHADES = ['#f9a8d4', '#f472b6', '#ec4899', '#db2777']
 const heartColor = (count: number): string => HEART_SHADES[Math.min(count, HEART_SHADES.length) - 1]
@@ -81,6 +98,12 @@ function roundDateRange(round: CycleRound, first: string | null, last: string | 
   return `${start} → ${md(last ?? round.ended_on)}`
 }
 
+interface DayDetail {
+  lifts: { name: string; sets: number }[]
+  sports: { name: string; hours: number; level?: string }[]
+  intimacy: string
+}
+
 export function DashboardScreen() {
   const { lang } = useLanguage()
   const [entries, setEntries] = useState<WorkoutEntry[]>([])
@@ -94,6 +117,8 @@ export function DashboardScreen() {
   const [progCategory, setProgCategory] = useState('')
   const [progShowGym, setProgShowGym] = useState(true)
   const [progShowBodyweight, setProgShowBodyweight] = useState(true)
+  const [calStrength, setCalStrength] = useState(true)
+  const [calSport, setCalSport] = useState(true)
   const [actShowCount, setActShowCount] = useState(true)
   const [actShowVolume, setActShowVolume] = useState(true)
   const [sportId, setSportId] = useState('')
@@ -258,26 +283,49 @@ export function DashboardScreen() {
     return { labels: keys.map((k) => ACTIVITY_LABEL[k][lang]), datasets: [...countSets, ...volSets], monthCount: n, months, count, volume, keys }
   }, [activityMonthly, lang, actShowCount, actShowVolume])
   const weekly = useMemo(() => weeklyEntryVolume(entries), [entries])
-  const heat = useMemo(() => intensityHeatmap(entries, sessions, setCount, showIntimacy ? intimacyRows : []), [entries, sessions, setCount, intimacyRows, showIntimacy])
-  // per-date detail for the heatmap tooltip
-  const heatDetail = useMemo(() => {
-    const m: Record<string, string[]> = {}
-    for (const e of entries) { const ex = exById[e.exercise_id]; if (ex) (m[e.date] ??= []).push(exerciseName(ex, lang)) }
-    for (const s of sessions) { const sp = sports.find((x) => x.id === s.sport_id); (m[s.date] ??= []).push('🏃 ' + (sp ? sportName(sp, lang) : 'sport')) }
-    const out: Record<string, string> = {}
-    for (const [d, list] of Object.entries(m)) out[d] = [...new Set(list)].slice(0, 8).join(', ')
+  const calendar = useMemo(
+    () => intensityCalendar({
+      entries, exById, setCountOf: setCount, sessions,
+      intimacy: showIntimacy ? intimacyRows : [],
+      include: { strength: calStrength, sport: calSport },
+    }),
+    [entries, exById, setCount, sessions, intimacyRows, showIntimacy, calStrength, calSport],
+  )
+  // Full per-day breakdown for the panel under the calendar: the squares carry the
+  // body-part tags, this names the movements that produced them.
+  const dayDetail = useMemo(() => {
+    const out: Record<string, DayDetail> = {}
+    const touch = (d: string): DayDetail => (out[d] ??= { lifts: [], sports: [], intimacy: '' })
+    if (calStrength) {
+      for (const e of entries) {
+        const ex = exById[e.exercise_id]
+        const sets = setCount(e.id)
+        if (!ex || !sets) continue
+        touch(e.date).lifts.push({ name: exerciseName(ex, lang), sets })
+      }
+    }
+    if (calSport) {
+      for (const s of sessions) {
+        const sp = sports.find((x) => x.id === s.sport_id)
+        touch(s.date).sports.push({ name: sp ? sportName(sp, lang) : 'sport', hours: s.hours, level: s.attributes?.level })
+      }
+    }
     // Intimacy is listed separately (not training — see the heart marker), with the
     // per-category counts for that day: e.g. "💗 插入×2 · 单人×1".
     if (showIntimacy) {
       const byDate: Record<string, Partial<Record<string, number>>> = {}
       for (const r of intimacyRows) { const c = intimacyCategory(r); (byDate[r.date] ??= {}); byDate[r.date][c] = (byDate[r.date][c] ?? 0) + r.count }
       for (const [d, cats] of Object.entries(byDate)) {
-        const txt = '💗 ' + INTIMACY_CATEGORIES.filter((c) => cats[c]).map((c) => `${intimacyLabel(c, lang, true)}×${cats[c]}`).join(' · ')
-        out[d] = out[d] ? `${out[d]}  ${txt}` : txt
+        touch(d).intimacy = INTIMACY_CATEGORIES.filter((c) => cats[c]).map((c) => `${intimacyLabel(c, lang, true)}×${cats[c]}`).join(' · ')
       }
     }
+    for (const v of Object.values(out)) v.lifts.sort((a, b) => b.sets - a.sets)
     return out
-  }, [entries, sessions, exById, sports, lang, showIntimacy, intimacyRows])
+  }, [entries, sessions, exById, sports, lang, showIntimacy, intimacyRows, setCount, calStrength, calSport])
+  const sportLabel = useMemo(() => {
+    const byId = Object.fromEntries(sports.map((s) => [s.id, sportName(s, lang)]))
+    return (id: string): string => byId[id] ?? (lang === 'zh' ? '运动' : 'sport')
+  }, [sports, lang])
   // dates that carry an injury signal (onset, injured session, or de-loaded lift)
   const injuryDates = useMemo(() => {
     const s = new Set<string>()
@@ -331,11 +379,11 @@ export function DashboardScreen() {
     const sportHours = sessions.reduce((sum, s) => sum + s.hours, 0)
     const active = injuries.filter((i) => i.status !== 'recovered').length
     const pushReps = totalBodyweightReps(allSets, entries, exById)
-    const lvls = heat.flat().map((c) => c.level).filter((l) => l > 0)
+    const lvls = calendar.flatMap((m) => m.days).map((d) => d.level).filter((l): l is number => l != null && l > 0)
     const avg = lvls.length ? (lvls.reduce((a, b) => a + b, 0) / lvls.length) : 0
     const intimacyCount = showIntimacy ? intimacyRows.reduce((sum, r) => sum + r.count, 0) : 0
     return { trainingDays, gymDays, sportHours, sportSessions: sessions.length, active, pushReps, avg, intimacyCount }
-  }, [entries, sessions, injuries, allSets, exById, heat, intimacyRows, showIntimacy])
+  }, [entries, sessions, injuries, allSets, exById, calendar, intimacyRows, showIntimacy])
 
   const categories = useMemo(() => getCategories(), [])
   const progCategories = useMemo(() => {
@@ -526,9 +574,32 @@ export function DashboardScreen() {
         </div>
       )}
 
-      <section className="dash-heat-sec">
-        <div className="th-sectitle">{lang === 'zh' ? '每日强度' : 'Daily intensity'} <small className="dash-sub">0 {lang === 'zh' ? '无' : 'rest'} · 4 {lang === 'zh' ? '最高(可叠加)' : 'max (additive)'}{showIntimacy ? (lang === 'zh' ? ' · 粉点=私密' : ' · pink = wellness') : ''}</small></div>
-        <Heatmap cols={heat} lang={lang} detail={heatDetail} injuryDates={injuryDates} />
+      <section className="dash-cal-sec">
+        <div className="th-sectitle">
+          {lang === 'zh' ? '每日强度' : 'Daily intensity'}
+          <span className="cal-filters">
+            <button
+              type="button"
+              className={`cal-chip strength${calStrength ? ' on' : ''}`}
+              aria-pressed={calStrength}
+              onClick={() => setCalStrength((v) => !v)}
+            >{lang === 'zh' ? '力量' : 'Lifting'}</button>
+            <button
+              type="button"
+              className={`cal-chip sport${calSport ? ' on' : ''}`}
+              aria-pressed={calSport}
+              onClick={() => setCalSport((v) => !v)}
+            >{lang === 'zh' ? '运动' : 'Sport'}</button>
+          </span>
+        </div>
+        <IntensityCalendar
+          months={calendar}
+          lang={lang}
+          detail={dayDetail}
+          sportLabel={sportLabel}
+          injuryDates={injuryDates}
+          showIntimacy={showIntimacy}
+        />
       </section>
 
       <section className="dash-recovery">
@@ -801,56 +872,172 @@ function progressionMetric(ex: Exercise, sets: ExerciseSet[]): { primary: number
 }
 
 const MONTHS_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-function monthLabel(iso: string, lang: 'en' | 'zh'): string {
-  const mo = Number(iso.slice(5, 7))
-  return lang === 'zh' ? `${mo}月` : MONTHS_EN[mo - 1]
+function monthTitle(month: string, lang: 'en' | 'zh'): string {
+  const [y, m] = month.split('-').map(Number)
+  return lang === 'zh' ? `${y}年${m}月` : `${MONTHS_EN[m - 1]} ${y}`
 }
 
-function Heatmap({ cols, lang, detail, injuryDates }: { cols: HeatCell[][]; lang: 'en' | 'zh'; detail: Record<string, string>; injuryDates: Set<string> }) {
+const hoursLabel = (h: number): string => `${Number.isInteger(h) ? h : h.toFixed(1)}h`
+
+/** How many month panels fit side by side — 1 on a phone, up to 3 on a wide screen.
+ *  Measured rather than declared in a media query so the panels stay legible inside
+ *  whatever column the dashboard gives this section. */
+function useVisibleMonths(ref: React.RefObject<HTMLDivElement | null>): number {
+  const [n, setN] = useState(1)
+  useEffect(() => {
+    const el = ref.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(([e]) => {
+      setN(Math.max(1, Math.min(3, Math.floor(e.contentRect.width / 480))))
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [ref])
+  return n
+}
+
+/** Calendar-shaped intensity view. Each square shows the day's body-part tags
+ *  outright — reading the calendar must not require hovering, which never worked
+ *  on a phone in the first place — and the panel underneath names the movements. */
+function IntensityCalendar({ months, lang, detail, sportLabel, injuryDates, showIntimacy }: {
+  months: CalendarMonth[]
+  lang: 'en' | 'zh'
+  detail: Record<string, DayDetail>
+  sportLabel: (id: string) => string
+  injuryDates: Set<string>
+  showIntimacy: boolean
+}) {
+  const wrap = useRef<HTMLDivElement>(null)
+  const visible = useVisibleMonths(wrap)
+  // Index one past the newest month on screen. null = pinned to the latest month,
+  // so the view follows new data until the user actually pages back.
+  const [end, setEnd] = useState<number | null>(null)
+  const [picked, setPicked] = useState<string | null>(null)
+  const [hover, setHover] = useState<string | null>(null)
+
   const wd = lang === 'zh' ? ['一', '二', '三', '四', '五', '六', '日'] : ['M', 'T', 'W', 'T', 'F', 'S', 'S']
-  const [tip, setTip] = useState<{ x: number; y: number; cell: HeatCell } | null>(null)
   const LVL = lang === 'zh' ? ['无', '轻', '中', '高', '最高'] : ['rest', 'light', 'moderate', 'high', 'max']
 
+  const last = Math.min(end ?? months.length, months.length)
+  const start = Math.max(0, last - visible)
+  const shown = months.slice(start, last)
+
+  // Falls back to the most recent day that actually has something on it, so the
+  // detail panel is never empty on arrival.
+  const fallback = useMemo(() => {
+    for (const m of [...shown].reverse()) {
+      for (let i = m.days.length - 1; i >= 0; i--) {
+        const d = m.days[i]
+        if (d.level != null && d.load > 0) return d.date
+      }
+    }
+    return null
+  }, [shown])
+  const activeDate = hover ?? picked ?? fallback
+  const active = activeDate ? shown.flatMap((m) => m.days).find((d) => d.date === activeDate) : undefined
+  const activeDetail = activeDate ? detail[activeDate] : undefined
+
+  // Name and amount are separate spans: the name may ellipse inside a narrow square,
+  // the amount never does — "背部 …" with the set count cut off tells you nothing.
+  const tagsFor = (day: DayCell): { kind: 'strength' | 'sport'; name: string; amount: string }[] => [
+    ...day.strength.map((t) => ({ kind: 'strength' as const, name: categoryLabel(t.part, lang), amount: String(t.sets) })),
+    ...day.sports.map((t) => ({ kind: 'sport' as const, name: sportLabel(t.sportId), amount: hoursLabel(t.hours) })),
+  ]
+
   return (
-    <div className="dash-heat" onMouseLeave={() => setTip(null)}>
-      <div className="dash-heat-days">
-        <span className="dash-heat-days-spacer" aria-hidden="true" />
-        {wd.map((d, i) => (<span key={i}>{d}</span>))}
+    <div className="dash-cal" ref={wrap} onMouseLeave={() => setHover(null)}>
+      <div className="cal-nav">
+        <button
+          type="button" className="cal-pg" disabled={start === 0}
+          onClick={() => setEnd(last - 1)} aria-label={lang === 'zh' ? '上个月' : 'previous month'}
+        >‹</button>
+        <span className="cal-range">
+          {shown.length ? `${monthTitle(shown[0].month, lang)}${shown.length > 1 ? ` – ${monthTitle(shown[shown.length - 1].month, lang)}` : ''}` : ''}
+        </span>
+        <button
+          type="button" className="cal-pg" disabled={last >= months.length}
+          onClick={() => setEnd(last + 1)} aria-label={lang === 'zh' ? '下个月' : 'next month'}
+        >›</button>
       </div>
-      <div className="dash-heat-cols">
-        <div className="dash-heat-months">
-          {cols.map((col, ci) => {
-            const m = col[0].date.slice(0, 7)
-            const show = ci === 0 || m !== cols[ci - 1][0].date.slice(0, 7)
-            return <span key={ci} className="dash-heat-month">{show ? monthLabel(col[0].date, lang) : ''}</span>
-          })}
-        </div>
-        <div className="dash-heat-grid">
-          {cols.map((col, ci) => (
-            <div key={ci} className="dash-heat-col">
-              {col.map((cell) => (
-                <span
-                  key={cell.date}
-                  className={`dash-heat-cell ${injuryDates.has(cell.date) ? 'inj' : ''}`}
-                  style={{ background: HEAT[cell.level] }}
-                  onMouseEnter={(e) => setTip({ x: e.clientX, y: e.clientY, cell })}
-                  onMouseMove={(e) => setTip((t) => (t ? { ...t, x: e.clientX, y: e.clientY } : t))}
-                >
-                  {cell.intimacy ? <span className="dash-heat-heart" style={{ color: heartColor(cell.intimacy) }}>♥</span> : null}
-                </span>
-              ))}
+
+      <div className="cal-months">
+        {shown.map((m) => (
+          <div className="cal-month" key={m.month}>
+            {shown.length > 1 && <div className="cal-mtitle">{monthTitle(m.month, lang)}</div>}
+            <div className="cal-wd">{wd.map((d, i) => <span key={i}>{d}</span>)}</div>
+            <div className="cal-grid">
+              {Array.from({ length: m.leading }, (_, i) => <span key={`b${i}`} className="cal-blank" aria-hidden="true" />)}
+              {m.days.map((day) => {
+                const tags = tagsFor(day)
+                const injured = injuryDates.has(day.date)
+                const summary = tags.map((t) => `${t.name} ${t.amount}`).join(', ')
+                return (
+                  <button
+                    key={day.date}
+                    type="button"
+                    disabled={day.level == null}
+                    className={`cal-day${day.level == null ? ' future' : ''}${injured ? ' inj' : ''}${day.date === activeDate ? ' on' : ''}`}
+                    style={day.level ? { background: LEVEL_FILL[day.level] } : undefined}
+                    onMouseEnter={() => setHover(day.date)}
+                    onFocus={() => setHover(day.date)}
+                    onClick={() => setPicked(day.date)}
+                    aria-label={`${day.date} · ${LVL[day.level ?? 0]}${summary ? ` · ${summary}` : ''}`}
+                  >
+                    <span className="cal-dnum">
+                      {Number(day.date.slice(8))}
+                      {day.level ? <i className="cal-dot" style={{ background: LEVEL_DOT[day.level] }} aria-hidden="true" /> : null}
+                    </span>
+                    {tags.slice(0, 3).map((t, i) => (
+                      <span key={i} className={`cal-tag ${t.kind}`}><b>{t.name}</b><i>{t.amount}</i></span>
+                    ))}
+                    {tags.length > 3 && <span className="cal-more">+{tags.length - 3}</span>}
+                    {day.intimacy ? <span className="cal-heart" style={{ color: heartColor(day.intimacy) }}>♥</span> : null}
+                  </button>
+                )
+              })}
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
       </div>
-      {tip && (
-        <div className="dash-heat-tip" style={{ left: tip.x + 14, top: tip.y + 14 }}>
-          <div className="tdate">{tip.cell.date}</div>
-          <div className="tint">{lang === 'zh' ? '强度' : 'intensity'} {tip.cell.level} · {LVL[tip.cell.level]}</div>
-          <div className="tbody">{detail[tip.cell.date] || (lang === 'zh' ? '休息' : 'rest day')}</div>
-          {injuryDates.has(tip.cell.date) && <div className="tinj">⚠️ {lang === 'zh' ? '伤病相关' : 'injury-related'}</div>}
-        </div>
-      )}
+
+      <div className="cal-detail">
+        {active ? (
+          <>
+            <div className="cal-dt-head">
+              <strong>{active.date}</strong>
+              <span className="cal-dt-lvl">
+                <i className="cal-dot" style={{ background: LEVEL_DOT[active.level ?? 0] }} aria-hidden="true" />
+                {LVL[active.level ?? 0]}{active.load > 0 ? ` · ${lang === 'zh' ? '负荷' : 'load'} ${Math.round(active.load)}` : ''}
+              </span>
+              {injuryDates.has(active.date) && <span className="cal-dt-inj">⚠️ {lang === 'zh' ? '伤病相关' : 'injury-related'}</span>}
+            </div>
+            <div className="cal-dt-body">
+              {activeDetail?.lifts.map((l, i) => (
+                <span key={`l${i}`} className="cal-tag strength"><b>{l.name}</b><i>{l.sets}{lang === 'zh' ? '组' : ''}</i></span>
+              ))}
+              {activeDetail?.sports.map((sp, i) => (
+                <span key={`s${i}`} className="cal-tag sport"><b>{sp.name}</b><i>{hoursLabel(sp.hours)}</i></span>
+              ))}
+              {showIntimacy && activeDetail?.intimacy ? <span className="cal-tag intimacy"><b>💗 {activeDetail.intimacy}</b></span> : null}
+              {!activeDetail?.lifts.length && !activeDetail?.sports.length && !(showIntimacy && activeDetail?.intimacy) && (
+                <span className="cal-dt-empty">{lang === 'zh' ? '休息日' : 'rest day'}</span>
+              )}
+            </div>
+          </>
+        ) : (
+          <span className="cal-dt-empty">{lang === 'zh' ? '这里还没有记录' : 'nothing logged here'}</span>
+        )}
+      </div>
+
+      <div className="cal-legend">
+        <span>{lang === 'zh' ? '轻' : 'light'}</span>
+        {[1, 2, 3, 4].map((l) => (
+          <span key={l} className="cal-lg" style={{ background: LEVEL_FILL[l] }}>
+            <i style={{ background: LEVEL_DOT[l] }} />
+          </span>
+        ))}
+        <span>{lang === 'zh' ? '最高' : 'max'}</span>
+      </div>
     </div>
   )
 }
