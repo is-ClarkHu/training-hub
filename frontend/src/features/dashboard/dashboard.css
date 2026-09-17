@@ -123,7 +123,7 @@
 .cal-mtitle { font: 700 12px var(--mono); color: var(--text); }
 .cal-wd, .cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
 .cal-wd span { font: 10px var(--sans); color: var(--faint); text-align: center; }
-.cal-grid { grid-auto-rows: minmax(38px, auto); }
+.cal-grid { grid-auto-rows: minmax(62px, auto); }
 
 .cal-day {
   position: relative;

@@ -71,11 +71,20 @@ const MONTH_RAMP = ['#dbe7fb', '#b3ccf6', '#8ab0f1', '#6295ec', '#3b78dd', '#265
 // the fill is a neutral ramp (readable under text, and theme-agnostic via --text)
 // and the saturated single-hue ramp goes on the dot beside the date. Two channels
 // — fill lightness AND dot depth — so the scale survives colour-blindness.
-// The heat ramp. It used to be near-white at 5–24% because the squares carried
-// text that had to stay readable on top; now that they don't, the fill IS the
-// signal and gets the accent hue and enough contrast to read at 10px in the
-// overview grid — four steps that are told apart at a glance, GitHub-style.
+// Two ramps for the same four levels, because the two views give a level very
+// different amounts of room. A month square is ~45px wide and carries the day's
+// tags on top, so its fill stays near-white and quiet — anything stronger fights
+// the text. An overview square is 10px with nothing on it, so the fill IS the
+// signal and takes the accent hue at full strength; at 5% white it would be
+// invisible. Same levels, same cut points — only the paint differs.
 const LEVEL_FILL = [
+  'transparent',
+  'color-mix(in srgb, var(--text) 5%, transparent)',
+  'color-mix(in srgb, var(--text) 10%, transparent)',
+  'color-mix(in srgb, var(--text) 16%, transparent)',
+  'color-mix(in srgb, var(--text) 24%, transparent)',
+]
+const LEVEL_SQ = [
   'transparent',
   'color-mix(in srgb, var(--cyan) 22%, transparent)',
   'color-mix(in srgb, var(--cyan) 42%, transparent)',
@@ -903,13 +912,13 @@ function useVisibleMonths(ref: React.RefObject<HTMLDivElement | null>): number {
 }
 
 /** Daily-intensity view with two shapes over the same data:
+ *  - Month: each square shows the day's body-part tags outright — reading the
+ *    calendar must not require hovering, which never worked on a phone in the
+ *    first place — and the panel underneath names the movements.
  *  - Overview: GitHub's contribution grid — 7 weekday rows × week columns, colour
- *    only, so consistency and gaps read at a glance across a whole year.
- *  - Month: one month, one square per day, again colour only.
- *  Squares carry no text. At ~45px a body-part tag ellipses to "Sh… 13", which
- *  tells you nothing and hides the fill the heat scale exists to show; the panel
- *  underneath names the movements for whichever day is hovered, focused or tapped
- *  (tapping is what makes this work on a phone, where hovering never did). */
+ *    only, so consistency and gaps read at a glance across a whole year. It is a
+ *    re-layout of the month view's cells, never a recomputation, so a given day is
+ *    shaded from the same level in both. */
 function IntensityCalendar({ months, lang, detail, sportLabel, injuryDates, showIntimacy }: {
   months: CalendarMonth[]
   lang: 'en' | 'zh'
@@ -1050,7 +1059,7 @@ function IntensityCalendar({ months, lang, detail, sportLabel, injuryDates, show
                         type="button"
                         disabled={cell.level == null}
                         className={`cal-sq${cell.level == null ? ' future' : ''}${injuryDates.has(cell.date) ? ' inj' : ''}${cell.date === activeDate ? ' on' : ''}`}
-                        style={cell.level ? { background: LEVEL_FILL[cell.level] } : undefined}
+                        style={cell.level ? { background: LEVEL_SQ[cell.level] } : undefined}
                         onMouseEnter={() => setHover(cell.date)}
                         onFocus={() => setHover(cell.date)}
                         onClick={() => setPicked(cell.date)}
@@ -1097,7 +1106,14 @@ function IntensityCalendar({ months, lang, detail, sportLabel, injuryDates, show
                     onClick={() => setPicked(day.date)}
                     aria-label={`${day.date} · ${LVL[day.level ?? 0]}${summary ? ` · ${summary}` : ''}`}
                   >
-                    <span className="cal-dnum">{Number(day.date.slice(8))}</span>
+                    <span className="cal-dnum">
+                      {Number(day.date.slice(8))}
+                      {day.level ? <i className="cal-dot" style={{ background: LEVEL_DOT[day.level] }} aria-hidden="true" /> : null}
+                    </span>
+                    {tags.slice(0, 3).map((t, i) => (
+                      <span key={i} className={`cal-tag ${t.kind}`}><b>{t.name}</b><i>{t.amount}</i></span>
+                    ))}
+                    {tags.length > 3 && <span className="cal-more">+{tags.length - 3}</span>}
                     {day.intimacy ? <span className="cal-heart" style={{ color: heartColor(day.intimacy) }}>♥</span> : null}
                   </button>
                 )
@@ -1140,7 +1156,7 @@ function IntensityCalendar({ months, lang, detail, sportLabel, injuryDates, show
       <div className="cal-legend">
         <span>{lang === 'zh' ? '轻' : 'light'}</span>
         {[1, 2, 3, 4].map((l) => (
-          <span key={l} className="cal-lg" style={{ background: LEVEL_FILL[l] }}>
+          <span key={l} className="cal-lg" style={{ background: (mode === 'year' ? LEVEL_SQ : LEVEL_FILL)[l] }}>
             <i style={{ background: LEVEL_DOT[l] }} />
           </span>
         ))}
