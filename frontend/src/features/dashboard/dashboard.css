@@ -362,3 +362,8 @@
 }
 .cal-mode.on, .cal-yr.on { border-color: var(--accent); color: var(--accent); }
 .cal-years { display: flex; flex-wrap: wrap; gap: 4px; }
+
+/* Phone-width squares: no date row, four tags instead of three, and tighter type
+   so a three-letter label plus its number fit without ellipsing. */
+.cal-day.tight { padding: 3px; gap: 1px; }
+.cal-day.tight .cal-tag { font-size: 8px; padding: 0 2px; gap: 2px; }

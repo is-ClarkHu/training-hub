@@ -894,6 +894,25 @@ function monthTitle(month: string, lang: 'en' | 'zh'): string {
 
 const hoursLabel = (h: number): string => `${Number.isInteger(h) ? h : h.toFixed(1)}h`
 
+/** True when a day square is too narrow to spend a line on the date. On a phone
+ *  the number row costs a whole tag row, and the tags are the point — the exact
+ *  date is one tap away in the detail panel. Measured from the real element for
+ *  the same reason as useVisibleMonths: this section can sit in any column. */
+function useCompactDays(ref: React.RefObject<HTMLDivElement | null>): boolean {
+  const [compact, setCompact] = useState(false)
+  useEffect(() => {
+    const el = ref.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(([e]) => {
+      // 7 columns + 6 gaps of 4px, inside a panel that also pads 0-ish here.
+      setCompact((e.contentRect.width - 24) / 7 < 54)
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [ref])
+  return compact
+}
+
 /** How many month panels fit side by side — 1 on a phone, up to 3 on a wide screen.
  *  Measured rather than declared in a media query so the panels stay legible inside
  *  whatever column the dashboard gives this section. */
@@ -929,6 +948,7 @@ function IntensityCalendar({ months, lang, detail, sportLabel, injuryDates, show
 }) {
   const wrap = useRef<HTMLDivElement>(null)
   const visible = useVisibleMonths(wrap)
+  const compact = useCompactDays(wrap)
   // Index one past the newest month on screen. null = pinned to the latest month,
   // so the view follows new data until the user actually pages back.
   const [end, setEnd] = useState<number | null>(null)
@@ -956,6 +976,9 @@ function IntensityCalendar({ months, lang, detail, sportLabel, injuryDates, show
     return m
   }, [months])
 
+  // The row the date gave up goes to the tags, so a narrow square shows MORE of
+  // the day's training than it did with the number on top.
+  const shownTags = compact ? 4 : 3
   const wd = lang === 'zh' ? ['一', '二', '三', '四', '五', '六', '日'] : ['M', 'T', 'W', 'T', 'F', 'S', 'S']
   const LVL = lang === 'zh' ? ['无', '轻', '中', '高', '最高'] : ['rest', 'light', 'moderate', 'high', 'max']
 
@@ -994,9 +1017,17 @@ function IntensityCalendar({ months, lang, detail, sportLabel, injuryDates, show
 
   // Name and amount are separate spans: the name may ellipse inside a narrow square,
   // the amount never does — "背部 …" with the set count cut off tells you nothing.
+  //
+  // On a phone even the name has only ~25px, which ellipses "Shoulders" to "Sh…" —
+  // three characters, one of them a dot. A deliberate three-letter cut spends those
+  // same pixels on "Sho", which is readable. Chinese labels are 1–2 glyphs already,
+  // so they're left alone.
+  const short = (name: string): string =>
+    compact && lang === 'en' && name.length > 3 ? name.slice(0, 3) : name
+
   const tagsFor = (day: DayCell): { kind: 'strength' | 'sport'; name: string; amount: string }[] => [
-    ...day.strength.map((t) => ({ kind: 'strength' as const, name: categoryLabel(t.part, lang), amount: String(t.sets) })),
-    ...day.sports.map((t) => ({ kind: 'sport' as const, name: sportLabel(t.sportId), amount: hoursLabel(t.hours) })),
+    ...day.strength.map((t) => ({ kind: 'strength' as const, name: short(categoryLabel(t.part, lang)), amount: String(t.sets) })),
+    ...day.sports.map((t) => ({ kind: 'sport' as const, name: short(sportLabel(t.sportId)), amount: hoursLabel(t.hours) })),
   ]
 
   return (
@@ -1099,21 +1130,23 @@ function IntensityCalendar({ months, lang, detail, sportLabel, injuryDates, show
                     key={day.date}
                     type="button"
                     disabled={day.level == null}
-                    className={`cal-day${day.level == null ? ' future' : ''}${injured ? ' inj' : ''}${day.date === activeDate ? ' on' : ''}`}
+                    className={`cal-day${compact ? ' tight' : ''}${day.level == null ? ' future' : ''}${injured ? ' inj' : ''}${day.date === activeDate ? ' on' : ''}`}
                     style={day.level ? { background: LEVEL_FILL[day.level] } : undefined}
                     onMouseEnter={() => setHover(day.date)}
                     onFocus={() => setHover(day.date)}
                     onClick={() => setPicked(day.date)}
                     aria-label={`${day.date} · ${LVL[day.level ?? 0]}${summary ? ` · ${summary}` : ''}`}
                   >
-                    <span className="cal-dnum">
-                      {Number(day.date.slice(8))}
-                      {day.level ? <i className="cal-dot" style={{ background: LEVEL_DOT[day.level] }} aria-hidden="true" /> : null}
-                    </span>
-                    {tags.slice(0, 3).map((t, i) => (
+                    {!compact && (
+                      <span className="cal-dnum">
+                        {Number(day.date.slice(8))}
+                        {day.level ? <i className="cal-dot" style={{ background: LEVEL_DOT[day.level] }} aria-hidden="true" /> : null}
+                      </span>
+                    )}
+                    {tags.slice(0, shownTags).map((t, i) => (
                       <span key={i} className={`cal-tag ${t.kind}`}><b>{t.name}</b><i>{t.amount}</i></span>
                     ))}
-                    {tags.length > 3 && <span className="cal-more">+{tags.length - 3}</span>}
+                    {tags.length > shownTags && <span className="cal-more">+{tags.length - shownTags}</span>}
                     {day.intimacy ? <span className="cal-heart" style={{ color: heartColor(day.intimacy) }}>♥</span> : null}
                   </button>
                 )
