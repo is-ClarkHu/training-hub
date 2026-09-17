@@ -317,3 +317,82 @@ export function totalBodyweightReps(sets: ExerciseSet[], entries: WorkoutEntry[]
   const repsOnly = new Set(entries.filter((e) => exById[e.exercise_id]?.measure_type === 'reps_only').map((e) => e.id))
   return sets.filter((s) => repsOnly.has(s.entry_id) && s.set_type !== 'warmup').reduce((sum, s) => sum + (s.reps ?? 0), 0)
 }
+
+// ── year grid (overview mode) ────────────────────────────────
+// The GitHub-contributions layout: 7 weekday rows × 53 week columns, one small
+// square per day, colour = the SAME level the month calendar uses. It answers a
+// different question from the month view — "have I been consistent, where are the
+// gaps" — so it reads the already-computed CalendarMonth[] rather than recomputing,
+// which guarantees a given day is shaded identically in both modes.
+//
+// Rows are Monday-first, matching the month calendar in this app (GitHub starts on
+// Sunday; internal consistency wins over copying that detail).
+export interface YearGrid {
+  /** Week columns, oldest → newest. Each column is 7 slots (Mon…Sun); a slot is
+   *  null when the day falls outside the requested range. */
+  columns: (DayCell | null)[][]
+  /** Month headers aligned to the columns they span, GitHub-style. */
+  monthLabels: { month: string; span: number }[]
+  /** Days with any load, and their summed load — the "N training days" line. */
+  trainedDays: number
+  totalLoad: number
+}
+
+const dayOfWeekMon0 = (iso: string): number => {
+  const [y, m, d] = iso.split('-').map(Number)
+  return (new Date(y, m - 1, d).getDay() + 6) % 7
+}
+
+const addDaysIso = (iso: string, n: number): string => {
+  const [y, m, d] = iso.split('-').map(Number)
+  return isoOf(new Date(y, m - 1, d + n))
+}
+
+/** Calendar years covered by the data, oldest → newest. */
+export function yearsOf(months: CalendarMonth[]): number[] {
+  const years = [...new Set(months.map((m) => Number(m.month.slice(0, 4))))]
+  return years.sort((a, b) => a - b)
+}
+
+/**
+ * Lay the days out as week columns. `year` picks a calendar year (Jan 1 – Dec 31);
+ * omit it for GitHub's default — the rolling 53 weeks ending today.
+ */
+export function yearGrid(months: CalendarMonth[], { year, today }: { year?: number; today?: string } = {}): YearGrid {
+  const todayIso = today ?? isoOf(new Date())
+  const byDate = new Map<string, DayCell>()
+  for (const m of months) for (const d of m.days) byDate.set(d.date, d)
+
+  const last = year ? `${year}-12-31` : todayIso
+  const first = year ? `${year}-01-01` : addDaysIso(todayIso, -7 * 52 - dayOfWeekMon0(todayIso))
+  // Columns are whole weeks: pad back to the Monday on or before `first`.
+  const firstMonday = addDaysIso(first, -dayOfWeekMon0(first))
+
+  const columns: (DayCell | null)[][] = []
+  let trainedDays = 0
+  let totalLoad = 0
+  for (let monday = firstMonday; monday <= last; monday = addDaysIso(monday, 7)) {
+    const col: (DayCell | null)[] = []
+    for (let i = 0; i < 7; i++) {
+      const date = addDaysIso(monday, i)
+      if (date < first || date > last) { col.push(null); continue }
+      const cell = byDate.get(date) ?? { date, level: date > todayIso ? null : 0, load: 0, strength: [], sports: [] }
+      if (cell.load > 0) { trainedDays++; totalLoad += cell.load }
+      col.push(cell)
+    }
+    columns.push(col)
+  }
+
+  // A month owns the columns whose Monday falls inside it. Groups shorter than two
+  // columns get no label — GitHub drops those too rather than crowd the header.
+  const monthLabels: { month: string; span: number }[] = []
+  columns.forEach((_col, i) => {
+    const monday = addDaysIso(firstMonday, i * 7)
+    const month = monday.slice(0, 7)
+    const prev = monthLabels[monthLabels.length - 1]
+    if (prev && prev.month === month) prev.span++
+    else monthLabels.push({ month, span: 1 })
+  })
+
+  return { columns, monthLabels, trainedDays, totalLoad }
+}

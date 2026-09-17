@@ -46,6 +46,8 @@ import {
   bodyPartCounts,
   bodyweightVolume,
   intensityCalendar,
+  yearGrid,
+  yearsOf,
   muscleRecovery,
   totalBodyweightReps,
   weeklyEntryVolume,
@@ -69,12 +71,16 @@ const MONTH_RAMP = ['#dbe7fb', '#b3ccf6', '#8ab0f1', '#6295ec', '#3b78dd', '#265
 // the fill is a neutral ramp (readable under text, and theme-agnostic via --text)
 // and the saturated single-hue ramp goes on the dot beside the date. Two channels
 // — fill lightness AND dot depth — so the scale survives colour-blindness.
+// The heat ramp. It used to be near-white at 5–24% because the squares carried
+// text that had to stay readable on top; now that they don't, the fill IS the
+// signal and gets the accent hue and enough contrast to read at 10px in the
+// overview grid — four steps that are told apart at a glance, GitHub-style.
 const LEVEL_FILL = [
   'transparent',
-  'color-mix(in srgb, var(--text) 5%, transparent)',
-  'color-mix(in srgb, var(--text) 10%, transparent)',
-  'color-mix(in srgb, var(--text) 16%, transparent)',
-  'color-mix(in srgb, var(--text) 24%, transparent)',
+  'color-mix(in srgb, var(--cyan) 22%, transparent)',
+  'color-mix(in srgb, var(--cyan) 42%, transparent)',
+  'color-mix(in srgb, var(--cyan) 66%, transparent)',
+  'var(--cyan)',
 ]
 const LEVEL_DOT = [
   'transparent',
@@ -896,9 +902,14 @@ function useVisibleMonths(ref: React.RefObject<HTMLDivElement | null>): number {
   return n
 }
 
-/** Calendar-shaped intensity view. Each square shows the day's body-part tags
- *  outright — reading the calendar must not require hovering, which never worked
- *  on a phone in the first place — and the panel underneath names the movements. */
+/** Daily-intensity view with two shapes over the same data:
+ *  - Overview: GitHub's contribution grid — 7 weekday rows × week columns, colour
+ *    only, so consistency and gaps read at a glance across a whole year.
+ *  - Month: one month, one square per day, again colour only.
+ *  Squares carry no text. At ~45px a body-part tag ellipses to "Sh… 13", which
+ *  tells you nothing and hides the fill the heat scale exists to show; the panel
+ *  underneath names the movements for whichever day is hovered, focused or tapped
+ *  (tapping is what makes this work on a phone, where hovering never did). */
 function IntensityCalendar({ months, lang, detail, sportLabel, injuryDates, showIntimacy }: {
   months: CalendarMonth[]
   lang: 'en' | 'zh'
@@ -914,6 +925,27 @@ function IntensityCalendar({ months, lang, detail, sportLabel, injuryDates, show
   const [end, setEnd] = useState<number | null>(null)
   const [picked, setPicked] = useState<string | null>(null)
   const [hover, setHover] = useState<string | null>(null)
+  // 'year' = the GitHub-style overview (consistency, gaps); 'month' = one month in
+  // detail. Both shade a day identically — same levels, computed once.
+  const [mode, setMode] = useState<'year' | 'month'>('year')
+  // null = the rolling 53 weeks ending today, GitHub's default view.
+  const [year, setYear] = useState<number | null>(null)
+
+  // 53 columns overflow a phone, so the grid scrolls — and must open on the NEWEST
+  // week, not on last September. (A CSS `direction: rtl` container does this too,
+  // but it also flips the content, and the fix for that is fragile.)
+  const scroller = useRef<HTMLDivElement>(null)
+  const years = useMemo(() => yearsOf(months), [months])
+  const grid = useMemo(() => yearGrid(months, { year: year ?? undefined }), [months, year])
+  useEffect(() => {
+    const el = scroller.current
+    if (el) el.scrollLeft = el.scrollWidth
+  }, [mode, grid])
+  const allDays = useMemo(() => {
+    const m = new Map<string, DayCell>()
+    for (const mo of months) for (const d of mo.days) m.set(d.date, d)
+    return m
+  }, [months])
 
   const wd = lang === 'zh' ? ['一', '二', '三', '四', '五', '六', '日'] : ['M', 'T', 'W', 'T', 'F', 'S', 'S']
   const LVL = lang === 'zh' ? ['无', '轻', '中', '高', '最高'] : ['rest', 'light', 'moderate', 'high', 'max']
@@ -933,8 +965,22 @@ function IntensityCalendar({ months, lang, detail, sportLabel, injuryDates, show
     }
     return null
   }, [shown])
-  const activeDate = hover ?? picked ?? fallback
-  const active = activeDate ? shown.flatMap((m) => m.days).find((d) => d.date === activeDate) : undefined
+  // The year grid spans dates outside the paged months, so it falls back to the
+  // newest day carrying load anywhere in the grid.
+  const yearFallback = useMemo(() => {
+    for (let c = grid.columns.length - 1; c >= 0; c--) {
+      for (let r = 6; r >= 0; r--) {
+        const cell = grid.columns[c][r]
+        if (cell && cell.load > 0) return cell.date
+      }
+    }
+    return null
+  }, [grid])
+
+  const activeDate = hover ?? picked ?? (mode === 'year' ? yearFallback : fallback)
+  const active = activeDate
+    ? (mode === 'year' ? allDays.get(activeDate) : shown.flatMap((m) => m.days).find((d) => d.date === activeDate))
+    : undefined
   const activeDetail = activeDate ? detail[activeDate] : undefined
 
   // Name and amount are separate spans: the name may ellipse inside a narrow square,
@@ -947,19 +993,87 @@ function IntensityCalendar({ months, lang, detail, sportLabel, injuryDates, show
   return (
     <div className="dash-cal" ref={wrap} onMouseLeave={() => setHover(null)}>
       <div className="cal-nav">
-        <button
-          type="button" className="cal-pg" disabled={start === 0}
-          onClick={() => setEnd(last - 1)} aria-label={lang === 'zh' ? '上个月' : 'previous month'}
-        >‹</button>
-        <span className="cal-range">
-          {shown.length ? `${monthTitle(shown[0].month, lang)}${shown.length > 1 ? ` – ${monthTitle(shown[shown.length - 1].month, lang)}` : ''}` : ''}
-        </span>
-        <button
-          type="button" className="cal-pg" disabled={last >= months.length}
-          onClick={() => setEnd(last + 1)} aria-label={lang === 'zh' ? '下个月' : 'next month'}
-        >›</button>
+        <div className="cal-modes" role="group">
+          <button type="button" className={`cal-mode${mode === 'year' ? ' on' : ''}`} onClick={() => setMode('year')}>
+            {lang === 'zh' ? '概览' : 'Overview'}
+          </button>
+          <button type="button" className={`cal-mode${mode === 'month' ? ' on' : ''}`} onClick={() => setMode('month')}>
+            {lang === 'zh' ? '月' : 'Month'}
+          </button>
+        </div>
+        {mode === 'year' ? (
+          <span className="cal-range">
+            {lang === 'zh'
+              ? `${grid.trainedDays} 个训练日`
+              : `${grid.trainedDays} training days`}
+          </span>
+        ) : (
+          <>
+            <button
+              type="button" className="cal-pg" disabled={start === 0}
+              onClick={() => setEnd(last - 1)} aria-label={lang === 'zh' ? '上个月' : 'previous month'}
+            >‹</button>
+            <span className="cal-range">
+              {shown.length ? `${monthTitle(shown[0].month, lang)}${shown.length > 1 ? ` – ${monthTitle(shown[shown.length - 1].month, lang)}` : ''}` : ''}
+            </span>
+            <button
+              type="button" className="cal-pg" disabled={last >= months.length}
+              onClick={() => setEnd(last + 1)} aria-label={lang === 'zh' ? '下个月' : 'next month'}
+            >›</button>
+          </>
+        )}
       </div>
 
+      {mode === 'year' ? (
+        <div className="cal-year">
+          <div className="cal-yscroll" ref={scroller}>
+            <div className="cal-ymonths" style={{ gridTemplateColumns: `repeat(${grid.columns.length}, var(--sq))` }}>
+              {grid.monthLabels.map((ml, i) => (
+                <span key={i} style={{ gridColumn: `span ${ml.span}` }}>
+                  {ml.span >= 2 ? monthTitle(ml.month, lang).replace(/ ?\d{4}$/, '') : ''}
+                </span>
+              ))}
+            </div>
+            <div className="cal-ybody">
+              <div className="cal-ywd">
+                {/* Mon/Wed/Fri only — seven labels at this size is noise (GitHub does the same). */}
+                <span>{wd[0]}</span><span /><span>{wd[2]}</span><span /><span>{wd[4]}</span><span /><span />
+              </div>
+              <div className="cal-ygrid" style={{ gridTemplateColumns: `repeat(${grid.columns.length}, var(--sq))` }}>
+                {grid.columns.map((col, ci) => (
+                  <div className="cal-ycol" key={ci}>
+                    {col.map((cell, ri) => cell == null ? (
+                      <span key={ri} className="cal-sq void" aria-hidden="true" />
+                    ) : (
+                      <button
+                        key={ri}
+                        type="button"
+                        disabled={cell.level == null}
+                        className={`cal-sq${cell.level == null ? ' future' : ''}${injuryDates.has(cell.date) ? ' inj' : ''}${cell.date === activeDate ? ' on' : ''}`}
+                        style={cell.level ? { background: LEVEL_FILL[cell.level] } : undefined}
+                        onMouseEnter={() => setHover(cell.date)}
+                        onFocus={() => setHover(cell.date)}
+                        onClick={() => setPicked(cell.date)}
+                        aria-label={`${cell.date} · ${LVL[cell.level ?? 0]}`}
+                      />
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          {years.length > 0 && (
+            <div className="cal-years">
+              <button type="button" className={`cal-yr${year == null ? ' on' : ''}`} onClick={() => setYear(null)}>
+                {lang === 'zh' ? '最近一年' : 'Last year'}
+              </button>
+              {[...years].reverse().map((y) => (
+                <button key={y} type="button" className={`cal-yr${year === y ? ' on' : ''}`} onClick={() => setYear(y)}>{y}</button>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
       <div className="cal-months">
         {shown.map((m) => (
           <div className="cal-month" key={m.month}>
@@ -983,14 +1097,7 @@ function IntensityCalendar({ months, lang, detail, sportLabel, injuryDates, show
                     onClick={() => setPicked(day.date)}
                     aria-label={`${day.date} · ${LVL[day.level ?? 0]}${summary ? ` · ${summary}` : ''}`}
                   >
-                    <span className="cal-dnum">
-                      {Number(day.date.slice(8))}
-                      {day.level ? <i className="cal-dot" style={{ background: LEVEL_DOT[day.level] }} aria-hidden="true" /> : null}
-                    </span>
-                    {tags.slice(0, 3).map((t, i) => (
-                      <span key={i} className={`cal-tag ${t.kind}`}><b>{t.name}</b><i>{t.amount}</i></span>
-                    ))}
-                    {tags.length > 3 && <span className="cal-more">+{tags.length - 3}</span>}
+                    <span className="cal-dnum">{Number(day.date.slice(8))}</span>
                     {day.intimacy ? <span className="cal-heart" style={{ color: heartColor(day.intimacy) }}>♥</span> : null}
                   </button>
                 )
@@ -999,6 +1106,7 @@ function IntensityCalendar({ months, lang, detail, sportLabel, injuryDates, show
           </div>
         ))}
       </div>
+      )}
 
       <div className="cal-detail">
         {active ? (

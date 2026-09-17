@@ -3,7 +3,10 @@
 // collapsed every hard day into the same red, and future days in the current
 // month rendered identically to rest days.
 import { describe, it, expect } from 'vitest'
-import { MAX_DAY_LOAD, dayLoad, intensityCalendar, type CalendarSession } from './stats'
+import {
+  MAX_DAY_LOAD, dayLoad, intensityCalendar, yearGrid, yearsOf,
+  type CalendarMonth, type CalendarSession, type DayCell,
+} from './stats'
 import type { Exercise, WorkoutEntry } from '../../supabase/types'
 
 const ex = (id: string, parts: string[]): Exercise =>
@@ -198,5 +201,71 @@ describe('intensityCalendar — default month span', () => {
       entries: [], exById: EX, setCountOf: () => 0, sessions: [], today: '2026-09-16',
     })
     expect(cal.map((m) => m.month)).toEqual(['2026-09'])
+  })
+})
+
+// ── overview grid ───────────────────────────────────────────
+// The GitHub-style year view is a re-layout of the SAME CalendarMonth[] the month
+// view renders, so these guard the layout — and that it never re-derives a level.
+describe('yearGrid', () => {
+  const month = (m: string, days: Partial<DayCell>[]): CalendarMonth => ({
+    month: m,
+    leading: 0,
+    days: days.map((d) => ({ date: '', level: 0, load: 0, strength: [], sports: [], ...d }) as DayCell),
+  })
+
+  it('lays the rolling window out as whole Monday-first weeks', () => {
+    const g = yearGrid([], { today: '2026-09-16' }) // a Wednesday
+    expect(g.columns).toHaveLength(53)
+    expect(g.columns.every((c) => c.length === 7)).toBe(true)
+    // Every column starts on a Monday, and the last one holds today.
+    const mondays = g.columns.map((c) => c[0]?.date).filter(Boolean) as string[]
+    expect(mondays.every((d) => new Date(`${d}T00:00:00`).getDay() === 1)).toBe(true)
+    expect(g.columns[g.columns.length - 1].some((c) => c?.date === '2026-09-16')).toBe(true)
+  })
+
+  it('clips a calendar year to Jan 1 – Dec 31, leaving the padding empty', () => {
+    const g = yearGrid([], { year: 2026, today: '2026-09-16' })
+    const dates = g.columns.flat().filter(Boolean).map((c) => c!.date)
+    expect(Math.min(...dates.map((d) => Number(d.slice(5, 7))))).toBe(1)
+    expect(dates[0]).toBe('2026-01-01')
+    expect(dates[dates.length - 1]).toBe('2026-12-31')
+    // The first column pads back to Monday 2025-12-29, so its first slots are null.
+    expect(g.columns[0][0]).toBeNull()
+  })
+
+  it('marks days after today as null so the rest of the year is blank, not rested', () => {
+    const g = yearGrid([], { year: 2026, today: '2026-09-16' })
+    const cell = (d: string) => g.columns.flat().find((c) => c?.date === d)
+    expect(cell('2026-09-16')!.level).toBe(0)
+    expect(cell('2026-09-17')!.level).toBeNull()
+  })
+
+  it('carries levels through untouched instead of re-ranking them', () => {
+    const g = yearGrid([month('2026-09', [
+      { date: '2026-09-14', level: 3, load: 20 },
+      { date: '2026-09-15', level: 1, load: 4 },
+    ])], { today: '2026-09-16' })
+    const cell = (d: string) => g.columns.flat().find((c) => c?.date === d)
+    expect(cell('2026-09-14')!.level).toBe(3)
+    expect(cell('2026-09-15')!.level).toBe(1)
+  })
+
+  it('counts only days that carry load', () => {
+    const g = yearGrid([month('2026-09', [
+      { date: '2026-09-14', level: 3, load: 20 },
+      { date: '2026-09-15', level: 0, load: 0 },
+    ])], { today: '2026-09-16' })
+    expect(g.trainedDays).toBe(1)
+    expect(g.totalLoad).toBe(20)
+  })
+
+  it('gives every column exactly one month label', () => {
+    const g = yearGrid([], { today: '2026-09-16' })
+    expect(g.monthLabels.reduce((n, l) => n + l.span, 0)).toBe(g.columns.length)
+  })
+
+  it('lists the years the data covers, oldest first', () => {
+    expect(yearsOf([month('2025-12', []), month('2026-01', []), month('2026-02', [])])).toEqual([2025, 2026])
   })
 })
