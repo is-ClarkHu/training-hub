@@ -13,16 +13,35 @@ the data, not just the interface.
 [![Deploy](https://github.com/is-ClarkHu/training-hub/actions/workflows/deploy.yml/badge.svg)](https://github.com/is-ClarkHu/training-hub/actions/workflows/deploy.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 
-| | |
-|---|---|
-| <img src="assets/screenshots/intensity.png" alt="Dashboard: a year of daily training load, and days since each muscle group was trained" width="380"> | <img src="assets/screenshots/cycle.png" alt="Cycle: a 5-day split with the body model lit by the current round" width="380"> |
-| **Dashboard.** A year of daily load in one grid, and how long each muscle group has gone untrained. | **Cycle.** The open round lights the body model. Finished splits keep running alongside it as side loops. |
-| <img src="assets/screenshots/assistant.png" alt="An AI chatroom and its permission bar" width="380"> | <img src="assets/screenshots/injuries.png" alt="Injuries: recovery stages, rehab plan and pain trend" width="380"> |
-| **AI coach.** The chips are the room's read scope. The transcript below them is the same question answered before and after `Training` was granted. | **Injuries.** An injury is an event with stages, a plan and a pain trend, not a line in a profile. |
+<p align="center">
+  <img src="assets/screenshots/desk-dashboard.png" alt="Desktop dashboard with training totals, round progress, daily intensity and muscle recovery" width="900">
+</p>
+
+<p align="center"><strong>Desktop dashboard.</strong> Training totals, the open round, a year of daily load and muscle recovery in one view.</p>
+
+<table align="center">
+<tr>
+<td width="25%"><img src="assets/screenshots/intensity.png" width="100%" alt="Dashboard: a year of daily training load and days since each muscle group was trained"></td>
+<td width="25%"><img src="assets/screenshots/cycle.png" width="100%" alt="Cycle: a 5-day split with the body model lit by the current round"></td>
+<td width="25%"><img src="assets/screenshots/assistant.png" width="100%" alt="An AI chatroom and its permission bar"></td>
+<td width="25%"><img src="assets/screenshots/injuries.png" width="100%" alt="Injuries: recovery stages, rehab plan and pain trend"></td>
+</tr>
+<tr>
+<td><b>Dashboard.</b> A year of daily load in one grid, and how long each muscle group has gone untrained.</td>
+<td><b>Cycle.</b> The open round lights the body model; finished splits keep running as side loops.</td>
+<td><b>AI coach.</b> The chips are the room's read scope. The transcript shows one question before and after <code>Training</code> was granted.</td>
+<td><b>Injuries.</b> An injury is an event with stages, a plan and a pain trend, not a line in a profile.</td>
+</tr>
+</table>
+
+<p align="center"><sub>The same app installed on a phone.</sub></p>
+
+<!-- Demo GIF: drop it in as the first image on the page, above the desktop shot.
+     <p align="center"><img src="assets/demo.gif" width="900" alt="..."></p> -->
 
 ## Live demo
 
-- **URL:** `https://is-clarkhu.github.io/training-hub/`
+- **URL:** [https://is-clarkhu.github.io/training-hub/](https://is-clarkhu.github.io/training-hub/)
 - **Email:** `demo@training-hub.app` · **Password:** `demo-training-hub`
 
 A GitHub Actions job wipes and rebuilds the account every night, so it is never empty
@@ -52,8 +71,8 @@ trained.
 
 Every module here exists because the previous version of the app annoyed me.
 
-About 18,000 lines of TypeScript and Python, 21 SQL migrations, 117 commits between
-June and September 2026.
+About 19,000 lines of TypeScript and Python across 21 SQL migrations and more than
+100 commits between June and September 2026.
 
 ## Design notes
 
@@ -66,6 +85,12 @@ unauthorized data can't reach the prompt even by mistake.
 The one category that isn't a permission at all is the intimacy tracker: there is no
 code path in the context assembler that reads it. Turning every switch on doesn't
 expose it, because there is no switch.
+
+<p align="center">
+  <img src="assets/screenshots/desk-assistant.png" width="900"
+       alt="Five chatrooms, the permission bar with Medical opt-in, and one question answered before and after the Training permission was granted">
+</p>
+<p align="center"><sub>Five rooms, five permission matrices. The room on screen can read goals, training, injuries and basics; medical is opt-in and switched off.</sub></p>
 
 **What one room can learn from another is a memory unit.** Old conversation compresses
 into a rolling summary, and anything worth keeping gets promoted to a pinned memory
@@ -119,7 +144,7 @@ flowchart LR
     end
 
     subgraph SB["Supabase"]
-        PG[("Postgres<br/>25 tables · RLS on user_id")]
+        PG[("Postgres<br/>27 synced tables · RLS on user_id")]
         AU["Auth · JWT"]
         ST[("Storage<br/>photos · files")]
     end
@@ -127,6 +152,7 @@ flowchart LR
     subgraph RLY["FastAPI relay"]
         PERM["Per-room permission gate"]
         CTX["Context assembler<br/>+ rolling summaries"]
+        MEDIA["Authenticated media helpers<br/>food vision · file summary"]
     end
 
     LLM[["LLM providers<br/>DeepSeek · OpenAI · Anthropic · Gemini · …"]]
@@ -135,11 +161,13 @@ flowchart LR
     UI -->|"sign in"| AU
     UI -->|"upload · signed read"| ST
     UI -->|"translation: browser-direct, user's key"| LLM
-    UI -->|"chat · food photo · file summary"| PERM
+    UI -->|"assistant chat · JWT"| PERM
+    UI -->|"food photo / file text · JWT"| MEDIA
     PERM --> CTX
     CTX -->|"reads only permitted tables"| PG
     CTX -->|"writes messages + rolling summary"| PG
     CTX --> LLM
+    MEDIA --> LLM
 
     subgraph CI["GitHub Actions"]
         DEP["Pages deploy"]
@@ -169,7 +197,7 @@ Supabase.
 | AI chat | `/api/assistant` | Yes. Reads your data and enforces the room's permissions server-side |
 | Food photo → recognition + nutrition | `/api/describe-food` | Yes (vision) |
 | Reference-file summary | `/api/summarize-file` | Yes |
-| Translation dictionary | (none) | No. Browser-direct from Settings → AI, touches no user data |
+| Translation dictionary | (none) | No. Browser-direct from Settings → AI; sends the term being translated and reads no Supabase account context |
 
 `/api/translate` and `supabase/functions/translate` are legacy; translation moved
 browser-direct and no longer calls them.
@@ -244,6 +272,21 @@ project can host many accounts with each user's data isolated, no schema change 
 Accounts are invite-only by default (the owner creates them in Supabase Auth); flip
 Supabase's sign-up setting for self-serve registration. One backend serves everyone,
 scoping every read through the caller's JWT, and each user brings their own LLM keys.
+
+## Limitations
+
+Things a reader should know before judging it.
+
+- Not offline-first. Writes land locally and the UI keeps working through a dropped
+  connection, but sign-in, cross-device sync and every AI feature need the network.
+- Conflict resolution is last-write-wins per row. Two devices editing the same set
+  within the same sync window means the later write survives, with no merge UI.
+- The relay is stateless and single-region. On Render's free tier it sleeps when idle
+  and the first request after that takes about a minute, which the UI warns about.
+- Answer quality is whatever model you point it at. The app controls what data reaches
+  the prompt, not what the model does with it.
+- One person's real usage is the only load this has seen. There are no benchmarks here
+  because I have not run any that would mean anything at this scale.
 
 ## Structure
 
