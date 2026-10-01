@@ -367,3 +367,9 @@
    so a three-letter label plus its number fit without ellipsing. */
 .cal-day.tight { padding: 3px; gap: 1px; }
 .cal-day.tight .cal-tag { font-size: 8px; padding: 0 2px; gap: 2px; }
+
+/* Days from the neighbouring month that share this month's first or last week. Shown
+   (a session on the 31st is still a session) but dimmed, so the month still reads as
+   a block. */
+.cal-day.adj { opacity: 0.45; }
+.cal-day.adj.on { opacity: 1; }

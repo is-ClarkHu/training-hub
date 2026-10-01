@@ -212,6 +212,8 @@ describe('yearGrid', () => {
     month: m,
     leading: 0,
     days: days.map((d) => ({ date: '', level: 0, load: 0, strength: [], sports: [], ...d }) as DayCell),
+    lead: [],
+    trail: [],
   })
 
   it('lays the rolling window out as whole Monday-first weeks', () => {
@@ -267,5 +269,41 @@ describe('yearGrid', () => {
 
   it('lists the years the data covers, oldest first', () => {
     expect(yearsOf([month('2025-12', []), month('2026-01', []), month('2026-02', [])])).toEqual([2025, 2026])
+  })
+})
+
+describe('intensityCalendar — the weeks either side of the month', () => {
+  // September 2026 starts on a Tuesday and ends on a Wednesday, so its first week
+  // carries one August day and its last week carries four October days.
+  const cal = (today = '2026-10-15') =>
+    intensityCalendar({ entries: [], exById: EX, setCountOf: () => 0, sessions: [], months: ['2026-09'], today })[0]
+
+  it('fills the first week with the tail of the previous month', () => {
+    const m = cal()
+    expect(m.lead.map((d) => d.date)).toEqual(['2026-08-31'])
+    expect(m.leading).toBe(m.lead.length)
+  })
+
+  it('fills the last week with the head of the next month', () => {
+    expect(cal().trail.map((d) => d.date)).toEqual(['2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04'])
+  })
+
+  it('leaves no partial week', () => {
+    const m = cal()
+    expect((m.lead.length + m.days.length + m.trail.length) % 7).toBe(0)
+  })
+
+  it('adds nothing when the month already starts on Monday and ends on Sunday', () => {
+    // March 2026: Sunday the 1st… so use a month that fits exactly — June 2026 runs
+    // Mon 1 → Tue 30, which still needs a tail; February 2027 runs Mon 1 → Sun 28.
+    const feb = intensityCalendar({ entries: [], exById: EX, setCountOf: () => 0, sessions: [], months: ['2027-02'], today: '2027-03-10' })[0]
+    expect(feb.lead).toEqual([])
+    expect(feb.trail).toEqual([])
+  })
+
+  it('still marks adjacent days after today as future', () => {
+    const m = cal('2026-10-02')
+    expect(m.trail.find((d) => d.date === '2026-10-01')?.level).toBe(0)
+    expect(m.trail.find((d) => d.date === '2026-10-03')?.level).toBeNull()
   })
 })

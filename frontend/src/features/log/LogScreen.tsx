@@ -218,7 +218,14 @@ export function LogScreen() {
     const rounds = roundsByCycle[cycle.id] ?? []
     const target = targetRoundFor(cycle, rounds, date)
     const owed = cycle.days.map((d) => d.label).filter((l) => !target?.completed_labels.includes(l))
-    const label = suggestCycleDay(cycle, ex, owed)
+    // Days this cycle already has entries under today. Read from what's logged rather
+    // than from component state, so it survives the app being closed mid-session.
+    const openToday = [...new Set(
+      logged
+        .filter((i) => i.kind === 'exercise' && i.entry?.cycle_id === cycle.id && i.entry.cycle_day_label)
+        .map((i) => i.entry!.cycle_day_label as string),
+    )]
+    const label = suggestCycleDay(cycle, ex, owed, openToday)
     setCycleSel(label ? `${cycle.id}::${label}` : '')
     setDayAuto(!!label)
   }

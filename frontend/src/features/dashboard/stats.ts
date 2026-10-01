@@ -207,8 +207,13 @@ export interface DayCell {
 
 export interface CalendarMonth {
   month: string    // 'YYYY-MM'
-  leading: number  // blank cells before day 1 (Monday = 0)
+  leading: number  // cells before day 1 (Monday = 0) — the length of `lead`
   days: DayCell[]
+  /** The tail of the previous month that shares the first week, and the head of the
+   *  next month that shares the last week. A calendar that blanks them hides real
+   *  training: the Monday of a week that starts on the 30th is still a training day. */
+  lead: DayCell[]
+  trail: DayCell[]
 }
 
 /** Every 'YYYY-MM' from the earliest date through `today`, oldest → newest. */
@@ -274,24 +279,39 @@ export function intensityCalendar({
     todayIso,
   )
 
+  const cell = (date: string): DayCell => {
+    const load = loadOf(date)
+    return {
+      date,
+      level: date > todayIso ? null : levelFor(load, cuts),
+      load,
+      strength: Object.entries(strength[date] ?? {})
+        .map(([part, sets]) => ({ part, sets }))
+        .sort((a, b) => b.sets - a.sets || a.part.localeCompare(b.part)),
+      sports: (sportByDate[date] ?? []).map((s) => ({ sportId: s.sport_id, hours: s.hours })),
+      intimacy: intimByDate[date] || undefined,
+    }
+  }
+
   return span.map((month) => {
     const [y, m] = month.split('-').map(Number)
+    const total = new Date(y, m, 0).getDate()
     const days: DayCell[] = []
-    for (let d = 1, total = new Date(y, m, 0).getDate(); d <= total; d++) {
-      const date = `${month}-${String(d).padStart(2, '0')}`
-      const load = loadOf(date)
-      days.push({
-        date,
-        level: date > todayIso ? null : levelFor(load, cuts),
-        load,
-        strength: Object.entries(strength[date] ?? {})
-          .map(([part, sets]) => ({ part, sets }))
-          .sort((a, b) => b.sets - a.sets || a.part.localeCompare(b.part)),
-        sports: (sportByDate[date] ?? []).map((s) => ({ sportId: s.sport_id, hours: s.hours })),
-        intimacy: intimByDate[date] || undefined,
-      })
-    }
-    return { month, leading: (new Date(y, m - 1, 1).getDay() + 6) % 7, days }
+    for (let d = 1; d <= total; d++) days.push(cell(`${month}-${String(d).padStart(2, '0')}`))
+
+    // Monday-first offset of the 1st, which is also how many days of the previous
+    // month share that week.
+    const leading = (new Date(y, m - 1, 1).getDay() + 6) % 7
+    const lead: DayCell[] = []
+    for (let i = leading; i > 0; i--) lead.push(cell(isoOf(new Date(y, m - 1, 1 - i))))
+
+    // Fill out the last week with the start of the next month (0 when the month ends
+    // on a Sunday).
+    const trailing = (7 - ((leading + total) % 7)) % 7
+    const trail: DayCell[] = []
+    for (let i = 1; i <= trailing; i++) trail.push(cell(isoOf(new Date(y, m - 1, total + i))))
+
+    return { month, leading, days, lead, trail }
   })
 }
 

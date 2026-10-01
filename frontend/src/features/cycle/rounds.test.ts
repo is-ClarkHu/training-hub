@@ -73,6 +73,21 @@ describe('suggestCycleDay — aim the split day at the exercise being logged', (
     const twoWay = cycle([day('A', ['core']), day('B', ['core'])])
     expect(suggestCycleDay(twoWay, ex(['core']), ['B'])).toBe('B')
   })
+  it('keeps the rest of a session on the day already under way', () => {
+    // The chest day (A) also lists core. Once it's logged, it is no longer "owed",
+    // so crunches used to jump to the legs day (C) — which also lists core — and the
+    // session ended up split across the week. Today's open day wins that tie now.
+    const split = cycle([day('A', ['chest', 'core']), day('B', ['back']), day('C', ['legs', 'core'])])
+    const crunch = ex(['core'])
+    expect(suggestCycleDay(split, crunch, ['B', 'C'])).toBe('C')          // before: follows what's owed
+    expect(suggestCycleDay(split, crunch, ['B', 'C'], ['A'])).toBe('A')   // after: stays on today's day
+  })
+
+  it('does not let today override a genuinely better match', () => {
+    // A back lift goes to the back day even mid-chest-session.
+    expect(suggestCycleDay(SPLIT, ex(['back']), ['B', 'C', 'D'], ['A'])).toBe('B')
+  })
+
   it('scores a shared category above a merely shared region', () => {
     expect(dayMatchScore(day('A', ['chest'], ['chest']), ex(['chest']))).toBeGreaterThan(
       dayMatchScore(day('B', ['shoulders'], ['chest']), ex(['chest'])),

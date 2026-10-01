@@ -1009,9 +1009,12 @@ function IntensityCalendar({ months, lang, detail, sportLabel, injuryDates, show
     return null
   }, [grid])
 
+  // Adjacent-month cells belong to a month the pager isn't showing, so the detail
+  // panel resolves against every cell on screen, not just the current month's days.
+  const shownCells = useMemo(() => shown.flatMap((m) => [...m.lead, ...m.days, ...m.trail]), [shown])
   const activeDate = hover ?? picked ?? (mode === 'year' ? yearFallback : fallback)
   const active = activeDate
-    ? (mode === 'year' ? allDays.get(activeDate) : shown.flatMap((m) => m.days).find((d) => d.date === activeDate))
+    ? (mode === 'year' ? allDays.get(activeDate) : shownCells.find((d) => d.date === activeDate))
     : undefined
   const activeDetail = activeDate ? detail[activeDate] : undefined
 
@@ -1120,8 +1123,9 @@ function IntensityCalendar({ months, lang, detail, sportLabel, injuryDates, show
             {shown.length > 1 && <div className="cal-mtitle">{monthTitle(m.month, lang)}</div>}
             <div className="cal-wd">{wd.map((d, i) => <span key={i}>{d}</span>)}</div>
             <div className="cal-grid">
-              {Array.from({ length: m.leading }, (_, i) => <span key={`b${i}`} className="cal-blank" aria-hidden="true" />)}
-              {m.days.map((day) => {
+              {[...m.lead.map((d) => [d, true] as const),
+                ...m.days.map((d) => [d, false] as const),
+                ...m.trail.map((d) => [d, true] as const)].map(([day, adjacent]) => {
                 const tags = tagsFor(day)
                 const injured = injuryDates.has(day.date)
                 const summary = tags.map((t) => `${t.name} ${t.amount}`).join(', ')
@@ -1130,7 +1134,7 @@ function IntensityCalendar({ months, lang, detail, sportLabel, injuryDates, show
                     key={day.date}
                     type="button"
                     disabled={day.level == null}
-                    className={`cal-day${compact ? ' tight' : ''}${day.level == null ? ' future' : ''}${injured ? ' inj' : ''}${day.date === activeDate ? ' on' : ''}`}
+                    className={`cal-day${compact ? ' tight' : ''}${adjacent ? ' adj' : ''}${day.level == null ? ' future' : ''}${injured ? ' inj' : ''}${day.date === activeDate ? ' on' : ''}`}
                     style={day.level ? { background: LEVEL_FILL[day.level] } : undefined}
                     onMouseEnter={() => setHover(day.date)}
                     onFocus={() => setHover(day.date)}

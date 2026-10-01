@@ -35,17 +35,31 @@ export function dayMatchScore(day: CycleDay, ex: Exercise): number {
  * that day, close the round, and quietly start the next one). Returns null when the
  * exercise trains nothing this cycle plans, i.e. it is free training.
  *
- * Ties break toward a day the current round still owes (`remaining`), then day order.
+ * Ties break toward a day already logged TODAY (`openToday`), then toward a day the
+ * round still owes (`remaining`), then day order. Today comes first because a session
+ * is one body part in practice: once the chest day is under way, a set of crunches
+ * belongs to it, even though the chest day is no longer owed and the legs day (which
+ * also lists core) is. Without that rule, closing and reopening the app mid-session
+ * scattered the rest of the session across the split.
  */
-export function suggestCycleDay(cycle: TrainingCycle, ex: Exercise, remaining: string[] = []): string | null {
-  let best: { label: string; score: number; owed: boolean } | null = null
+export function suggestCycleDay(
+  cycle: TrainingCycle,
+  ex: Exercise,
+  remaining: string[] = [],
+  openToday: string[] = [],
+): string | null {
+  let best: { label: string; score: number; today: boolean; owed: boolean } | null = null
   for (const d of cycle.days) {
     const score = dayMatchScore(d, ex)
     if (score <= 0) continue
+    const today = openToday.includes(d.label)
     const owed = remaining.includes(d.label)
-    if (!best || score > best.score || (score === best.score && owed && !best.owed)) {
-      best = { label: d.label, score, owed }
-    }
+    const better =
+      !best ||
+      score > best.score ||
+      (score === best.score &&
+        (today !== best.today ? today : !best.owed && owed))
+    if (better) best = { label: d.label, score, today, owed }
   }
   return best?.label ?? null
 }
