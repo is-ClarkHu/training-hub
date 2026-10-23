@@ -341,14 +341,10 @@ export function DashboardScreen() {
     const byId = Object.fromEntries(sports.map((s) => [s.id, sportName(s, lang)]))
     return (id: string): string => byId[id] ?? (lang === 'zh' ? '运动' : 'sport')
   }, [sports, lang])
-  // dates that carry an injury signal (onset, injured session, or de-loaded lift)
-  const injuryDates = useMemo(() => {
-    const s = new Set<string>()
-    for (const i of injuries) s.add(i.started_on)
-    for (const ss of sessions) if (ss.injury) s.add(ss.date)
-    for (const e of entries) if (e.injury_modified) s.add(e.date)
-    return s
-  }, [injuries, sessions, entries])
+  // Onset days only. This used to also mark every injured sport session and every
+  // de-loaded lift, which meant one injury painted a red streak across weeks of the
+  // calendar — the recovery, not the event. The day it happened is the event.
+  const injuryDates = useMemo(() => new Set(injuries.map((i) => i.started_on)), [injuries])
   const bwVol = useMemo(() => bodyweightVolume(entries, setMap, exById), [entries, setMap, exById])
 
   // injury / rehab overview (§6A dashboard)

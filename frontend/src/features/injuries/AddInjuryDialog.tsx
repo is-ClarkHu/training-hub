@@ -77,7 +77,16 @@ export function AddInjuryDialog({
     ),
   )
   const setCp = (k: string, patch: Partial<CpRow>) =>
-    setCheckpoints((cs) => sortRows(cs.map((c) => (c._k === k ? { ...c, ...patch } : c))))
+    setCheckpoints((cs) => {
+      const next = sortRows(cs.map((c) => (c._k === k ? { ...c, ...patch } : c)))
+      // "Newly occurred" IS the onset, so the two controls stay in lockstep. They
+      // used to drift: the seed checkpoint kept today's date while the onset field
+      // was moved back to the real date, leaving an injury that happened last week
+      // but "newly occurred" today.
+      const onset = next.find((c) => c.status === 'newly_occurred')
+      if (onset && onset.date !== startedOn) setStartedOn(onset.date)
+      return next
+    })
   const addCheckpoint = () =>
     setCheckpoints((cs) => sortRows([...cs, { _k: newId(), status: 'treating', date: startedOn }]))
   const removeCheckpoint = (k: string) => setCheckpoints((cs) => cs.filter((c) => c._k !== k))
@@ -299,7 +308,17 @@ export function AddInjuryDialog({
         <div className="inj-grid2">
           <div className="inj-field">
             <label className="th-label" htmlFor="inj-date">{lang === 'zh' ? '受伤时间' : 'Onset date'}</label>
-            <input id="inj-date" className="th-input" type="date" value={startedOn} onChange={(e) => setStartedOn(e.target.value)} />
+            <input
+              id="inj-date"
+              className="th-input"
+              type="date"
+              value={startedOn}
+              onChange={(e) => {
+                const d = e.target.value
+                setStartedOn(d)
+                setCheckpoints((cs) => sortRows(cs.map((c) => (c.status === 'newly_occurred' ? { ...c, date: d } : c))))
+              }}
+            />
           </div>
           <div className="inj-field">
             <label className="th-label" htmlFor="inj-sev">{lang === 'zh' ? '严重度 (1–5)' : 'Severity (1–5)'}</label>

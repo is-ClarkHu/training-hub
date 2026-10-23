@@ -2,7 +2,7 @@
 // (client UUID, user_id from the session, updated_at, deleted=false) so the
 // SyncEngine can later upsert it to Supabase unchanged (SPEC §3).
 import { db } from './db'
-import { currentStage } from '../features/injuries/util'
+import { currentStage, reconcileOnset } from '../features/injuries/util'
 import { nextRoundIndex, roundForDate, roundMembers, targetRoundFor } from '../features/cycle/rounds'
 import { newId, nowIso, today } from './helpers'
 import { currentUserId, supabase } from '../supabase/client'
@@ -357,10 +357,15 @@ function normalizeInjury(raw: Injury): Injury {
   const areaRaw = raw.body_area ?? ''
   const body_area_zh = raw.body_area_zh ?? (HAS_CJK.test(areaRaw) ? areaRaw : '')
   const body_area_en = raw.body_area_en ?? (HAS_CJK.test(areaRaw) ? '' : areaRaw)
-  const checkpoints =
+  let checkpoints =
     raw.checkpoints && raw.checkpoints.length > 0
       ? raw.checkpoints
       : [{ status: legacyStatus, date: raw.started_on }]
+  // Heal rows written before the editor kept these in step. Read-time, like the other
+  // legacy fixes here, so it needs no migration and sticks on the next write.
+  const onset = reconcileOnset(raw.started_on, checkpoints)
+  const started_on = onset.started_on
+  checkpoints = onset.checkpoints
   // Current status is DERIVED from the checkpoints: the furthest-along stage in
   // the locked recovery flow (§6A), not the latest-dated one. Backfilling an
   // earlier stage never re-opens the injury. resolved_on tracks the recovered
@@ -372,6 +377,7 @@ function normalizeInjury(raw: Injury): Injury {
     ...raw,
     status,
     resolved_on,
+    started_on,
     body_area: areaRaw || body_area_zh || body_area_en,
     body_area_zh,
     body_area_en,

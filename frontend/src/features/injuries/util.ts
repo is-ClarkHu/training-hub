@@ -137,3 +137,25 @@ export function daysBetween(from: string, to: string): number {
   const b = new Date(`${to}T00:00:00`)
   return Math.max(0, Math.round((b.getTime() - a.getTime()) / 86_400_000))
 }
+
+/**
+ * The onset date and the "newly occurred" checkpoint describe the same moment, so a
+ * row carrying two different dates is inconsistent. Returns the pair reconciled to
+ * the EARLIER of the two, which is the one the user actually meant: the drift came
+ * from an editor that seeded the checkpoint at today and then let the onset field be
+ * moved back to the real date.
+ *
+ * Pure so it can run at read time without a migration, and be tested without Dexie.
+ */
+export function reconcileOnset(
+  startedOn: string,
+  checkpoints: InjuryCheckpoint[],
+): { started_on: string; checkpoints: InjuryCheckpoint[] } {
+  const onset = checkpoints.find((c) => c.status === 'newly_occurred')
+  if (!onset || onset.date === startedOn) return { started_on: startedOn, checkpoints }
+  const earliest = onset.date < startedOn ? onset.date : startedOn
+  return {
+    started_on: earliest,
+    checkpoints: checkpoints.map((c) => (c === onset ? { ...c, date: earliest } : c)),
+  }
+}
