@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="248" height="44" role="img" aria-label="Open the live demo">
+  <title>Open the live demo</title>
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2ea043"/>
+      <stop offset="1" stop-color="#238636"/>
+    </linearGradient>
+  </defs>
+  <rect x="0.5" y="0.5" width="247" height="43" rx="8" fill="url(#g)" stroke="#1f7a31"/>
+  <!-- play glyph -->
+  <path d="M26 15.5 L38 22 L26 28.5 Z" fill="#ffffff"/>
+  <text x="52" y="27.5"
+        font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif"
+        font-size="15" font-weight="600" fill="#ffffff">Open the live demo</text>
+</svg>

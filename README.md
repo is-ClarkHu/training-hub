@@ -9,9 +9,17 @@ React + TypeScript + Dexie in the browser, Supabase (Postgres / Auth / Storage /
 as the source of truth, a small FastAPI relay for the LLM features. Bilingual down to
 the data, not just the interface.
 
-[![Live demo](https://img.shields.io/badge/live-demo-2ea043?style=flat-square)](https://is-clarkhu.github.io/training-hub/)
-[![Deploy](https://github.com/is-ClarkHu/training-hub/actions/workflows/deploy.yml/badge.svg)](https://github.com/is-ClarkHu/training-hub/actions/workflows/deploy.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
+<p align="center">
+  <a href="https://is-clarkhu.github.io/training-hub/?demo"><img src="assets/demo-button.svg" alt="Open the live demo" height="44"></a>
+</p>
+<p align="center">
+  <sub>Credentials are filled in for you. Press <b>Sign in</b>.</sub>
+</p>
+
+<p align="center">
+  <a href="https://github.com/is-ClarkHu/training-hub/actions/workflows/deploy.yml"><img src="https://github.com/is-ClarkHu/training-hub/actions/workflows/deploy.yml/badge.svg" alt="Deploy"></a>
+  <a href="LICENSE"><img src="assets/license-mit.svg" alt="License: MIT" height="20"></a>
+</p>
 
 <p align="center">
   <img src="assets/screenshots/desk-dashboard.png" alt="Desktop dashboard with training totals, round progress, daily intensity and muscle recovery" width="900">
@@ -41,7 +49,7 @@ the data, not just the interface.
 
 ## Live demo
 
-- **URL:** [https://is-clarkhu.github.io/training-hub/](https://is-clarkhu.github.io/training-hub/)
+- **URL:** [is-clarkhu.github.io/training-hub/?demo](https://is-clarkhu.github.io/training-hub/?demo) — the `?demo` lands on the login form already filled in
 - **Email:** `demo@training-hub.app` · **Password:** `demo-training-hub`
 
 A GitHub Actions job wipes and rebuilds the account every night, so it is never empty
