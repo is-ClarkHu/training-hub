@@ -1,8 +1,8 @@
 // Rehab loop (§6A Phase 3), mounted on the Injuries tab. For each active
 // injury it closes the loop: assess symptoms → execute the rehab plan → observe
 // training response → advance the stage. Recovered injuries drop out (archived).
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { addInjuryAssessment, getEntries, getExercises, getInjuries, today, updateInjury } from '../../db'
+import { useMemo, useState } from 'react'
+import { addInjuryAssessment, today, updateInjury } from '../../db'
 import type { Exercise, Injury, InjuryStatus, WorkoutEntry } from '../../supabase/types'
 import type { TranslationTarget } from '../../translation'
 import { exerciseName } from '../log/util'
@@ -15,40 +15,29 @@ import {
 
 const RESPONSE_WINDOW_DAYS = 14
 
-export function RehabLoop({ lang, onMutate }: { lang: TranslationTarget; onMutate?: () => void }) {
-  const [injuries, setInjuries] = useState<Injury[]>([])
-  const [exercises, setExercises] = useState<Exercise[]>([])
-  const [entries, setEntries] = useState<WorkoutEntry[]>([])
-  const [loading, setLoading] = useState(true)
-
-  const reload = useCallback(async () => {
-    const [inj, exs, ents] = await Promise.all([getInjuries(), getExercises(), getEntries()])
-    setInjuries(inj)
-    setExercises(exs)
-    setEntries(ents)
-    setLoading(false)
-  }, [])
-  useEffect(() => {
-    void reload()
-  }, [reload])
-
-  // A mutation here also changes the injury the sibling "Injury log" list renders, so
-  // refresh our own data AND notify the parent screen — otherwise the log below stays
-  // stale until a manual reload.
-  const handleChange = useCallback(async () => {
-    await reload()
-    onMutate?.()
-  }, [reload, onMutate])
-
+/**
+ * Injuries, exercises and entries come from the screen rather than being fetched
+ * here. This used to keep its own copy, which went stale the moment the same injury
+ * was changed from the log below: marking it recovered there refreshed the log but
+ * left this card on screen until the tab was remounted. One owner, one fetch, no way
+ * for the two halves to disagree.
+ */
+export function RehabLoop({ injuries, exercises, entries, lang, onMutate }: {
+  injuries: Injury[]
+  exercises: Exercise[]
+  entries: WorkoutEntry[]
+  lang: TranslationTarget
+  onMutate: () => void | Promise<void>
+}) {
   const active = injuries.filter((i) => i.status !== 'recovered')
-  if (loading || active.length === 0) return null
+  if (active.length === 0) return null
 
   return (
     <section className="loop-section">
       <span className="th-label">{lang === 'zh' ? '康复循环' : 'Rehab loop'}</span>
       <div className="loop-list">
         {active.map((i) => (
-          <InjuryLoopCard key={i.id} injury={i} exercises={exercises} entries={entries} lang={lang} onChange={handleChange} />
+          <InjuryLoopCard key={i.id} injury={i} exercises={exercises} entries={entries} lang={lang} onChange={onMutate} />
         ))}
       </div>
     </section>

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import {
   getInjuries,
   getEntries,
+  getExercises,
   getSportSessions,
   updateInjury,
   softDeleteInjury,
@@ -12,6 +13,7 @@ import {
 import { useLanguage } from '../../i18n'
 import { categoryLabel } from '../../categories'
 import {
+  type Exercise,
   type Injury,
   type InjuryStatus,
   type SportSession,
@@ -38,6 +40,9 @@ export function InjuriesScreen() {
   const [injuries, setInjuries] = useState<Injury[]>([])
   const [entries, setEntries] = useState<WorkoutEntry[]>([])
   const [sessions, setSessions] = useState<SportSession[]>([])
+  // Held here, not in RehabLoop, so the loop card and the log below can never show
+  // two different versions of the same injury.
+  const [exercises, setExercises] = useState<Exercise[]>([])
   const [dialog, setDialog] = useState<{ open: boolean; injury?: Injury }>({ open: false })
   const [loading, setLoading] = useState(true)
   const [showLibrary, setShowLibrary] = useState(false)
@@ -45,10 +50,11 @@ export function InjuriesScreen() {
   const [lightbox, setLightbox] = useState<string | null>(null)
 
   const reload = useCallback(async () => {
-    const [inj, ents, sess] = await Promise.all([getInjuries(), getEntries(), getSportSessions()])
+    const [inj, ents, sess, exs] = await Promise.all([getInjuries(), getEntries(), getSportSessions(), getExercises()])
     setInjuries(inj)
     setEntries(ents)
     setSessions(sess)
+    setExercises(exs)
     const photoRefs = inj.flatMap((i) => i.attachments.filter((a) => a.kind === 'photo' && a.photo_id))
     setPhotoMap(await resolveInjuryPhotoUrls(photoRefs))
     setLoading(false)
@@ -74,7 +80,7 @@ export function InjuriesScreen() {
   return (
     <div className="inj-screen">
       <ActiveInjuryBanner injuries={injuries} lang={lang} />
-      <RehabLoop lang={lang} onMutate={reload} />
+      <RehabLoop injuries={injuries} exercises={exercises} entries={entries} lang={lang} onMutate={reload} />
 
       <div className="inj-head">
         <span className="th-label">Injury log</span>
