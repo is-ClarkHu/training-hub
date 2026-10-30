@@ -54,7 +54,7 @@ import { SportSessionDialog } from '../sports'
 import { ExercisePicker } from './ExercisePicker'
 import { SetEditor } from './SetEditor'
 import { AddExerciseDialog } from './AddExerciseDialog'
-import { draftsToSetInputs, emptySet, exerciseName, exerciseSummary, formatMetrics, formatSetLine, formatSubSet, parseHours, formatHours, toNumber, type ExerciseSummary, type SetDraft } from './util'
+import { draftsToSetInputs, emptySet, exerciseName, exerciseSummary, formatMetrics, formatSetLine, formatSubSet, maskHours, parseHours, formatHours, toNumber, type ExerciseSummary, type SetDraft } from './util'
 import './log.css'
 
 type Selection =
@@ -703,7 +703,13 @@ export function LogScreen() {
           </div>
           <div className="log-field">
             <label className="th-label">{lang === 'zh' ? '时长 (时:分)' : 'Duration (h:mm)'}</label>
-            <input className="th-input" value={hours} onChange={(e) => setHours(e.target.value)} placeholder="1:30" />
+            <input
+              className="th-input"
+              value={hours}
+              onChange={(e) => setHours(maskHours(e.target.value))}
+              placeholder="1:30"
+              inputMode="numeric"
+            />
           </div>
           {(sel.sport.fields ?? []).map((f) => (
             <div key={f.key} className="log-field">

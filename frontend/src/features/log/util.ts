@@ -87,6 +87,15 @@ export function maskTime(raw: string): string {
   return `${d.slice(0, -2)}:${d.slice(-2)}`
 }
 
+/** Same idea as maskTime, for a sport session's h:mm. Capped at 4 digits because
+ *  nobody logs a 1000-hour session, and a stray keypress shouldn't silently become
+ *  one. Typing 130 gives '1:30'; the colon is never typed by hand. */
+export function maskHours(raw: string): string {
+  const d = raw.replace(/\D/g, '').slice(0, 4)
+  if (d.length <= 2) return d
+  return `${d.slice(0, -2)}:${d.slice(-2)}`
+}
+
 /** Parse 'a:b' (or bare) → total seconds. hm=false → mm:ss; hm=true → hh:mm.
  *  A bare number is seconds (mm:ss) or minutes (hh:mm). '' → null. */
 export function parseDuration(text: string, hm = false): number | null {

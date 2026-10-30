@@ -5,7 +5,7 @@ import { updateSportSession, softDeleteSportSession } from '../../db'
 import type { Sport, SportSession } from '../../supabase/types'
 import type { TranslationTarget } from '../../translation'
 import { fieldLabel } from './util'
-import { parseHours, formatHours, toNumber } from '../log/util'
+import { maskHours, parseHours, formatHours, toNumber } from '../log/util'
 import './sports.css'
 
 export function SportSessionDialog({
@@ -60,7 +60,13 @@ export function SportSessionDialog({
           </div>
           <div className="sport-field">
             <label className="th-label">{lang === 'zh' ? '时长 (时:分)' : 'Duration (h:mm)'}</label>
-            <input className="th-input" value={hours} onChange={(e) => setHours(e.target.value)} placeholder="1:30" />
+            <input
+              className="th-input"
+              value={hours}
+              onChange={(e) => setHours(maskHours(e.target.value))}
+              placeholder="1:30"
+              inputMode="numeric"
+            />
           </div>
         </div>
 
