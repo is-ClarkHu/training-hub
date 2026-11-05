@@ -888,6 +888,15 @@ function monthTitle(month: string, lang: 'en' | 'zh'): string {
   return lang === 'zh' ? `${y}年${m}月` : `${MONTHS_EN[m - 1]} ${y}`
 }
 
+/** Month with the year dropped, for the overview grid's header where a label gets
+ *  about 50px. Stripping a trailing year off monthTitle only worked in English —
+ *  Chinese puts the year first ("2026年10月"), so nothing came off and consecutive
+ *  labels ran into each other. */
+function monthShort(month: string, lang: 'en' | 'zh'): string {
+  const m = Number(month.split('-')[1])
+  return lang === 'zh' ? `${m}月` : MONTHS_EN[m - 1]
+}
+
 const hoursLabel = (h: number): string => `${Number.isInteger(h) ? h : h.toFixed(1)}h`
 
 /** True when a day square is too narrow to spend a line on the date. On a phone
@@ -1069,7 +1078,7 @@ function IntensityCalendar({ months, lang, detail, sportLabel, injuryDates, show
             <div className="cal-ymonths" style={{ gridTemplateColumns: `repeat(${grid.columns.length}, var(--sq))` }}>
               {grid.monthLabels.map((ml, i) => (
                 <span key={i} style={{ gridColumn: `span ${ml.span}` }}>
-                  {ml.span >= 2 ? monthTitle(ml.month, lang).replace(/ ?\d{4}$/, '') : ''}
+                  {ml.span >= 2 ? monthShort(ml.month, lang) : ''}
                 </span>
               ))}
             </div>
