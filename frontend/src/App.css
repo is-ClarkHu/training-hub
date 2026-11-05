@@ -19,6 +19,7 @@
   font: 600 16px/1 var(--mono);
   letter-spacing: 0.02em;
   color: var(--text-bright);
+  white-space: nowrap;
 }
 
 .app-user {
@@ -29,6 +30,10 @@
 }
 .app-logout { width: auto; padding: 7px 12px; }
 .app-lang { width: auto; padding: 7px 10px; font-size: 12px; }
+/* Chinese labels are shorter in characters but wider per glyph, and flex shrinks
+   children by default — "仪表盘" / "登出" / "EN / 中" were each breaking mid-word on a
+   phone. Nothing in this bar may wrap or shrink; the logo gives way instead. */
+.app-logout, .app-lang, .app-current { white-space: nowrap; flex: 0 0 auto; }
 
 .app-current {
   font: 600 13px/1 var(--mono);
@@ -124,6 +129,13 @@
 
 /* ── wide screens: persistent sidebar, no hamburger/overlay ── */
 /* (placed AFTER the base rules so it wins) */
+/* Narrow phones: the wordmark is the one decorative item here, so it yields before
+   anything you can tap. The current-tab chip keeps you oriented in its place. */
+@media (max-width: 430px) {
+  .app-bar { gap: 10px; padding: 12px 14px; }
+  .app-logo { display: none; }
+}
+
 @media (min-width: 900px) {
   .app-burger,
   .app-current,
