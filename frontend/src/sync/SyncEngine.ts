@@ -9,6 +9,7 @@ import { supabase, currentUserId } from '../supabase/client'
 import { db } from '../db'
 import type { TableName } from '../supabase/types'
 import { tms, isNewer, afterCursor } from './cursor'
+import { dedupeDictionary } from '../translation/dictionary'
 
 // Push respects FK order (exercises/injuries before entries; entries before sets;
 // sports before sport_sessions). Pull order is irrelevant (Dexie has no FKs).
@@ -190,6 +191,23 @@ async function runSync(uid: string, pushOnly: boolean): Promise<SyncResult> {
   const errors: string[] = []
   let pushed = 0
   let pulled = 0
+  // Dexie can hold two live dictionary rows for one term; Postgres cannot, and the
+  // rejection (23505) fails that table's push for good — the watermark never
+  // advances, so every later sync retries the same doomed row. Collapse duplicates
+  // before pushing so the deletes go up first and the survivor lands cleanly.
+  //
+  // Pull this one table first. The duplicate is often cross-device: this device
+  // minted a row for a term another device already created, so there is nothing
+  // local to collapse and the insert still collides. Pulling first brings the other
+  // id into the store, which gives the dedupe both rows to work with and makes the
+  // fix take one pass instead of two. The pull below re-runs it as a watermark
+  // no-op. Skipped on a push-only flush, which by definition must not pull.
+  try {
+    if (!pushOnly) pulled += await pullTable(uid, 'translation_dictionary')
+    await dedupeDictionary()
+  } catch (e) {
+    errors.push(`dedupe translation_dictionary: ${errorMessage(e)}`)
+  }
   for (const t of TABLES) {
     try {
       pushed += await pushTable(uid, t)

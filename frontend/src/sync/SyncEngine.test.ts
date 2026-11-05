@@ -79,15 +79,22 @@ const H = vi.hoisted(() => {
       select: () => makeBuilder(table),
     }),
   }
+  const tbl = (name: string) => ({
+    toArray: async (): Promise<R[]> => {
+      if (name === 'exercises') { ctl.runStarts.push('start'); if (ctl.hold) await ctl.hold }
+      return [...loc(name).values()]
+    },
+    get: async (id: string): Promise<R | undefined> => loc(name).get(id),
+    put: async (row: R): Promise<void> => { ctl.puts.push({ table: name, id: row.id }); loc(name).set(row.id, row) },
+    bulkPut: async (rows: R[]): Promise<void> => {
+      for (const row of rows) { ctl.puts.push({ table: name, id: row.id }); loc(name).set(row.id, row) }
+    },
+  })
   const db = {
-    table: (name: string) => ({
-      toArray: async (): Promise<R[]> => {
-        if (name === 'exercises') { ctl.runStarts.push('start'); if (ctl.hold) await ctl.hold }
-        return [...loc(name).values()]
-      },
-      get: async (id: string): Promise<R | undefined> => loc(name).get(id),
-      put: async (row: R): Promise<void> => { ctl.puts.push({ table: name, id: row.id }); loc(name).set(row.id, row) },
-    }),
+    table: tbl,
+    // Dexie exposes each table as a property too; the engine reaches for this one
+    // directly when it collapses duplicate dictionary terms before pushing.
+    translation_dictionary: tbl('translation_dictionary'),
     transaction: async (_mode: string, _t: unknown, cb: () => Promise<void>) => { await cb() },
   }
   const reset = () => {
@@ -199,6 +206,54 @@ describe('tombstone pushed before live row', () => {
     // Teeth: the fake really enforces — the reverse (two live 'Squat') is rejected.
     const bad = await H.supabase.from('exercises').upsert([{ id: 'o', name: 'Squat', deleted: false, updated_at: T(4) }] as never)
     expect((bad as { error: unknown }).error).toBeTruthy()
+  })
+})
+
+describe('duplicate dictionary terms are collapsed before the push', () => {
+  // Postgres keeps one live row per (user_id, domain, zh). Dexie keeps none of that,
+  // so a second live row for a term used to 23505 the whole table's push — and since
+  // the watermark only advances after a clean pass, every later sync failed the same
+  // way. The survivor is chosen by byPreference (verified, then newest).
+  it('tombstones the loser and pushes it ahead of the survivor', async () => {
+    setLocal('translation_dictionary', [
+      { id: 'old', domain: 'exercise', zh: '卧推', en: 'Bench', verified: false, deleted: false, updated_at: T(1) },
+      { id: 'new', domain: 'exercise', zh: '卧推', en: 'Bench press', verified: false, deleted: false, updated_at: T(3) },
+    ])
+    const res = await syncNow()
+    expect(res?.errors).toEqual([])
+
+    const local = [...H.local.get('translation_dictionary')!.values()]
+    expect(local.find((r) => r.id === 'new')!.deleted).toBe(false) // newest survives
+    expect(local.find((r) => r.id === 'old')!.deleted).toBe(true)
+
+    // Deletes go up before live rows, so the unique index is free when 'new' lands.
+    expect(upsertsFor('translation_dictionary')).toEqual(['old', 'new'])
+  })
+
+  it('heals a cross-device collision in one pass', async () => {
+    // Nothing to collapse locally: the other id only exists on the server. Pulling
+    // this table before the dedupe is what turns a guaranteed 23505 into a clean push.
+    setServer('translation_dictionary', [
+      { id: 'theirs', domain: 'exercise', zh: '卧推', en: 'Bench', verified: false, deleted: false, updated_at: T(1) },
+    ])
+    setLocal('translation_dictionary', [
+      { id: 'mine', domain: 'exercise', zh: '卧推', en: 'Bench press', verified: false, deleted: false, updated_at: T(3) },
+    ])
+    const res = await syncNow()
+    expect(res?.errors).toEqual([])
+    const live = getServer('translation_dictionary').filter((r) => !r.deleted)
+    expect(live.map((r) => r.id)).toEqual(['mine'])
+  })
+
+  it('leaves a dictionary with no duplicates alone', async () => {
+    setLocal('translation_dictionary', [
+      { id: 'a', domain: 'exercise', zh: '卧推', en: 'Bench press', verified: false, deleted: false, updated_at: T(1) },
+      { id: 'b', domain: 'exercise', zh: '深蹲', en: 'Squat', verified: false, deleted: false, updated_at: T(1) },
+      { id: 'c', domain: 'sport', zh: '卧推', en: 'Bench press', verified: false, deleted: false, updated_at: T(1) },
+    ])
+    await syncNow()
+    const local = [...H.local.get('translation_dictionary')!.values()]
+    expect(local.filter((r) => r.deleted)).toEqual([])
   })
 })
 
