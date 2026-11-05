@@ -824,8 +824,14 @@ function CycleDialog({
               <div key={i} className="cyc-edit-day">
                 <div className="cyc-edit-row">
                   <input className="th-input cyc-label" value={d.label} onChange={(e) => setDay(i, { label: e.target.value })} placeholder="A" />
-                  <input className="th-input" value={d.title_zh ?? ''} onChange={(e) => setDay(i, { title_zh: e.target.value })} placeholder="中文标题, 如 胸 + 核心" />
-                  <input className="th-input" value={d.title_en ?? ''} onChange={(e) => setDay(i, { title_en: e.target.value })} placeholder="English title, e.g. Chest + Core" />
+                  {/* A day with no explicit title is shown everywhere else as its body
+                      parts ("胸 / 核心"), so an empty box here read as "this day has no
+                      name" when it plainly had one on the card. The placeholder shows
+                      the name actually in use. It stays a placeholder rather than a
+                      value: baking the derived string in would freeze it, and renaming
+                      a category would stop updating the day. */}
+                  <input className="th-input" value={d.title_zh ?? ''} onChange={(e) => setDay(i, { title_zh: e.target.value })} placeholder={cycleDayTitle(d, 'zh')} />
+                  <input className="th-input" value={d.title_en ?? ''} onChange={(e) => setDay(i, { title_en: e.target.value })} placeholder={cycleDayTitle(d, 'en')} />
                   <button className="cyc-del" type="button" onClick={() => { setDays((ds) => ds.filter((_, idx) => idx !== i)); setSplitCount((n) => Math.max(0, n - 1)) }}>×</button>
                 </div>
                 <div className="cyc-bp-row">
